@@ -245,8 +245,8 @@ from jdcloud_sdk.services.vm.apis.DescribeInstancesRequest import DescribeInstan
 
 # 初始化
 credential = Credential(
-    os.environ.get('JDC_ACCESS_KEY'),
-    os.environ.get('JDC_SECRET_KEY')
+    os.environ['JDC_ACCESS_KEY'],
+    os.environ['JDC_SECRET_KEY']
 )
 client = VmClient(credential, 'cn-north-1')
 

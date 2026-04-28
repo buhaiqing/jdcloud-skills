@@ -130,8 +130,8 @@ from datetime import datetime, timedelta
 
 # 初始化客户端
 credential = Credential(
-    os.environ.get('JDC_ACCESS_KEY'),
-    os.environ.get('JDC_SECRET_KEY')
+    os.environ['JDC_ACCESS_KEY'],
+    os.environ['JDC_SECRET_KEY']
 )
 client = MonitorClient(credential, 'cn-north-1')
 
@@ -506,8 +506,8 @@ import os
 
 # 初始化客户端
 credential = Credential(
-    os.environ.get('JDC_ACCESS_KEY'),
-    os.environ.get('JDC_SECRET_KEY')
+    os.environ['JDC_ACCESS_KEY'],
+    os.environ['JDC_SECRET_KEY']
 )
 client = MonitorClient(credential, 'cn-north-1')
 

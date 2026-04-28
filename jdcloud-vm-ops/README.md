@@ -39,40 +39,15 @@ jdc config init
 
 ### 2. 配置凭证
 
-#### 方式一：环境变量（推荐）
+Agent 运行时必须已配置以下环境变量：
 
 ```bash
-export JDC_ACCESS_KEY="your_access_key"
-export JDC_SECRET_KEY="your_secret_key"
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
 export JDC_REGION="cn-north-1"
 ```
 
-#### 方式二：CLI 交互式配置
-
-```bash
-jdc config init
-# 按提示输入 Access Key 和 Secret Key
-```
-
-#### 方式三：MCP Server 配置
-
-在 MCP 配置文件中设置：
-
-```json
-{
-  "mcpServers": {
-    "jdcloud-vm": {
-      "env": {
-        "JDC_ACCESS_KEY": "${JDC_ACCESS_KEY}",
-        "JDC_SECRET_KEY": "${JDC_SECRET_KEY}",
-        "JDC_REGION": "${JDC_REGION:-cn-north-1}"
-      }
-    }
-  }
-}
-```
-
-> ⚠️ **安全提示**：不要将凭证硬编码在代码或配置文件中，建议使用环境变量或密钥管理服务。
+> Agent 不得向用户索取凭证值。若未设置，引导用户通过 `jdc config init` 配置。切勿将凭证硬编码在代码或配置文件中。
 
 ### 3. 查询实例列表
 

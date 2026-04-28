@@ -18,32 +18,28 @@
         "@jdcloud/monitor-mcp"
       ],
       "env": {
-        "JDC_ACCESS_KEY": "${JDC_ACCESS_KEY}",
-        "JDC_SECRET_KEY": "${JDC_SECRET_KEY}",
-        "JDC_REGION": "${JDC_REGION:-cn-north-1}"
+        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
+        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
+        "JDC_REGION": "{{env.JDC_REGION}}"
       }
     }
   }
 }
 ```
 
-> **注意**：MCP servers 使用 Python 3.10+ 开发，通过 `uvx` 命令启动。环境变量应在 shell 配置文件或 CI/CD 系统中设置，切勿在配置文件中硬编码凭证。
+> **注意**：MCP servers 使用 Python 3.10+ 开发，通过 `uvx` 命令启动。环境变量必须在 Agent 运行时环境中设置。切勿在配置文件中硬编码凭证。`{{env.*}}` 占位符由 Agent harness 在运行时解析。
 
 ### 环境变量配置
 
-在 `~/.zshrc` 或 `~/.bashrc` 中添加：
+Agent 运行时必须已配置以下环境变量：
 
 ```bash
-# 京东云凭证
-export JDC_ACCESS_KEY="your_access_key"
-export JDC_SECRET_KEY="your_secret_key"
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
 export JDC_REGION="cn-north-1"
 ```
 
-然后执行：
-```bash
-source ~/.zshrc  # 或 source ~/.bashrc
-```
+> Agent 不得向用户索取上述变量值。若未设置，引导用户通过 `jdc config init` 配置。
 
 ## SDK 集成
 
@@ -65,8 +61,8 @@ from jdcloud_sdk.services.monitor.client import MonitorClient
 
 # 使用环境变量配置凭证（推荐）
 credential = Credential(
-    os.environ.get('JDC_ACCESS_KEY'),
-    os.environ.get('JDC_SECRET_KEY')
+    os.environ['JDC_ACCESS_KEY'],
+    os.environ['JDC_SECRET_KEY']
 )
 
 # 创建客户端

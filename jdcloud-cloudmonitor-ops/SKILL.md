@@ -17,6 +17,64 @@ description: >-
 
 京东云云监控(CloudMonitor)是对用户名下云资源进行监控和报警的服务，支持40余种云产品的监控，包括计算、网络、存储、数据库、中间件及大数据服务等。本 Skill 提供监控数据查询、告警规则管理、自定义监控等运维能力。
 
+## 触发范围（Agent 可读）
+
+### 应使用本 Skill 的场景
+- 用户提及"云监控"、"CloudMonitor"、"监控"、"告警"等关键词
+- 任务涉及监控数据查询、告警规则 CRUD、告警历史查看、自定义监控上报
+- 任务关键词：describe-metric-data、create-alarm、alarm、metric、dashboard、put-metric-data
+- 用户要求对云资源监控指标进行查询、配置告警、或分析告警历史
+
+### 不应使用本 Skill 的场景
+- 任务纯粹是云主机(VM)的创建/删除/启停 → 委派给 `jdcloud-vm-ops`
+- 任务纯粹是云数据库(RDS)的管理 → 委派给 `jdcloud-rds-ops`
+- 任务纯粹是负载均衡(LB)的配置 → 委派给 `jdcloud-lb-ops`
+- 任务涉及账单/账户管理 → 委派给 `jdcloud-billing-ops`
+
+### 委派规则
+- 若用户需要先确认某资源（如 VM）的监控数据，先用本 Skill 查询，再根据结果建议使用对应的资源管理 Skill
+- 若请求涉及多个独立云产品的监控，分别用本 Skill 对每个产品独立查询
+
+## 变量约定（Agent 可读）
+
+本 Skill 使用结构化占位符，防止 prompt 注入和解析歧义：
+
+| 占位符 | 含义 | Agent 行为 |
+|--------|------|-----------|
+| `{{env.JDC_ACCESS_KEY}}` | Agent 运行时环境变量 | 绝不向用户索取；未设置则失败 |
+| `{{env.JDC_SECRET_KEY}}` | Agent 运行时环境变量 | 绝不向用户索取；未设置则失败 |
+| `{{env.JDC_REGION}}` | Agent 运行时环境变量 | 默认 `cn-north-1`，可被用户覆盖 |
+| `{{user.region}}` | 须向用户收集 | 询问一次，缓存复用 |
+| `{{user.resource_id}}` | 须向用户收集 | 询问一次，缓存复用 |
+| `{{user.alarm_id}}` | 须向用户收集 | 询问一次，缓存复用 |
+| `{{output.alarm_id}}` | 从 CLI JSON 输出捕获 | 从 `$.result.alarmId` 解析 |
+
+> 规则：`{{env.*}}` 占位符不得向用户暴露或索取。`{{user.*}}` 占位符须通过交互收集。
+
+## 输出解析规则（Agent 可读）
+
+### CLI 强制约定
+- 所有 CLI 命令必须追加 `--output json` 以保证机器可解析
+- 所有 CLI 命令应追加 `--no-interactive`（或等价参数）防止阻塞等待用户输入
+- 时间戳采用 ISO 8601 格式带时区：`2026-04-28T10:00:00+08:00`
+- 布尔值：`true` / `false`（小写）
+
+### 关键 JSON 路径
+| 操作 | JSON 路径 | 类型 | 说明 |
+|------|-----------|------|------|
+| 创建告警 | `$.result.alarmId` | string | 告警规则 ID |
+| 查询告警列表 | `$.result.alarms[*].alarmId` | array | 所有告警 ID |
+| 查询告警详情 | `$.result.alarm.status` | string | ALARM / OK / INSUFFICIENT_DATA |
+| 查询监控数据 | `$.result.metricDatas[*].value` | array | 监控数值 |
+| 查询服务列表 | `$.result.services[*].serviceCode` | array | 服务代码列表 |
+
+### 操作超时约定
+| 操作 | 最长等待 | 轮询间隔 |
+|------|---------|---------|
+| 创建告警规则 | 10s（同步操作） | - |
+| 查询监控数据 | 30s（API 限流重试） | 2s |
+| 删除告警规则 | 10s（同步操作） | - |
+
 ## 核心功能
 
 - **监控数据查询**: 查询云资源的实时和历史监控指标数据
@@ -24,6 +82,109 @@ description: >-
 - **告警历史查看**: 查询告警触发历史和通知记录
 - **自定义监控**: 上报和查询自定义业务指标
 - **Dashboard管理**: 监控面板和图表管理
+
+## 执行流程（Agent 可读）
+
+每个操作遵循：前置检查 → 执行 → 后置验证 → 失败恢复。Agent 不得跳过任何阶段。
+
+### 操作：创建告警规则
+
+#### 前置检查
+| 检查项 | 命令 | 期望 | 失败处理 |
+|--------|------|------|---------|
+| CLI 已安装 | `jdc --version` | exit code 0 | 引导用户安装 jdcloud-cli |
+| 凭证有效 | `jdc config validate --output json` | `$.valid == true` | 提示用户执行 `jdc config init` |
+| 区域可用 | `jdc monitor describe-services --region-id {{user.region}} --output json` | 返回服务列表非空 | 建议最近可用区域 |
+
+#### 执行
+```bash
+jdc monitor create-alarm \
+  --region-id {{user.region}} \
+  --alarm-name "{{user.alarm_name}}" \
+  --service-code {{user.service_code}} \
+  --resource-id {{user.resource_id}} \
+  --metric-name {{user.metric_name}} \
+  --comparison-operator {{user.comparison}} \
+  --threshold {{user.threshold}} \
+  --period {{user.period}} \
+  --evaluation-periods {{user.eval_periods}} \
+  --contact-group-id {{user.contact_group_id}} \
+  --notice-type "{{user.notice_type}}" \
+  --output json \
+  --no-interactive
+```
+
+#### 后置验证
+1. 从 `$.result.alarmId` 捕获 `{{output.alarm_id}}`
+2. 验证告警已创建：
+   ```bash
+   jdc monitor describe-alarm \
+     --region-id {{user.region}} \
+     --alarm-id {{output.alarm_id}} \
+     --output json | jq -r '.result.alarm.status'
+   ```
+3. 若返回有效状态 → 操作成功，向用户报告 `{{output.alarm_id}}`
+4. 若返回错误 → 捕获 `$.error.message`，进入失败恢复
+
+#### 失败恢复
+| 错误模式 (regex) | 最大重试 | 退避策略 | Agent 动作 |
+|-----------------|---------|---------|-----------|
+| `InvalidParameter` | 1 | - | 检查参数格式，修正后重试 |
+| `QuotaExceeded` | 0 | - | 停止。告知用户告警规则配额已满（每区域最多 500 条） |
+| `MetricNotFound` | 1 | - | 确认监控项名称，用 `describe-metrics` 查询可用项后重试 |
+| `InternalError` | 3 | 2s, 4s, 8s | 指数退避重试。第 3 次失败后报告用户 |
+
+### 操作：查询监控数据
+
+#### 执行
+```bash
+jdc monitor describe-metric-data \
+  --region-id {{user.region}} \
+  --metric {{user.metric}} \
+  --service-code {{user.service_code}} \
+  --resource-id {{user.resource_id}} \
+  --start-time "{{user.start_time}}" \
+  --end-time "{{user.end_time}}" \
+  --aggr-type avg \
+  --output json
+```
+
+#### 后置验证
+1. 检查 `$.result.metricDatas` 是否非空
+2. 若为空 → 可能原因：资源刚创建无数据、时间范围错误、监控项名错误
+3. 以表格形式展示：时间戳 | 数值 | 单位
+
+#### 失败恢复
+| 错误模式 (regex) | 最大重试 | 退避策略 | Agent 动作 |
+|-----------------|---------|---------|-----------|
+| `RateLimitExceeded` | 3 | 2s, 4s, 8s | 降低频率重试 |
+| `ResourceNotFound` | 0 | - | 停止。告知用户资源 ID 不存在 |
+| `MetricNotFound` | 1 | - | 用 `describe-metrics` 确认名称后重试 |
+
+### 操作：删除告警规则
+
+#### 前置检查（安全门）
+- **必须**询问用户："确认删除告警规则 `{{user.alarm_name}}` ({{user.alarm_id}})？此操作不可撤销。"
+- **必须**等待用户明确回复"确认"或"yes"后才继续
+
+#### 执行
+```bash
+jdc monitor delete-alarms \
+  --region-id {{env.JDC_REGION}} \
+  --alarm-ids '["{{user.alarm_id}}"]' \
+  --output json \
+  --no-interactive
+```
+
+#### 后置验证
+1. 再次查询确认不存在：
+   ```bash
+   jdc monitor describe-alarm \
+     --region-id {{env.JDC_REGION}} \
+     --alarm-id {{user.alarm_id}} \
+     --output json 2>&1
+   ```
+2. 期望返回 `AlarmNotFound` 错误 → 删除成功
 
 ## 前提条件
 
@@ -55,36 +216,15 @@ sudo mv jdc /usr/local/bin/
 
 ### 2. 配置凭证
 
-方式一：环境变量（推荐）
+Agent 运行时必须设置以下环境变量，对应本 Skill 中的 `{{env.*}}` 占位符：
+
 ```bash
-export JDC_ACCESS_KEY="your_access_key_here"
-export JDC_SECRET_KEY="your_secret_key_here"
-export JDC_REGION="cn-north-1"  # 默认区域
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
+export JDC_REGION="cn-north-1"
 ```
 
-方式二：配置文件
-```bash
-# 创建配置文件目录
-mkdir -p ~/.jdc
-
-# 编辑配置文件
-cat > ~/.jdc/config.json << EOF
-{
-  "access_key": "your_access_key_here",
-  "secret_key": "your_secret_key_here",
-  "region_id": "cn-north-1"
-}
-EOF
-```
-
-方式三：命令行参数
-```bash
-# 在每个命令中指定凭证
-jdc monitor describe-alarms \
-  --access-key your_access_key \
-  --secret-key your_secret_key \
-  --region-id cn-north-1
-```
+> Agent 必须在任何操作前验证这些变量已设置。若缺失，引导用户通过 `jdc config init` 配置。
 
 ## 支持的云产品监控
 
