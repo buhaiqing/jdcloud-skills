@@ -1,0 +1,349 @@
+# 京东云云监控告警配置示例
+
+# 云主机监控告警配置
+vm_alarms:
+  - name: "VM-CPU-Critical"
+    service_code: "vm"
+    metric_name: "vm.cpu.util"
+    comparison_operator: "gt"
+    threshold: 90
+    period: 300
+    evaluation_periods: 2
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "VM-CPU-Warning"
+    service_code: "vm"
+    metric_name: "vm.cpu.util"
+    comparison_operator: "gt"
+    threshold: 70
+    period: 300
+    evaluation_periods: 3
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "VM-Memory-Critical"
+    service_code: "vm"
+    metric_name: "vm.memory.util"
+    comparison_operator: "gt"
+    threshold: 95
+    period: 300
+    evaluation_periods: 1
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "VM-Memory-Warning"
+    service_code: "vm"
+    metric_name: "vm.memory.util"
+    comparison_operator: "gt"
+    threshold: 80
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "VM-Disk-Critical"
+    service_code: "vm"
+    metric_name: "vm.disk.util"
+    comparison_operator: "gt"
+    threshold: 85
+    period: 300
+    evaluation_periods: 1
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "VM-Disk-Warning"
+    service_code: "vm"
+    metric_name: "vm.disk.util"
+    comparison_operator: "gt"
+    threshold: 70
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "VM-Load-High"
+    service_code: "vm"
+    metric_name: "vm.cpu.load1"
+    comparison_operator: "gt"
+    threshold: 8
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    notice_type: "email"
+
+# RDS 监控告警配置
+rds_alarms:
+  - name: "RDS-CPU-Critical"
+    service_code: "rds"
+    metric_name: "rds.cpu.util"
+    comparison_operator: "gt"
+    threshold: 80
+    period: 300
+    evaluation_periods: 2
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "RDS-CPU-Warning"
+    service_code: "rds"
+    metric_name: "rds.cpu.util"
+    comparison_operator: "gt"
+    threshold: 60
+    period: 300
+    evaluation_periods: 3
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "RDS-Connection-Critical"
+    service_code: "rds"
+    metric_name: "rds.connection.util"
+    comparison_operator: "gt"
+    threshold: 85
+    period: 300
+    evaluation_periods: 1
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "RDS-Connection-Warning"
+    service_code: "rds"
+    metric_name: "rds.connection.util"
+    comparison_operator: "gt"
+    threshold: 70
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "RDS-SlowQuery-Warning"
+    service_code: "rds"
+    metric_name: "rds.slow.queries"
+    comparison_operator: "gt"
+    threshold: 10
+    period: 300
+    evaluation_periods: 1
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "RDS-ReplicationLag-Warning"
+    service_code: "rds"
+    metric_name: "rds.replication.lag"
+    comparison_operator: "gt"
+    threshold: 5
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    notice_type: "email"
+
+# 负载均衡监控告警配置
+lb_alarms:
+  - name: "LB-Connection-Critical"
+    service_code: "lb"
+    metric_name: "lb.activeconnection"
+    comparison_operator: "gt"
+    threshold: 10000
+    period: 300
+    evaluation_periods: 2
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "LB-Connection-Warning"
+    service_code: "lb"
+    metric_name: "lb.activeconnection"
+    comparison_operator: "gt"
+    threshold: 8000
+    period: 300
+    evaluation_periods: 3
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "LB-5xxError-Critical"
+    service_code: "lb"
+    metric_name: "lb.httpcode.5xx"
+    comparison_operator: "gt"
+    threshold: 10
+    period: 300
+    evaluation_periods: 2
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "LB-5xxError-Warning"
+    service_code: "lb"
+    metric_name: "lb.httpcode.5xx"
+    comparison_operator: "gt"
+    threshold: 5
+    period: 300
+    evaluation_periods: 3
+    level: "warning"
+    notice_type: "email"
+    
+  - name: "LB-Latency-Warning"
+    service_code: "lb"
+    metric_name: "lb.latency"
+    comparison_operator: "gt"
+    threshold: 500
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    notice_type: "email"
+
+# Redis 监控告警配置
+redis_alarms:
+  - name: "Redis-CPU-Critical"
+    service_code: "redis"
+    metric_name: "redis.cpu.util"
+    comparison_operator: "gt"
+    threshold: 80
+    period: 300
+    evaluation_periods: 2
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "Redis-Memory-Critical"
+    service_code: "redis"
+    metric_name: "redis.memory.util"
+    comparison_operator: "gt"
+    threshold: 80
+    period: 300
+    evaluation_periods: 1
+    level: "critical"
+    notice_type: "sms,email"
+    
+  - name: "Redis-Connections-Warning"
+    service_code: "redis"
+    metric_name: "redis.connections.util"
+    comparison_operator: "gt"
+    threshold: 80
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    notice_type: "email"
+
+# 自定义监控配置
+custom_metrics:
+  namespace: "my-application"
+  metrics:
+    - name: "order-count"
+      unit: "Count"
+      dimensions:
+        - name: "region"
+          value: "cn-north-1"
+        - name: "service"
+          value: "order-service"
+          
+    - name: "api-latency"
+      unit: "Milliseconds"
+      dimensions:
+        - name: "endpoint"
+          value: "/api/v1/orders"
+          
+    - name: "error-rate"
+      unit: "Percent"
+      dimensions:
+        - name: "service"
+          value: "api-gateway"
+
+# Dashboard 配置
+dashboards:
+  - name: "Production-Overview"
+    description: "生产环境监控总览"
+    widgets:
+      - type: "line"
+        title: "CPU 使用率趋势"
+        service_code: "vm"
+        metrics:
+          - "vm.cpu.util"
+        period: 300
+        
+      - type: "line"
+        title: "内存使用率趋势"
+        service_code: "vm"
+        metrics:
+          - "vm.memory.util"
+        period: 300
+        
+      - type: "line"
+        title: "RDS QPS"
+        service_code: "rds"
+        metrics:
+          - "rds.qps"
+        period: 60
+        
+      - type: "number"
+        title: "活跃连接数"
+        service_code: "lb"
+        metrics:
+          - "lb.activeconnection"
+          
+  - name: "Application-Metrics"
+    description: "应用自定义指标"
+    widgets:
+      - type: "line"
+        title: "订单量"
+        namespace: "my-application"
+        metric: "order-count"
+        period: 60
+        
+      - type: "line"
+        title: "API 延迟"
+        namespace: "my-application"
+        metric: "api-latency"
+        period: 60
+        
+      - type: "line"
+        title: "错误率"
+        namespace: "my-application"
+        metric: "error-rate"
+        period: 60
+
+# 通知配置
+notifications:
+  contact_groups:
+    - id: 1
+      name: "运维团队"
+      members:
+        - name: "张三"
+          phone: "138****8888"
+          email: "zhangsan@example.com"
+        - name: "李四"
+          phone: "139****9999"
+          email: "lisi@example.com"
+          
+    - id: 2
+      name: "开发团队"
+      members:
+        - name: "王五"
+          phone: "137****7777"
+          email: "wangwu@example.com"
+          
+  webhook:
+    url: "https://your-domain.com/webhook"
+    secret: "your-webhook-secret"
+    
+  dingtalk:
+    webhook: "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+    secret: "your-dingtalk-secret"
+
+# 监控策略
+policies:
+  # 采集周期配置
+  collection:
+    vm:
+      period: 60
+    rds:
+      period: 60
+    lb:
+      period: 60
+    custom:
+      period: 60
+      
+  # 数据保留策略
+  retention:
+    raw_data: 15  # 天
+    hour_aggregation: 30  # 天
+    day_aggregation: 180  # 天
+    
+  # 告警抑制策略
+  suppression:
+    enabled: true
+    cooldown_period: 300  # 秒
+    max_notifications: 5  # 每小时最大通知次数
