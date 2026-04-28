@@ -98,6 +98,7 @@ description: >-
 | 变更历史 | 版本更新记录，放在文件开头 |
 | 概述 | 产品介绍和 Skill 能力概述 |
 | 前提条件 | 安装 CLI、配置凭证等 |
+| 环境变量 | Skill 运行所需的环境变量说明 |
 | 核心功能 | 该 Skill 支持的操作列表 |
 | 常用命令 | 典型使用场景的 CLI 示例 |
 | 最佳实践 | 运维建议和注意事项 |
@@ -133,7 +134,55 @@ cp jdcloud-skill-template.md jdcloud-[product]-ops/SKILL.md
 
 ### 5. 内容编写指南
 
-#### 5.1 CLI 命令示例
+#### 5.1 环境变量配置
+
+在 SKILL.md 中明确说明运行所需的环境变量：
+
+```markdown
+## 环境变量
+
+Skill 运行需要配置以下环境变量：
+
+| 变量名 | 说明 | 是否必需 | 示例值 |
+|--------|------|----------|--------|
+| JDC_ACCESS_KEY | 京东云 Access Key | 是 | LTAI... |
+| JDC_SECRET_KEY | 京东云 Secret Key | 是 | xxxxxx |
+| JDC_REGION | 默认区域 ID | 否 | cn-north-1 |
+
+### 配置方式
+
+**方式一：Shell 环境变量**
+```bash
+export JDC_ACCESS_KEY="your_access_key"
+export JDC_SECRET_KEY="your_secret_key"
+export JDC_REGION="cn-north-1"
+```
+
+**方式二：CLI 配置文件**
+```bash
+jdc config init
+# 交互式输入凭证
+```
+
+**方式三：MCP Server 配置**
+```json
+{
+  "mcpServers": {
+    "jdcloud-vm": {
+      "env": {
+        "JDC_ACCESS_KEY": "${JDC_ACCESS_KEY}",
+        "JDC_SECRET_KEY": "${JDC_SECRET_KEY}",
+        "JDC_REGION": "${JDC_REGION:-cn-north-1}"
+      }
+    }
+  }
+}
+```
+
+> ⚠️ **安全提示**：不要将凭证硬编码在代码或配置文件中，建议使用环境变量或密钥管理服务。
+```
+
+#### 5.2 CLI 命令示例
 
 ```markdown
 ### 查询资源列表
@@ -145,7 +194,7 @@ jdc [product] describe-[resources] \
 \`\`\`
 ```
 
-#### 5.2 表格规范
+#### 5.3 表格规范
 
 使用 Markdown 表格展示：
 - 支持的云产品列表
@@ -153,7 +202,7 @@ jdc [product] describe-[resources] \
 - 告警阈值建议
 - 错误代码对照
 
-#### 5.3 代码块语言标记
+#### 5.4 代码块语言标记
 
 - Bash 命令：`bash`
 - JSON 数据：`json`
@@ -210,9 +259,16 @@ create-skill --product "云主机 VM" --name "jdcloud-vm-ops"
 # - 添加云主机特有的 CLI 命令
 # - 补充监控指标（CPU、内存、磁盘）
 # - 编写故障排查指南
+# - 配置环境变量说明
 
 # 4. 验证
 head -20 jdcloud-vm-ops/SKILL.md
+
+# 5. 测试环境变量配置
+export JDC_ACCESS_KEY="your_key"
+export JDC_SECRET_KEY="your_secret"
+export JDC_REGION="cn-north-1"
+jdc vm describe-instances --region-id cn-north-1
 ```
 
 ## 参考资源

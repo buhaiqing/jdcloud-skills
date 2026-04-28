@@ -1,0 +1,678 @@
+# JD Cloud VM Configuration Examples
+
+## 实例配置示例
+
+### 1. Web服务器配置
+
+```yaml
+# web-server-config.yaml
+instance:
+  name: "web-server"
+  description: "Production web server"
+  region_id: "cn-north-1"
+  az: "cn-north-1a"
+  instance_type: "g.n2.medium"
+  image_id: "img-centos-7.9"
+  
+network:
+  vpc_id: "vpc-xxxxx"
+  subnet_id: "subnet-xxxxx"
+  security_groups:
+    - "sg-web"
+  elastic_ip:
+    bandwidth_mbps: 10
+    
+storage:
+  system_disk:
+    disk_category: "local"
+    disk_size_gb: 40
+  data_disks:
+    - disk_category: "cloud_ssd"
+      disk_size_gb: 100
+      device_name: "/dev/vdb"
+      mount_point: "/data"
+      filesystem: "ext4"
+      
+access:
+  key_name: "web-keypair"
+  
+monitoring:
+  alarms:
+    - name: "CPU-High"
+      metric: "vm.cpu.util"
+      threshold: 80
+      comparison_operator: "gt"
+      period: 300
+      evaluation_periods: 3
+      level: "warning"
+      
+    - name: "Memory-High"
+      metric: "vm.memory.util"
+      threshold: 85
+      comparison_operator: "gt"
+      period: 300
+      evaluation_periods: 2
+      level: "warning"
+      
+tags:
+  Environment: "production"
+  Application: "web"
+  Team: "backend"
+  CostCenter: "IT-001"
+```
+
+### 2. 数据库服务器配置
+
+```yaml
+# database-server-config.yaml
+instance:
+  name: "mysql-primary"
+  description: "Primary MySQL database server"
+  region_id: "cn-north-1"
+  az: "cn-north-1a"
+  instance_type: "r.n2.xlarge"  # 内存优化型
+  image_id: "img-centos-7.9"
+  
+network:
+  vpc_id: "vpc-xxxxx"
+  subnet_id: "subnet-db"
+  security_groups:
+    - "sg-database"
+  private_ip_only: true  # 不分配公网IP
+  
+storage:
+  system_disk:
+    disk_category: "cloud_ssd"
+    disk_size_gb: 100
+  data_disks:
+    - disk_category: "cloud_ssd"
+      disk_size_gb: 500
+      device_name: "/dev/vdb"
+      mount_point: "/var/lib/mysql"
+      filesystem: "xfs"
+      iops: 3000
+      
+backup:
+  snapshot_policy:
+    enabled: true
+    cron_expression: "0 2 * * *"  # 每天凌晨2点
+    retention_days: 7
+    
+monitoring:
+  alarms:
+    - name: "CPU-High"
+      metric: "vm.cpu.util"
+      threshold: 70
+      comparison_operator: "gt"
+      period: 300
+      evaluation_periods: 2
+      level: "warning"
+      
+    - name: "Memory-Critical"
+      metric: "vm.memory.util"
+      threshold: 90
+      comparison_operator: "gt"
+      period: 300
+      evaluation_periods: 1
+      level: "critical"
+      
+    - name: "Disk-High"
+      metric: "vm.disk.util"
+      threshold: 80
+      comparison_operator: "gt"
+      period: 300
+      evaluation_periods: 2
+      level: "warning"
+      
+tags:
+  Environment: "production"
+  Application: "database"
+  Role: "primary"
+  Team: "dba"
+```
+
+### 3. 批处理任务配置
+
+```yaml
+# batch-job-config.yaml
+instance:
+  name_prefix: "batch-worker"
+  description: "Batch processing worker nodes"
+  region_id: "cn-north-1"
+  az: 
+    - "cn-north-1a"
+    - "cn-north-1b"
+  instance_type: "c.n2.xlarge"  # 计算优化型
+  image_id: "img-ubuntu-20.04"
+  count: 5
+  
+network:
+  vpc_id: "vpc-xxxxx"
+  subnet_id: "subnet-batch"
+  security_groups:
+    - "sg-batch"
+    
+storage:
+  system_disk:
+    disk_category: "local"
+    disk_size_gb: 40
+  data_disks:
+    - disk_category: "cloud_efficiency"
+      disk_size_gb: 200
+      device_name: "/dev/vdb"
+      mount_point: "/scratch"
+      auto_delete: true
+      
+lifecycle:
+  auto_shutdown: true
+  max_runtime_hours: 24
+  charge_mode: "postpaid_by_duration"
+  
+tags:
+  Environment: "production"
+  Application: "batch-processing"
+  Team: "data-engineering"
+```
+
+## 安全组规则示例
+
+### Web服务器安全组
+
+```yaml
+# web-security-group.yaml
+security_group:
+  name: "web-sg"
+  description: "Security group for web servers"
+  vpc_id: "vpc-xxxxx"
+  
+rules:
+  ingress:
+    - protocol: "tcp"
+      from_port: 80
+      to_port: 80
+      source: "0.0.0.0/0"
+      description: "Allow HTTP"
+      
+    - protocol: "tcp"
+      from_port: 443
+      to_port: 443
+      source: "0.0.0.0/0"
+      description: "Allow HTTPS"
+      
+    - protocol: "tcp"
+      from_port: 22
+      to_port: 22
+      source: "192.168.1.0/24"  # 仅允许办公网络
+      description: "Allow SSH from office"
+      
+  egress:
+    - protocol: "-1"
+      from_port: -1
+      to_port: -1
+      destination: "0.0.0.0/0"
+      description: "Allow all outbound"
+```
+
+### 数据库安全组
+
+```yaml
+# database-security-group.yaml
+security_group:
+  name: "database-sg"
+  description: "Security group for database servers"
+  vpc_id: "vpc-xxxxx"
+  
+rules:
+  ingress:
+    - protocol: "tcp"
+      from_port: 3306
+      to_port: 3306
+      source: "192.168.1.0/24"  # 应用服务器网段
+      description: "Allow MySQL from app servers"
+      
+    - protocol: "tcp"
+      from_port: 22
+      to_port: 22
+      source: "192.168.100.0/24"  # 堡垒机网段
+      description: "Allow SSH from bastion"
+      
+  egress:
+    - protocol: "-1"
+      from_port: -1
+      to_port: -1
+      destination: "0.0.0.0/0"
+      description: "Allow all outbound"
+```
+
+## 监控告警配置示例
+
+### 生产环境告警策略
+
+```yaml
+# production-alarms.yaml
+contact_groups:
+  - id: 1
+    name: "运维团队"
+    members:
+      - name: "张三"
+        phone: "138****8888"
+        email: "zhangsan@example.com"
+      - name: "李四"
+        phone: "139****9999"
+        email: "lisi@example.com"
+        
+  - id: 2
+    name: "开发团队"
+    members:
+      - name: "王五"
+        phone: "137****7777"
+        email: "wangwu@example.com"
+
+alarms:
+  # CPU告警
+  - name: "Prod-VM-CPU-Warning"
+    service_code: "vm"
+    metric_name: "vm.cpu.util"
+    comparison_operator: "gt"
+    threshold: 75
+    period: 300
+    evaluation_periods: 3
+    level: "warning"
+    contact_group_id: 2
+    notice_type: "email"
+    
+  - name: "Prod-VM-CPU-Critical"
+    service_code: "vm"
+    metric_name: "vm.cpu.util"
+    comparison_operator: "gt"
+    threshold: 90
+    period: 300
+    evaluation_periods: 2
+    level: "critical"
+    contact_group_id: 1
+    notice_type: "sms,email"
+    
+  # 内存告警
+  - name: "Prod-VM-Memory-Warning"
+    service_code: "vm"
+    metric_name: "vm.memory.util"
+    comparison_operator: "gt"
+    threshold: 80
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    contact_group_id: 2
+    notice_type: "email"
+    
+  - name: "Prod-VM-Memory-Critical"
+    service_code: "vm"
+    metric_name: "vm.memory.util"
+    comparison_operator: "gt"
+    threshold: 95
+    period: 300
+    evaluation_periods: 1
+    level: "critical"
+    contact_group_id: 1
+    notice_type: "sms,email"
+    
+  # 磁盘告警
+  - name: "Prod-VM-Disk-Warning"
+    service_code: "vm"
+    metric_name: "vm.disk.util"
+    comparison_operator: "gt"
+    threshold: 70
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    contact_group_id: 2
+    notice_type: "email"
+    
+  - name: "Prod-VM-Disk-Critical"
+    service_code: "vm"
+    metric_name: "vm.disk.util"
+    comparison_operator: "gt"
+    threshold: 85
+    period: 300
+    evaluation_periods: 1
+    level: "critical"
+    contact_group_id: 1
+    notice_type: "sms,email"
+    
+  # 网络告警
+  - name: "Prod-VM-NetworkIn-Warning"
+    service_code: "vm"
+    metric_name: "vm.network.in.bytes"
+    comparison_operator: "gt"
+    threshold: 10240  # 10 MB/s
+    period: 300
+    evaluation_periods: 2
+    level: "warning"
+    contact_group_id: 2
+    notice_type: "email"
+```
+
+## Terraform变量文件示例
+
+### 开发环境
+
+```hcl
+# dev.tfvars
+environment     = "dev"
+region          = "cn-north-1"
+instance_count  = 1
+instance_type   = "g.n2.small"
+disk_size       = 40
+bandwidth       = 5
+
+tags = {
+  Environment = "development"
+  ManagedBy   = "terraform"
+}
+```
+
+### 测试环境
+
+```hcl
+# test.tfvars
+environment     = "test"
+region          = "cn-north-1"
+instance_count  = 2
+instance_type   = "g.n2.medium"
+disk_size       = 100
+bandwidth       = 10
+
+tags = {
+  Environment = "testing"
+  ManagedBy   = "terraform"
+}
+```
+
+### 生产环境
+
+```hcl
+# prod.tfvars
+environment     = "production"
+region          = "cn-north-1"
+instance_count  = 3
+instance_type   = "g.n2.large"
+disk_size       = 200
+bandwidth       = 20
+
+multi_az        = true
+availability_zones = ["cn-north-1a", "cn-north-1b"]
+
+tags = {
+  Environment = "production"
+  ManagedBy   = "terraform"
+  Critical    = "true"
+}
+```
+
+## Ansible Inventory示例
+
+```yaml
+# inventory.yml
+all:
+  children:
+    web_servers:
+      hosts:
+        web-01:
+          ansible_host: 192.168.1.10
+          instance_id: i-xxxxx
+          environment: production
+        web-02:
+          ansible_host: 192.168.1.11
+          instance_id: i-xxxxx
+          environment: production
+          
+    database_servers:
+      hosts:
+        db-primary:
+          ansible_host: 192.168.2.10
+          instance_id: i-xxxxx
+          role: primary
+        db-replica:
+          ansible_host: 192.168.2.11
+          instance_id: i-xxxxx
+          role: replica
+          
+    vars:
+      ansible_user: centos
+      ansible_ssh_private_key_file: ~/.ssh/jdcloud.pem
+      ansible_python_interpreter: /usr/bin/python3
+```
+
+## Docker部署示例
+
+```yaml
+# docker-compose.yml (在VM上运行)
+version: '3.8'
+
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./html:/usr/share/nginx/html:ro
+    restart: unless-stopped
+    networks:
+      - frontend
+      
+  app:
+    image: myapp:latest
+    environment:
+      - DATABASE_URL=mysql://user:pass@db:3306/mydb
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+    networks:
+      - frontend
+      - backend
+      
+  db:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=mydb
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - backend
+      
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - backend
+
+volumes:
+  app-data:
+  db-data:
+  redis-data:
+
+networks:
+  frontend:
+  backend:
+```
+
+## Kubernetes节点配置示例
+
+```yaml
+# k8s-node-config.yaml
+instance:
+  name_prefix: "k8s-node"
+  description: "Kubernetes worker nodes"
+  region_id: "cn-north-1"
+  instance_type: "g.n2.xlarge"
+  image_id: "img-centos-7.9-k8s"
+  count: 3
+  
+storage:
+  system_disk:
+    disk_category: "cloud_ssd"
+    disk_size_gb: 100
+  data_disks:
+    - disk_category: "cloud_ssd"
+      disk_size_gb: 500
+      device_name: "/dev/vdb"
+      mount_point: "/var/lib/docker"
+      filesystem: "ext4"
+
+network:
+  security_groups:
+    - "sg-k8s-node"
+  labels:
+    node-role.kubernetes.io/worker: ""
+    
+kubernetes:
+  version: "1.28"
+  kubelet_config:
+    max_pods: 110
+    system_reserved:
+      cpu: "500m"
+      memory: "512Mi"
+    kube_reserved:
+      cpu: "500m"
+      memory: "512Mi"
+```
+
+## 备份策略示例
+
+```yaml
+# backup-policy.yaml
+backup:
+  schedule:
+    daily:
+      time: "02:00"
+      retention_days: 7
+      
+    weekly:
+      day: "Sunday"
+      time: "01:00"
+      retention_weeks: 4
+      
+    monthly:
+      day: 1
+      time: "00:00"
+      retention_months: 12
+      
+  targets:
+    - type: "system_disk"
+      include_all: true
+      
+    - type: "data_disk"
+      device_names:
+        - "/dev/vdb"
+        - "/dev/vdc"
+        
+  notifications:
+    on_success: false
+    on_failure: true
+    contact_group_id: 1
+    
+  cleanup:
+    auto_delete_expired: true
+    min_retention_count: 3
+```
+
+## 成本优化配置示例
+
+```yaml
+# cost-optimization.yaml
+instances:
+  # 使用预留实例降低长期运行成本
+  reserved_instances:
+    - instance_type: "g.n2.large"
+      quantity: 5
+      term: "1 year"
+      payment_option: "all_upfront"  # 全预付，折扣最大
+      
+  # 使用抢占式实例处理临时任务
+  spot_instances:
+    - instance_type: "c.n2.xlarge"
+      max_price: 0.5  # 最高出价（元/小时）
+      interruption_behavior: "terminate"
+      
+  # 自动伸缩配置
+  auto_scaling:
+    min_instances: 2
+    max_instances: 10
+    desired_instances: 3
+    
+    scale_up:
+      metric: "vm.cpu.util"
+      threshold: 70
+      cooldown: 300
+      
+    scale_down:
+      metric: "vm.cpu.util"
+      threshold: 30
+      cooldown: 600
+
+resource_cleanup:
+  unused_eips:
+    auto_release: true
+    grace_period_hours: 24
+    
+  unattached_disks:
+    auto_release: true
+    grace_period_hours: 48
+    
+  old_snapshots:
+    auto_delete: true
+    retention_days: 30
+```
+
+## 标签规范示例
+
+```yaml
+# tagging-policy.yaml
+required_tags:
+  - key: "Environment"
+    allowed_values:
+      - "development"
+      - "testing"
+      - "staging"
+      - "production"
+      
+  - key: "Application"
+    description: "应用名称"
+    
+  - key: "Owner"
+    description: "资源负责人邮箱"
+    
+  - key: "CostCenter"
+    description: "成本中心代码"
+    
+  - key: "ManagedBy"
+    allowed_values:
+      - "terraform"
+      - "ansible"
+      - "manual"
+      
+optional_tags:
+  - key: "Project"
+    description: "项目名称"
+    
+  - key: "Team"
+    description: "团队名称"
+    
+  - key: "Version"
+    description: "应用版本"
+    
+enforcement:
+  auto_tag_new_resources: true
+  alert_on_missing_tags: true
+  block_creation_without_required_tags: false
+```
+
+这些配置示例可以根据实际需求进行调整和扩展。建议将配置文件纳入版本控制系统，并建立配置审查流程。
