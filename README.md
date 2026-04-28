@@ -136,39 +136,60 @@ cp jdcloud-skill-template.md jdcloud-[product]-ops/SKILL.md
 
 #### 5.1 环境变量配置
 
-在 SKILL.md 中明确说明运行所需的环境变量：
+每个 Skill 运行都需要配置京东云访问凭证。以下是标准的环境变量配置说明：
 
-```markdown
-## 环境变量
+##### 必需的环境变量
 
-Skill 运行需要配置以下环境变量：
+| 变量名 | 说明 | 是否必需 | 获取方式 |
+|--------|------|----------|----------|
+| `JDC_ACCESS_KEY` | 京东云 Access Key | 是 | [京东云控制台 - Access Key管理](https://uc.jdcloud.com/accesskey) |
+| `JDC_SECRET_KEY` | 京东云 Secret Key | 是 | 与 Access Key 同时生成 |
+| `JDC_REGION` | 默认区域 ID | 否 | 默认 `cn-north-1` |
 
-| 变量名 | 说明 | 是否必需 | 示例值 |
-|--------|------|----------|--------|
-| JDC_ACCESS_KEY | 京东云 Access Key | 是 | LTAI... |
-| JDC_SECRET_KEY | 京东云 Secret Key | 是 | xxxxxx |
-| JDC_REGION | 默认区域 ID | 否 | cn-north-1 |
+##### 配置方式
 
-### 配置方式
+**方式一：Shell 环境变量（推荐开发使用）**
 
-**方式一：Shell 环境变量**
 ```bash
-export JDC_ACCESS_KEY="your_access_key"
-export JDC_SECRET_KEY="your_secret_key"
+# 临时配置（当前终端会话有效）
+export JDC_ACCESS_KEY="your_access_key_here"
+export JDC_SECRET_KEY="your_secret_key_here"
 export JDC_REGION="cn-north-1"
+
+# 验证配置
+jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1
 ```
 
-**方式二：CLI 配置文件**
+**方式二：Shell 配置文件（持久化）**
+
 ```bash
-jdc config init
-# 交互式输入凭证
+# 添加到 ~/.bashrc 或 ~/.zshrc
+echo 'export JDC_ACCESS_KEY="your_access_key"' >> ~/.bashrc
+echo 'export JDC_SECRET_KEY="your_secret_key"' >> ~/.bashrc
+echo 'export JDC_REGION="cn-north-1"' >> ~/.bashrc
+
+# 重新加载配置
+source ~/.bashrc  # 或 source ~/.zshrc
 ```
 
-**方式三：MCP Server 配置**
+**方式三：CLI 配置文件**
+
+```bash
+# 交互式配置（凭证存储在 ~/.jdc/config）
+jdc config init
+
+# 根据提示输入 Access Key 和 Secret Key
+# 配置文件位置：~/.jdc/config
+```
+
+**方式四：MCP Server 配置（AI Agent 使用）**
+
 ```json
 {
   "mcpServers": {
     "jdcloud-vm": {
+      "command": "uvx",
+      "args": ["run", "--python", "3.10", "@jdcloud/vm-mcp"],
       "env": {
         "JDC_ACCESS_KEY": "${JDC_ACCESS_KEY}",
         "JDC_SECRET_KEY": "${JDC_SECRET_KEY}",
@@ -179,7 +200,39 @@ jdc config init
 }
 ```
 
-> ⚠️ **安全提示**：不要将凭证硬编码在代码或配置文件中，建议使用环境变量或密钥管理服务。
+> **注意**：MCP 配置中的 `${JDC_ACCESS_KEY}` 表示引用系统环境变量，需要在启动 MCP Server 前配置好对应的环境变量。
+
+##### 安全最佳实践
+
+- ✅ **推荐**：使用环境变量或密钥管理服务（如 AWS Secrets Manager、HashiCorp Vault）
+- ✅ **推荐**：为不同环境（开发/测试/生产）创建不同的 Access Key
+- ✅ **推荐**：定期轮换 Access Key（建议每 90 天）
+- ❌ **禁止**：将凭证硬编码在代码中
+- ❌ **禁止**：将凭证提交到 Git 仓库
+- ❌ **禁止**：在日志中输出凭证信息
+
+##### 凭证权限配置
+
+建议为 Skill 创建专用的 IAM 用户，并授予最小必要权限：
+
+```json
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "vm:Describe*",
+        "vm:Start*",
+        "vm:Stop*",
+        "vm:Reboot*",
+        "disk:Describe*",
+        "vpc:Describe*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
 ```
 
 #### 5.2 CLI 命令示例
