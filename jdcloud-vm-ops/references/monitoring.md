@@ -1,73 +1,73 @@
 # JD Cloud VM Monitoring & Alerts Guide
 
-## 监控概述
+## Monitoring Overview
 
-京东云云监控（Cloud Monitor）提供全面的VM实例监控能力，包括基础监控、操作系统监控和自定义监控。通过合理的监控配置和告警策略，可以及时发现并解决潜在问题。
+JD Cloud Monitor provides comprehensive VM instance monitoring capabilities, including basic monitoring, OS monitoring, and custom monitoring. Through proper monitoring configuration and alert policies, potential issues can be detected and resolved in a timely manner.
 
-## 核心监控指标
+## Core Monitoring Metrics
 
-### 1. CPU相关指标
+### 1. CPU-Related Metrics
 
-| 指标名称 | 指标Code | 单位 | 说明 |
-|---------|---------|------|------|
-| CPU使用率 | vm.cpu.util | % | CPU平均使用率 |
-| CPU负载(1分钟) | vm.cpu.load1 | - | 1分钟系统负载 |
-| CPU负载(5分钟) | vm.cpu.load5 | - | 5分钟系统负载 |
-| CPU负载(15分钟) | vm.cpu.load15 | - | 15分钟系统负载 |
-| CPU空闲率 | vm.cpu.idle | % | CPU空闲百分比 |
-| CPU用户态使用率 | vm.cpu.user | % | 用户态CPU使用率 |
-| CPU系统态使用率 | vm.cpu.system | % | 系统态CPU使用率 |
-| CPU等待I/O率 | vm.cpu.iowait | % | 等待I/O的CPU时间占比 |
+| Metric Name | Metric Code | Unit | Description |
+|------------|-------------|------|-------------|
+| CPU Usage | vm.cpu.util | % | Average CPU usage rate |
+| CPU Load (1 min) | vm.cpu.load1 | - | 1-minute system load |
+| CPU Load (5 min) | vm.cpu.load5 | - | 5-minute system load |
+| CPU Load (15 min) | vm.cpu.load15 | - | 15-minute system load |
+| CPU Idle | vm.cpu.idle | % | CPU idle percentage |
+| CPU User Mode | vm.cpu.user | % | User mode CPU usage |
+| CPU System Mode | vm.cpu.system | % | System mode CPU usage |
+| CPU I/O Wait | vm.cpu.iowait | % | CPU time waiting for I/O |
 
-### 2. 内存相关指标
+### 2. Memory-Related Metrics
 
-| 指标名称 | 指标Code | 单位 | 说明 |
-|---------|---------|------|------|
-| 内存使用率 | vm.memory.util | % | 内存使用百分比 |
-| 已用内存 | vm.memory.used | MB | 已使用的内存量 |
-| 可用内存 | vm.memory.available | MB | 可用内存量 |
-| 缓存内存 | vm.memory.cached | MB | 用于缓存的内存 |
-| Swap使用率 | vm.swap.util | % | Swap分区使用率 |
+| Metric Name | Metric Code | Unit | Description |
+|------------|-------------|------|-------------|
+| Memory Usage | vm.memory.util | % | Memory usage percentage |
+| Used Memory | vm.memory.used | MB | Amount of used memory |
+| Available Memory | vm.memory.available | MB | Amount of available memory |
+| Cached Memory | vm.memory.cached | MB | Memory used for caching |
+| Swap Usage | vm.swap.util | % | Swap partition usage rate |
 
-### 3. 磁盘相关指标
+### 3. Disk-Related Metrics
 
-| 指标名称 | 指标Code | 单位 | 说明 |
-|---------|---------|------|------|
-| 磁盘使用率 | vm.disk.util | % | 磁盘空间使用率 |
-| 磁盘读取速率 | vm.disk.read.bytes | KB/s | 磁盘读取速度 |
-| 磁盘写入速率 | vm.disk.write.bytes | KB/s | 磁盘写入速度 |
-| 磁盘读取IOPS | vm.disk.read.iops | 次/秒 | 每秒读取次数 |
-| 磁盘写入IOPS | vm.disk.write.iops | 次/秒 | 每秒写入次数 |
-| 磁盘读取延迟 | vm.disk.read.latency | ms | 读取操作平均延迟 |
-| 磁盘写入延迟 | vm.disk.write.latency | ms | 写入操作平均延迟 |
+| Metric Name | Metric Code | Unit | Description |
+|------------|-------------|------|-------------|
+| Disk Usage | vm.disk.util | % | Disk space usage rate |
+| Disk Read Rate | vm.disk.read.bytes | KB/s | Disk read speed |
+| Disk Write Rate | vm.disk.write.bytes | KB/s | Disk write speed |
+| Disk Read IOPS | vm.disk.read.iops | ops/s | Read operations per second |
+| Disk Write IOPS | vm.disk.write.iops | ops/s | Write operations per second |
+| Disk Read Latency | vm.disk.read.latency | ms | Average read operation latency |
+| Disk Write Latency | vm.disk.write.latency | ms | Average write operation latency |
 
-### 4. 网络相关指标
+### 4. Network-Related Metrics
 
-| 指标名称 | 指标Code | 单位 | 说明 |
-|---------|---------|------|------|
-| 网络流入带宽 | vm.network.in.bytes | KB/s | 入网流量速率 |
-| 网络流出带宽 | vm.network.out.bytes | KB/s | 出网流量速率 |
-| 网络流入数据包 | vm.network.in.packets | 个/秒 | 入网数据包速率 |
-| 网络流出数据包 | vm.network.out.packets | 个/秒 | 出网数据包速率 |
-| TCP连接数 | vm.tcp.connections | 个 | 当前TCP连接数 |
-| TCP新建连接数 | vm.tcp.new.connections | 个/秒 | 每秒新建TCP连接数 |
+| Metric Name | Metric Code | Unit | Description |
+|------------|-------------|------|-------------|
+| Network Inbound | vm.network.in.bytes | KB/s | Inbound traffic rate |
+| Network Outbound | vm.network.out.bytes | KB/s | Outbound traffic rate |
+| Network Inbound Packets | vm.network.in.packets | packets/s | Inbound packet rate |
+| Network Outbound Packets | vm.network.out.packets | packets/s | Outbound packet rate |
+| TCP Connections | vm.tcp.connections | count | Current TCP connections |
+| New TCP Connections | vm.tcp.new.connections | connections/s | New TCP connections per second |
 
-### 5. 系统相关指标
+### 5. System-Related Metrics
 
-| 指标名称 | 指标Code | 单位 | 说明 |
-|---------|---------|------|------|
-| 系统运行时间 | vm.uptime | 秒 | 系统启动后的运行时间 |
-| 进程总数 | vm.process.count | 个 | 当前运行的进程数 |
-| 登录用户数 | vm.user.login | 个 | 当前登录的用户数 |
+| Metric Name | Metric Code | Unit | Description |
+|------------|-------------|------|-------------|
+| System Uptime | vm.uptime | seconds | Running time since boot |
+| Total Processes | vm.process.count | count | Number of running processes |
+| Logged-in Users | vm.user.login | count | Number of currently logged-in users |
 
-## 查询监控数据
+## Querying Monitoring Data
 
-### CLI方式
+### CLI Method
 
-#### 查询单个指标
+#### Query Single Metric
 
 ```bash
-# 查询CPU使用率（最近1小时）
+# Query CPU usage (last 1 hour)
 jdc monitor describe-metric-data \
   --region-id cn-north-1 \
   --metric "vm.cpu.util" \
@@ -79,10 +79,10 @@ jdc monitor describe-metric-data \
   --period 60
 ```
 
-#### 查询多个指标
+#### Query Multiple Metrics
 
 ```bash
-# 同时查询CPU和内存使用率
+# Query CPU and memory usage simultaneously
 jdc monitor last-downsample \
   --region-id cn-north-1 \
   --service-code vm \
@@ -90,10 +90,10 @@ jdc monitor last-downsample \
   --metrics '["vm.cpu.util", "vm.memory.util", "vm.disk.util"]'
 ```
 
-#### 查询历史数据
+#### Query Historical Data
 
 ```bash
-# 查询过去24小时的CPU使用率，按5分钟聚合
+# Query CPU usage for the past 24 hours, aggregated by 5 minutes
 jdc monitor describe-metric-data \
   --region-id cn-north-1 \
   --metric "vm.cpu.util" \
@@ -105,10 +105,10 @@ jdc monitor describe-metric-data \
   --period 300
 ```
 
-#### 查询指定时间范围
+#### Query Specific Time Range
 
 ```bash
-# 查询特定时间段的数据
+# Query data for a specific time period
 jdc monitor describe-metric-data \
   --region-id cn-north-1 \
   --metric "vm.cpu.util" \
@@ -119,7 +119,7 @@ jdc monitor describe-metric-data \
   --aggr-type max
 ```
 
-### SDK方式（Python）
+### SDK Method (Python)
 
 ```python
 from jdcloud_sdk.core.credential import Credential
@@ -128,14 +128,14 @@ from jdcloud_sdk.services.monitor.apis.DescribeMetricDataRequest import Describe
 import os
 from datetime import datetime, timedelta
 
-# 初始化客户端
+# Initialize client
 credential = Credential(
     os.environ['JDC_ACCESS_KEY'],
     os.environ['JDC_SECRET_KEY']
 )
 client = MonitorClient(credential, 'cn-north-1')
 
-# 构建请求
+# Build request
 request = DescribeMetricDataRequest({
     "regionId": "cn-north-1",
     "metric": "vm.cpu.util",
@@ -147,10 +147,10 @@ request = DescribeMetricDataRequest({
     "period": 60
 })
 
-# 发送请求
+# Send request
 response = client.describeMetricData(request)
 
-# 处理结果
+# Process results
 if response.error is None:
     for data in response.result.metricDatas:
         print(f"Time: {data.timestamp}, CPU Usage: {data.value}%")
@@ -158,22 +158,22 @@ else:
     print(f"Error: {response.error.message}")
 ```
 
-## 告警配置
+## Alert Configuration
 
-### 告警级别
+### Alert Levels
 
-| 级别 | 说明 | 通知方式建议 |
-|------|------|------------|
-| 严重 (Critical) | 需要立即处理的问题 | 短信 + 电话 + 邮件 |
-| 警告 (Warning) | 需要关注的问题 | 邮件 + IM通知 |
-| 信息 (Info) | 一般性通知 | 邮件 |
+| Level | Description | Recommended Notification |
+|-------|-------------|------------------------|
+| Critical | Requires immediate action | SMS + Phone + Email |
+| Warning | Requires attention | Email + IM notification |
+| Info | General notification | Email |
 
-### 常用告警规则
+### Common Alert Rules
 
-#### 1. CPU使用率告警
+#### 1. CPU Usage Alert
 
 ```bash
-# CPU使用率 > 80% （警告）
+# CPU usage > 80% (Warning)
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-CPU-Warning" \
@@ -186,9 +186,9 @@ jdc monitor create-alarm \
   --evaluation-periods 3 \
   --contact-group-id 1 \
   --notice-type "email" \
-  --description "CPU使用率超过80%"
+  --description "CPU usage exceeds 80%"
 
-# CPU使用率 > 90% （严重）
+# CPU usage > 90% (Critical)
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-CPU-Critical" \
@@ -201,19 +201,19 @@ jdc monitor create-alarm \
   --evaluation-periods 2 \
   --contact-group-id 1 \
   --notice-type "sms,email" \
-  --description "CPU使用率超过90%"
+  --description "CPU usage exceeds 90%"
 ```
 
-**建议阈值**：
-- 警告级别：CPU > 70-80%
-- 严重级别：CPU > 90%
-- 统计周期：5分钟
-- 连续次数：2-3次
+**Recommended Thresholds**:
+- Warning: CPU > 70-80%
+- Critical: CPU > 90%
+- Statistic period: 5 minutes
+- Consecutive times: 2-3
 
-#### 2. 内存使用率告警
+#### 2. Memory Usage Alert
 
 ```bash
-# 内存使用率 > 85% （警告）
+# Memory usage > 85% (Warning)
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-Memory-Warning" \
@@ -226,9 +226,9 @@ jdc monitor create-alarm \
   --evaluation-periods 2 \
   --contact-group-id 1 \
   --notice-type "email" \
-  --description "内存使用率超过85%"
+  --description "Memory usage exceeds 85%"
 
-# 内存使用率 > 95% （严重）
+# Memory usage > 95% (Critical)
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-Memory-Critical" \
@@ -241,17 +241,17 @@ jdc monitor create-alarm \
   --evaluation-periods 1 \
   --contact-group-id 1 \
   --notice-type "sms,email" \
-  --description "内存使用率超过95%"
+  --description "Memory usage exceeds 95%"
 ```
 
-**建议阈值**：
-- 警告级别：内存 > 80-85%
-- 严重级别：内存 > 95%
+**Recommended Thresholds**:
+- Warning: Memory > 80-85%
+- Critical: Memory > 95%
 
-#### 3. 磁盘使用率告警
+#### 3. Disk Usage Alert
 
 ```bash
-# 磁盘使用率 > 70% （警告）
+# Disk usage > 70% (Warning)
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-Disk-Warning" \
@@ -264,9 +264,9 @@ jdc monitor create-alarm \
   --evaluation-periods 2 \
   --contact-group-id 1 \
   --notice-type "email" \
-  --description "磁盘使用率超过70%"
+  --description "Disk usage exceeds 70%"
 
-# 磁盘使用率 > 85% （严重）
+# Disk usage > 85% (Critical)
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-Disk-Critical" \
@@ -279,17 +279,17 @@ jdc monitor create-alarm \
   --evaluation-periods 1 \
   --contact-group-id 1 \
   --notice-type "sms,email" \
-  --description "磁盘使用率超过85%"
+  --description "Disk usage exceeds 85%"
 ```
 
-**建议阈值**：
-- 警告级别：磁盘 > 70%
-- 严重级别：磁盘 > 85%
+**Recommended Thresholds**:
+- Warning: Disk > 70%
+- Critical: Disk > 85%
 
-#### 4. 系统负载告警
+#### 4. System Load Alert
 
 ```bash
-# 1分钟负载过高
+# High 1-minute load
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-HighLoad-Warning" \
@@ -302,17 +302,17 @@ jdc monitor create-alarm \
   --evaluation-periods 2 \
   --contact-group-id 1 \
   --notice-type "email" \
-  --description "系统1分钟负载过高"
+  --description "High system 1-minute load"
 ```
 
-**建议阈值**：
-- 警告级别：1分钟负载 > CPU核数 × 2
-- 严重级别：1分钟负载 > CPU核数 × 4
+**Recommended Thresholds**:
+- Warning: 1-min load > CPU cores x 2
+- Critical: 1-min load > CPU cores x 4
 
-#### 5. 网络带宽告警
+#### 5. Network Bandwidth Alert
 
 ```bash
-# 网络流入带宽过高
+# High inbound bandwidth
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-NetworkIn-Warning" \
@@ -325,13 +325,13 @@ jdc monitor create-alarm \
   --evaluation-periods 2 \
   --contact-group-id 1 \
   --notice-type "email" \
-  --description "网络流入带宽超过10MB/s"
+  --description "Inbound bandwidth exceeds 10MB/s"
 ```
 
-#### 6. TCP连接数告警
+#### 6. TCP Connections Alert
 
 ```bash
-# TCP连接数过多
+# Too many TCP connections
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-TCPConnections-Warning" \
@@ -344,55 +344,55 @@ jdc monitor create-alarm \
   --evaluation-periods 2 \
   --contact-group-id 1 \
   --notice-type "email" \
-  --description "TCP连接数超过10000"
+  --description "TCP connections exceed 10000"
 ```
 
-### 管理告警规则
+### Managing Alert Rules
 
-#### 查询告警规则
+#### Query Alert Rules
 
 ```bash
-# 查询所有告警规则
+# Query all alert rules
 jdc monitor describe-alarms \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 查询指定资源的告警规则
+# Query alert rules for a specific resource
 jdc monitor describe-alarms \
   --region-id cn-north-1 \
   --service-code vm \
   --resource-id i-xxxxx
 
-# 查询启用的告警规则
+# Query enabled alert rules
 jdc monitor describe-alarms \
   --region-id cn-north-1 \
   --filters '[{"name":"enabled","values":["true"]}]'
 ```
 
-#### 更新告警规则
+#### Update Alert Rules
 
 ```bash
-# 修改告警阈值
+# Modify alert threshold
 jdc monitor update-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxxxx \
   --threshold 85
 
-# 禁用告警规则
+# Disable alert rule
 jdc monitor update-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxxxx \
   --enabled false
 
-# 启用告警规则
+# Enable alert rule
 jdc monitor update-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxxxx \
   --enabled true
 ```
 
-#### 删除告警规则
+#### Delete Alert Rules
 
 ```bash
 jdc monitor delete-alarm \
@@ -400,10 +400,10 @@ jdc monitor delete-alarm \
   --alarm-id alarm-xxxxx
 ```
 
-#### 查询告警历史
+#### Query Alert History
 
 ```bash
-# 查询告警触发历史
+# Query alert trigger history
 jdc monitor describe-alarm-history \
   --region-id cn-north-1 \
   --alarm-id alarm-xxxxx \
@@ -413,90 +413,90 @@ jdc monitor describe-alarm-history \
   --page-size 50
 ```
 
-## 联系人组管理
+## Contact Group Management
 
-### 创建联系人组
+### Create Contact Group
 
 ```bash
 jdc monitor create-contact-group \
   --region-id cn-north-1 \
-  --contact-group-name "运维团队" \
-  --description "负责生产环境运维" \
+  --contact-group-name "Ops Team" \
+  --description "Responsible for production environment operations" \
   --contacts '[{
-    "name": "张三",
+    "name": "Zhang San",
     "phone": "138****8888",
     "email": "zhangsan@example.com"
   }, {
-    "name": "李四",
+    "name": "Li Si",
     "phone": "139****9999",
     "email": "lisi@example.com"
   }]'
 ```
 
-### 查询联系人组
+### Query Contact Groups
 
 ```bash
-# 查询所有联系人组
+# Query all contact groups
 jdc monitor describe-contact-groups \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 查询指定联系人组
+# Query specific contact group
 jdc monitor describe-contact-group \
   --region-id cn-north-1 \
   --contact-group-id 1
 ```
 
-### 更新联系人组
+### Update Contact Group
 
 ```bash
 jdc monitor update-contact-group \
   --region-id cn-north-1 \
   --contact-group-id 1 \
   --contacts '[{
-    "name": "王五",
+    "name": "Wang Wu",
     "phone": "137****7777",
     "email": "wangwu@example.com"
   }]'
 ```
 
-## Dashboard配置
+## Dashboard Configuration
 
-### 创建自定义Dashboard
+### Create Custom Dashboard
 
-可以通过京东云控制台创建自定义监控面板，将多个指标集中展示。
+You can create custom monitoring dashboards through the JD Cloud Console to display multiple metrics in one place.
 
-#### 推荐的Dashboard布局
+#### Recommended Dashboard Layout
 
-**1. 资源概览面板**
-- CPU使用率趋势图
-- 内存使用率趋势图
-- 磁盘使用率趋势图
-- 网络带宽趋势图
+**1. Resource Overview Panel**
+- CPU usage trend chart
+- Memory usage trend chart
+- Disk usage trend chart
+- Network bandwidth trend chart
 
-**2. 性能详情面板**
-- CPU负载（1/5/15分钟）
-- 磁盘IOPS和延迟
-- TCP连接数
-- 进程数
+**2. Performance Details Panel**
+- CPU load (1/5/15 minutes)
+- Disk IOPS and latency
+- TCP connections
+- Process count
 
-**3. 告警状态面板**
-- 当前触发的告警列表
-- 告警级别分布
-- 告警历史趋势
+**3. Alert Status Panel**
+- Currently triggered alerts list
+- Alert level distribution
+- Alert history trends
 
-### 使用Grafana集成
+### Using Grafana Integration
 
-如果需要使用Grafana展示监控数据，可以配置Prometheus数据源或使用京东云提供的Grafana插件。
+If you need to display monitoring data using Grafana, you can configure a Prometheus data source or use the Grafana plugin provided by JD Cloud.
 
-## 自定义监控
+## Custom Monitoring
 
-### 推送自定义指标
+### Pushing Custom Metrics
 
-对于应用层面的监控指标，可以通过API推送自定义监控数据。
+For application-level monitoring, you can push custom monitoring data via the API.
 
-#### Python示例
+#### Python Example
 
 ```python
 from jdcloud_sdk.core.credential import Credential
@@ -504,14 +504,14 @@ from jdcloud_sdk.services.monitor.client import MonitorClient
 from jdcloud_sdk.services.monitor.apis.PutCustomMetricDataRequest import PutCustomMetricDataRequest
 import os
 
-# 初始化客户端
+# Initialize client
 credential = Credential(
     os.environ['JDC_ACCESS_KEY'],
     os.environ['JDC_SECRET_KEY']
 )
 client = MonitorClient(credential, 'cn-north-1')
 
-# 构建自定义指标数据
+# Build custom metric data
 request = PutCustomMetricDataRequest({
     "regionId": "cn-north-1",
     "namespace": "my-application",
@@ -524,7 +524,7 @@ request = PutCustomMetricDataRequest({
             ],
             "timestamp": "2026-04-28T12:00:00Z",
             "value": 1234,
-            "type": 0,  # 0: 原始值, 1: 累加值
+            "type": 0,  # 0: raw value, 1: cumulative value
             "unit": "Count"
         },
         {
@@ -540,7 +540,7 @@ request = PutCustomMetricDataRequest({
     ]
 })
 
-# 推送数据
+# Push data
 response = client.putCustomMetricData(request)
 if response.error is None:
     print("Custom metrics pushed successfully")
@@ -548,7 +548,7 @@ else:
     print(f"Error: {response.error.message}")
 ```
 
-#### 查询自定义指标
+#### Query Custom Metrics
 
 ```bash
 jdc monitor describe-metric-data \
@@ -560,83 +560,83 @@ jdc monitor describe-metric-data \
   --aggr-type sum
 ```
 
-## 监控最佳实践
+## Monitoring Best Practices
 
-### 1. 合理设置告警阈值
+### 1. Set Appropriate Alert Thresholds
 
-- **避免告警疲劳**: 不要设置过于敏感的阈值
-- **分级告警**: 根据严重程度设置不同的通知方式
-- **考虑业务特点**: 不同业务的阈值可能不同
-- **定期调整**: 根据历史数据优化阈值
+- **Avoid Alert Fatigue**: Do not set overly sensitive thresholds
+- **Tiered Alerts**: Use different notification methods based on severity
+- **Consider Business Characteristics**: Different businesses may have different thresholds
+- **Regular Adjustments**: Optimize thresholds based on historical data
 
-### 2. 多维度监控
+### 2. Multi-Dimensional Monitoring
 
-- **基础资源**: CPU、内存、磁盘、网络
-- **应用指标**: QPS、响应时间、错误率
-- **业务指标**: 订单量、用户数、交易额
-- **依赖服务**: 数据库、缓存、消息队列
+- **Infrastructure**: CPU, memory, disk, network
+- **Application Metrics**: QPS, response time, error rate
+- **Business Metrics**: Order volume, user count, transaction amount
+- **Dependent Services**: Database, cache, message queue
 
-### 3. 告警收敛
+### 3. Alert Convergence
 
-- **设置冷却时间**: 避免短时间内重复告警
-- **告警聚合**: 将相关告警合并通知
-- **抑制规则**: 在维护期间抑制非必要告警
+- **Set Cooldown Periods**: Avoid repeated alerts within a short time
+- **Alert Aggregation**: Merge related alerts into one notification
+- **Suppression Rules**: Suppress unnecessary alerts during maintenance periods
 
-### 4. 监控覆盖
+### 4. Monitoring Coverage
 
-- **全覆盖**: 确保所有关键资源都有监控
-- **无死角**: 不仅监控系统层面，也要监控应用和业务层面
-- **自动化**: 新资源创建时自动添加监控
+- **Full Coverage**: Ensure all critical resources have monitoring
+- **No Blind Spots**: Monitor not only the system level but also application and business levels
+- **Automation**: Automatically add monitoring when new resources are created
 
-### 5. 定期检查
+### 5. Regular Checks
 
-- **验证告警**: 定期测试告警是否正常工作
-- **清理无效告警**: 删除不再需要的告警规则
-- **更新联系人**: 确保联系人信息准确
+- **Verify Alerts**: Regularly test if alerts are working correctly
+- **Clean Up Invalid Alerts**: Delete unnecessary alert rules
+- **Update Contacts**: Ensure contact information is accurate
 
-### 6. 文档化
+### 6. Documentation
 
-- **记录阈值设定原因**: 便于后续优化
-- **维护应急预案**: 针对不同告警制定处理流程
-- **分享经验**: 团队内部分享监控和故障处理经验
+- **Record Threshold Rationale**: Facilitate future optimization
+- **Maintain Emergency Plans**: Develop handling procedures for different alerts
+- **Share Experience**: Share monitoring and troubleshooting experience within the team
 
-## 常见问题
+## Common Issues
 
-### 1. 监控数据缺失
+### 1. Missing Monitoring Data
 
-**可能原因**：
-- 实例已停止或删除
-- 监控Agent未安装或异常
-- 网络问题导致数据上报失败
+**Possible Causes**:
+- Instance has been stopped or deleted
+- Monitoring Agent not installed or abnormal
+- Network issues causing data upload failure
 
-**解决方案**：
+**Solutions**:
 ```bash
-# 检查实例状态
+# Check instance status
 jdc vm describe-instances --region-id cn-north-1 --instance-ids '["i-xxxxx"]'
 
-# 检查监控Agent状态（需要在实例内执行）
+# Check monitoring agent status (execute inside instance)
 sudo systemctl status jcloud-monitor-agent
 ```
 
-### 2. 告警未触发
+### 2. Alert Not Triggering
 
-**可能原因**：
-- 告警规则被禁用
-- 阈值设置不合理
-- 联系人组配置错误
+**Possible Causes**:
+- Alert rule is disabled
+- Threshold set incorrectly
+- Contact group configuration error
 
-**解决方案**：
+**Solutions**:
 ```bash
-# 检查告警规则状态
+# Check alert rule status
 jdc monitor describe-alarms --region-id cn-north-1 --alarm-ids '["alarm-xxxxx"]'
 
-# 检查联系人组
+# Check contact group
 jdc monitor describe-contact-group --region-id cn-north-1 --contact-group-id 1
 ```
 
-### 3. 收到过多告警
+### 3. Too Many Alerts
 
-**解决方案**：
-- 调整阈值，避免过于敏感
-- 增加统计周期和连续次数
-- 配置告警收敛和抑制规则
+**Solutions**:
+- Adjust thresholds to avoid being too sensitive
+- Increase statistic period and consecutive evaluation count
+- Configure alert convergence and suppression rules

@@ -1,166 +1,166 @@
 # JD Cloud VM Core Concepts
 
-## 什么是云主机 (VM)
+## What is a Virtual Machine (VM)
 
-京东云云主机（Virtual Machine，简称 VM）是一种弹性可伸缩的计算服务。它提供处理能力可变的计算资源，您可以根据业务需要随时调整配置。云主机帮助您更高效地构建稳定、安全的应用环境。
+JD Cloud Virtual Machine (VM) is a scalable computing service that provides variable processing power resources. You can adjust configurations at any time based on your business needs. VMs help you build stable and secure application environments more efficiently.
 
-## 核心组件
+## Core Components
 
-### 1. 实例类型 (Instance Types)
+### 1. Instance Types
 
-京东云提供多种实例类型以满足不同业务场景需求：
+JD Cloud offers various instance types to meet different business requirements:
 
-| 实例系列 | 适用场景 | 特点 |
-|---------|---------|------|
-| 通用型 (g系列) | Web服务器、中小型数据库 | 均衡的CPU和内存配比 |
-| 计算型 (c系列) | 高性能计算、批处理 | 高CPU性能 |
-| 内存型 (r系列) | 大型数据库、缓存系统 | 大内存容量 |
-| GPU型 (gn系列) | AI训练、图形渲染 | 配备GPU加速器 |
-| 本地SSD型 (i系列) | NoSQL数据库、数据仓库 | 高性能本地存储 |
+| Instance Series | Use Cases | Features |
+|----------------|-----------|----------|
+| General Purpose (g-series) | Web servers, small to medium databases | Balanced CPU and memory ratio |
+| Compute Optimized (c-series) | High-performance computing, batch processing | High CPU performance |
+| Memory Optimized (r-series) | Large databases, caching systems | Large memory capacity |
+| GPU (gn-series) | AI training, graphics rendering | Equipped with GPU accelerators |
+| Local SSD (i-series) | NoSQL databases, data warehouses | High-performance local storage |
 
-### 2. 镜像 (Images)
+### 2. Images
 
-镜像是创建VM实例的模板，包含操作系统和预装软件：
+Images are templates for creating VM instances, containing the operating system and pre-installed software:
 
-- **公共镜像**: 京东云官方提供的标准操作系统镜像
-- **自定义镜像**: 基于现有实例创建的个性化镜像
-- **共享镜像**: 其他用户共享给您的镜像
-- **市场镜像**: 第三方提供的预装应用的镜像
+- **Public Images**: Standard OS images officially provided by JD Cloud
+- **Custom Images**: Personalized images created from existing instances
+- **Shared Images**: Images shared by other users
+- **Marketplace Images**: Pre-installed application images provided by third parties
 
-### 3. 存储 (Storage)
+### 3. Storage
 
-#### 云硬盘 (Cloud Disk)
-- **普通云盘**: 适用于一般应用场景
-- **高效云盘**: 提供更高的IOPS性能
-- **SSD云盘**: 提供最高的IOPS和低延迟
+#### Cloud Disk
+- **Standard Cloud Disk**: Suitable for general application scenarios
+- **High-performance Cloud Disk**: Provides higher IOPS performance
+- **SSD Cloud Disk**: Provides the highest IOPS and low latency
 
-#### 本地存储
-- 部分实例类型提供本地SSD或HDD存储
-- 数据不持久化，实例释放后数据丢失
+#### Local Storage
+- Some instance types provide local SSD or HDD storage
+- Data is not persistent and will be lost when the instance is released
 
-### 4. 网络 (Networking)
+### 4. Networking
 
 #### VPC (Virtual Private Cloud)
-- 逻辑隔离的私有网络环境
-- 可自定义IP地址范围、子网、路由表
+- Logically isolated private network environment
+- Customizable IP address range, subnets, and route tables
 
-#### 安全组 (Security Group)
-- 虚拟防火墙，控制实例的入站和出站流量
-- 支持基于协议、端口、IP地址的规则配置
+#### Security Group
+- Virtual firewall controlling inbound and outbound traffic for instances
+- Supports rule configuration based on protocol, port, and IP address
 
-#### 弹性公网IP (EIP)
-- 可独立购买和持有的公网IP地址
-- 可随时绑定或解绑到VM实例
+#### Elastic IP (EIP)
+- Public IP address that can be purchased and held independently
+- Can be bound to or unbound from VM instances at any time
 
-### 5. 密钥对 (Key Pair)
+### 5. Key Pair
 
-- 用于Linux实例的SSH登录认证
-- 由公钥和私钥组成
-- 私钥需妥善保管，丢失后无法恢复
+- Used for SSH login authentication on Linux instances
+- Consists of a public key and a private key
+- The private key must be kept safe and cannot be recovered if lost
 
-## 实例生命周期
+## Instance Lifecycle
 
-### 状态转换
+### State Transitions
 
 ```
-创建中 (Creating) → 运行中 (Running) ↔ 已停止 (Stopped)
-                        ↓
-                    重启中 (Rebooting)
-                        ↓
-                    删除中 (Deleting) → 已删除 (Deleted)
+Creating → Running ↔ Stopped
+               ↓
+           Rebooting
+               ↓
+           Deleting → Deleted
 ```
 
-### 主要状态说明
+### Main States
 
-| 状态 | 说明 | 可执行操作 |
-|------|------|-----------|
-| Creating | 实例创建中 | 无 |
-| Running | 实例正常运行 | 重启、停止、重装系统、创建快照 |
-| Stopped | 实例已停止 | 启动、删除、变更配置 |
-| Rebooting | 实例重启中 | 无 |
-| Deleting | 实例删除中 | 无 |
-| Deleted | 实例已删除 | 无 |
+| State | Description | Operable Actions |
+|-------|-------------|------------------|
+| Creating | Instance being created | None |
+| Running | Instance running normally | Reboot, stop, reinstall OS, create snapshot |
+| Stopped | Instance stopped | Start, delete, modify configuration |
+| Rebooting | Instance rebooting | None |
+| Deleting | Instance being deleted | None |
+| Deleted | Instance deleted | None |
 
-## 计费模式
+## Billing Models
 
-### 按配置计费
+### By Configuration
 
-1. **包年包月 (Subscription)**
-   - 适合长期稳定运行的业务
-   - 价格更优惠，最长可购买3年
-   - 不支持随时退订
+1. **Subscription (Monthly/Yearly)**
+   - Suitable for long-term stable running businesses
+   - More cost-effective, up to 3 years purchase
+   - Cannot be canceled at any time
 
-2. **按量付费 (Pay-As-You-Go)**
-   - 适合短期测试或波动性业务
-   - 按小时计费，随时可以释放
-   - 单价相对较高
+2. **Pay-As-You-Go**
+   - Suitable for short-term testing or fluctuating businesses
+   - Billed by the hour, can be released at any time
+   - Relatively higher unit price
 
-### 计费项
+### Billing Items
 
-- 实例规格（CPU + 内存）
-- 系统盘和数据盘
-- 公网带宽（如使用）
-- 镜像（部分市场镜像收费）
+- Instance specifications (CPU + Memory)
+- System disk and data disks
+- Public network bandwidth (if used)
+- Images (some marketplace images are charged)
 
-## 高可用性架构
+## High Availability Architecture
 
-### 可用区 (Availability Zone)
+### Availability Zone
 
-- 同一地域内电力和网络互相独立的物理区域
-- 建议将关键业务部署在多个可用区
-- 可用区间通过内网互联，延迟低
+- Physically independent areas within the same region with separate power and networks
+- It is recommended to deploy critical services across multiple availability zones
+- Availability zones are interconnected via internal network with low latency
 
-### 最佳实践
+### Best Practices
 
-1. **多可用区部署**: 将实例分布在至少2个可用区
-2. **负载均衡**: 使用负载均衡器分发流量
-3. **自动伸缩**: 配置伸缩组应对流量波动
-4. **定期备份**: 使用快照功能定期备份数据
+1. **Multi-AZ Deployment**: Distribute instances across at least 2 availability zones
+2. **Load Balancing**: Use load balancers to distribute traffic
+3. **Auto Scaling**: Configure scaling groups to handle traffic fluctuations
+4. **Regular Backups**: Use snapshots to regularly back up data
 
-## 安全最佳实践
+## Security Best Practices
 
-1. **最小权限原则**: 仅开放必要的端口和服务
-2. **定期更新**: 及时安装操作系统和安全补丁
-3. **密钥管理**: 使用密钥对而非密码登录
-4. **安全组规则**: 定期审查和优化安全组规则
-5. **监控告警**: 配置资源使用和异常访问告警
-6. **数据加密**: 对敏感数据进行加密存储
+1. **Principle of Least Privilege**: Only open necessary ports and services
+2. **Regular Updates**: Promptly install OS and security patches
+3. **Key Management**: Use key pairs instead of passwords for login
+4. **Security Group Rules**: Regularly review and optimize security group rules
+5. **Monitoring & Alerting**: Configure resource usage and abnormal access alerts
+6. **Data Encryption**: Encrypt sensitive data for storage
 
-## 性能优化建议
+## Performance Optimization Tips
 
-1. **选择合适的实例类型**: 根据业务负载选择匹配的实例规格
-2. **使用高效云盘或SSD**: 提升I/O性能
-3. **启用增强网络**: 获得更高的网络带宽和更低的延迟
-4. **合理配置安全组**: 避免过多的安全组规则影响性能
-5. **监控系统指标**: 及时发现并解决性能瓶颈
+1. **Choose the Right Instance Type**: Select matching instance specifications based on workload
+2. **Use High-performance or SSD Disks**: Improve I/O performance
+3. **Enable Enhanced Networking**: Get higher network bandwidth and lower latency
+4. **Configure Security Groups Reasonably**: Avoid excessive security group rules affecting performance
+5. **Monitor System Metrics**: Identify and resolve performance bottlenecks in a timely manner
 
-## 常见应用场景
+## Common Use Cases
 
-### 1. Web应用托管
-- 使用通用型实例
-- 配合负载均衡实现高可用
-- 使用云盘存储应用数据
+### 1. Web Application Hosting
+- Use general-purpose instances
+- Combine with load balancers for high availability
+- Use cloud disks for application data storage
 
-### 2. 数据库服务
-- 使用内存型或计算型实例
-- 采用SSD云盘提升I/O性能
-- 配置主从复制实现高可用
+### 2. Database Services
+- Use memory-optimized or compute-optimized instances
+- Use SSD cloud disks to improve I/O performance
+- Configure master-slave replication for high availability
 
-### 3. 大数据处理
-- 使用计算型实例集群
-- 利用本地SSD提升数据处理速度
-- 结合对象存储保存海量数据
+### 3. Big Data Processing
+- Use compute-optimized instance clusters
+- Leverage local SSDs to improve data processing speed
+- Combine with object storage for massive data retention
 
-### 4. AI/机器学习
-- 使用GPU型实例
-- 预装深度学习框架
-- 配合高速网络加速数据传输
+### 4. AI / Machine Learning
+- Use GPU instances
+- Pre-install deep learning frameworks
+- Utilize high-speed networks to accelerate data transfer
 
-## 相关服务
+## Related Services
 
-- **云监控 (Cloud Monitor)**: 监控VM资源使用情况
-- **自动伸缩 (Auto Scaling)**: 根据负载自动调整实例数量
-- **负载均衡 (Load Balancer)**: 分发流量到多个实例
-- **云硬盘 (Cloud Disk)**: 为VM提供持久化存储
-- **对象存储 (Object Storage)**: 存储非结构化数据
-- **容器服务 (Container Service)**: 运行容器化应用
+- **Cloud Monitor**: Monitor VM resource usage
+- **Auto Scaling**: Automatically adjust instance count based on load
+- **Load Balancer**: Distribute traffic across multiple instances
+- **Cloud Disk**: Provide persistent storage for VMs
+- **Object Storage**: Store unstructured data
+- **Container Service**: Run containerized applications

@@ -71,10 +71,10 @@ This Skill uses structured placeholders to avoid prompt injection and parsing am
 
 ## Changelog
 
-| 版本 | 日期 | 变更内容 |
-|------|------|---------|
-| 1.0.0 | 2026-04-28 | 初始版本，包含基础运维指南和参考模板 |
-| 1.0.1 | 2026-04-28 | 添加VM实例管理、网络配置、安全组操作指南 |
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-04-28 | Initial version, includes basic operational guide and reference templates |
+| 1.0.1 | 2026-04-28 | Added VM instance management, network configuration, and security group operations guide |
 
 ## Execution Flows (Agent-Readable)
 Every operation follows the pattern: Pre-flight → Execute → Validate → Recover. The Agent MUST NOT skip any phase.
@@ -199,11 +199,11 @@ jdc vm delete-instance \
    
    The Agent runtime MUST have the following environment variables set. These map to `{{env.*}}` placeholders used throughout this Skill:
    
-   | 变量名 | 说明 | 是否必需 | Agent 行为 |
-   |--------|------|----------|-----------|
-   | `{{env.JDC_ACCESS_KEY}}` | 京东云 Access Key | 是 | 从运行时环境解析，绝不向用户索取 |
-   | `{{env.JDC_SECRET_KEY}}` | 京东云 Secret Key | 是 | 从运行时环境解析，绝不向用户索取 |
-   | `{{env.JDC_REGION}}` | 默认区域 ID | 否 | 默认 `cn-north-1` |
+   | Variable | Description | Required | Agent Behavior |
+   |----------|-------------|----------|----------------|
+   | `{{env.JDC_ACCESS_KEY}}` | JD Cloud Access Key | Yes | Resolved from runtime environment, NEVER ask the user |
+   | `{{env.JDC_SECRET_KEY}}` | JD Cloud Secret Key | Yes | Resolved from runtime environment, NEVER ask the user |
+   | `{{env.JDC_REGION}}` | Default region ID | No | Default `cn-north-1` |
    
    ```bash
    export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
@@ -212,7 +212,7 @@ jdc vm delete-instance \
    ```
    
    > The Agent MUST verify these are set before any operation. If missing, instruct user to configure via `jdc config init`.
-   > ⚠️ **安全提示**：不要将凭证硬编码在代码或配置文件中，使用 `{{env.*}}` 占位符由 Agent harness 注入。
+   > ⚠️ **Security Note**: Do not hardcode credentials in code or configuration files. Use `{{env.*}}` placeholders injected by the Agent harness.
 
 ## Reference Directory
 - [Core Concepts](references/core-concepts.md)

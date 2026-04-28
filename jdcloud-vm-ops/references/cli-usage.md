@@ -1,51 +1,51 @@
 # JD Cloud VM CLI Usage Guide
 
-## 前置条件
+## Prerequisites
 
-确保已安装并配置好京东云CLI：
+Ensure that the JD Cloud CLI is installed and configured:
 
 ```bash
-# 安装CLI
+# Install CLI
 pip install jdcloud-cli
 
-# 初始化配置
+# Initialize configuration
 jdc config init
 
-# 验证配置
+# Verify configuration
 jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1
 ```
 
-## 实例管理
+## Instance Management
 
-### 查询实例列表
+### Query Instances
 
 ```bash
-# 查询所有实例
+# Query all instances
 jdc vm describe-instances \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 根据实例ID查询
+# Query by instance ID
 jdc vm describe-instances \
   --region-id cn-north-1 \
   --instance-ids '["i-xxxxx"]'
 
-# 根据名称过滤
+# Filter by name
 jdc vm describe-instances \
   --region-id cn-north-1 \
   --filters '[{"name":"instance-name","values":["my-vm"]}]'
 
-# 查询指定状态的实例
+# Query instances with a specific status
 jdc vm describe-instances \
   --region-id cn-north-1 \
   --filters '[{"name":"status","values":["running"]}]'
 ```
 
-### 创建实例
+### Create Instance
 
 ```bash
-# 创建单个实例
+# Create a single instance
 jdc vm create-instances \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
@@ -71,7 +71,7 @@ jdc vm create-instances \
   --key-names '["my-keypair"]' \
   --charge-mode "postpaid_by_duration"
 
-# 批量创建实例
+# Batch create instances
 jdc vm create-instances \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
@@ -87,40 +87,40 @@ jdc vm create-instances \
   --charge-mode "postpaid_by_duration"
 ```
 
-### 启动/停止实例
+### Start / Stop Instance
 
 ```bash
-# 启动实例
+# Start instance
 jdc vm start-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 
-# 停止实例（正常关机）
+# Stop instance (normal shutdown)
 jdc vm stop-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 
-# 强制停止实例
+# Force stop instance
 jdc vm stop-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --force-stop true
 
-# 重启实例
+# Reboot instance
 jdc vm reboot-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 ```
 
-### 删除实例
+### Delete Instance
 
 ```bash
-# 删除单个实例
+# Delete a single instance
 jdc vm delete-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 
-# 删除实例并释放关联资源
+# Delete instance and release associated resources
 jdc vm delete-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
@@ -128,55 +128,55 @@ jdc vm delete-instance \
   --delete-snapshot true
 ```
 
-### 变更实例配置
+### Resize Instance
 
 ```bash
-# 变更实例规格
+# Resize instance specification
 jdc vm resize-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --instance-type "g.n2.large"
 
-# 注意：变配需要实例处于停止状态
+# Note: Resizing requires the instance to be in stopped state
 jdc vm stop-instance --region-id cn-north-1 --instance-id i-xxxxx
 jdc vm resize-instance --region-id cn-north-1 --instance-id i-xxxxx --instance-type "g.n2.large"
 jdc vm start-instance --region-id cn-north-1 --instance-id i-xxxxx
 ```
 
-## 镜像管理
+## Image Management
 
-### 查询镜像
+### Query Images
 
 ```bash
-# 查询公共镜像
+# Query public images
 jdc vm describe-images \
   --region-id cn-north-1 \
   --owners official \
   --page-number 1 \
   --page-size 20
 
-# 查询自定义镜像
+# Query custom images
 jdc vm describe-images \
   --region-id cn-north-1 \
   --owners self
 
-# 查询指定镜像详情
+# Query specific image details
 jdc vm describe-images \
   --region-id cn-north-1 \
   --image-ids '["img-xxxxx"]'
 ```
 
-### 创建自定义镜像
+### Create Custom Image
 
 ```bash
-# 基于实例创建镜像
+# Create image from an instance
 jdc vm create-image \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --name "my-custom-image" \
   --description "Custom image from production server"
 
-# 基于快照创建镜像
+# Create image from a snapshot
 jdc vm create-image \
   --region-id cn-north-1 \
   --snapshot-id "snap-xxxxx" \
@@ -184,7 +184,7 @@ jdc vm create-image \
   --description "Image created from snapshot"
 ```
 
-### 删除镜像
+### Delete Image
 
 ```bash
 jdc vm delete-image \
@@ -192,32 +192,32 @@ jdc vm delete-image \
   --image-id img-xxxxx
 ```
 
-## 云硬盘管理
+## Cloud Disk Management
 
-### 查询云硬盘
+### Query Cloud Disks
 
 ```bash
-# 查询云硬盘列表
+# List cloud disks
 jdc disk describe-disks \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 查询指定云硬盘
+# Query a specific cloud disk
 jdc disk describe-disks \
   --region-id cn-north-1 \
   --disk-ids '["vol-xxxxx"]'
 
-# 查询挂载到指定实例的云硬盘
+# Query disks attached to a specific instance
 jdc disk describe-disks \
   --region-id cn-north-1 \
   --filters '[{"name":"instance-id","values":["i-xxxxx"]}]'
 ```
 
-### 创建云硬盘
+### Create Cloud Disk
 
 ```bash
-# 创建云硬盘
+# Create a cloud disk
 jdc disk create-disk \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
@@ -227,7 +227,7 @@ jdc disk create-disk \
   --description "Data disk for database" \
   --charge-mode "postpaid_by_duration"
 
-# 创建云硬盘并挂载到实例
+# Create a cloud disk and attach it to an instance
 jdc disk create-disk \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
@@ -239,83 +239,83 @@ jdc disk create-disk \
   --charge-mode "postpaid_by_duration"
 ```
 
-### 挂载/卸载云硬盘
+### Attach / Detach Cloud Disk
 
 ```bash
-# 挂载云硬盘
+# Attach cloud disk
 jdc disk attach-disk \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --instance-id i-xxxxx \
   --device-name "/dev/vdb"
 
-# 卸载云硬盘
+# Detach cloud disk
 jdc disk detach-disk \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --instance-id i-xxxxx
 ```
 
-### 扩容云硬盘
+### Resize Cloud Disk
 
 ```bash
-# 扩容云硬盘（只能扩容，不能缩容）
+# Resize cloud disk (can only increase, cannot decrease)
 jdc disk resize-disk \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --disk-size-gb 200
 
-# 注意：扩容后需要在操作系统内进行文件系统扩容
+# Note: After resizing, you need to extend the filesystem inside the operating system
 ```
 
-### 删除云硬盘
+### Delete Cloud Disk
 
 ```bash
-# 删除云硬盘（必须先卸载）
+# Delete cloud disk (must detach first)
 jdc disk detach-disk --region-id cn-north-1 --disk-id vol-xxxxx --instance-id i-xxxxx
 jdc disk delete-disk --region-id cn-north-1 --disk-id vol-xxxxx
 ```
 
-## 快照管理
+## Snapshot Management
 
-### 创建快照
+### Create Snapshot
 
 ```bash
-# 为云硬盘创建快照
+# Create a snapshot for a cloud disk
 jdc disk create-snapshot \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --snapshot-name "backup-2026-04-28" \
   --description "Daily backup snapshot"
 
-# 为实例的所有云硬盘创建快照
+# Create snapshots for all cloud disks of an instance
 jdc disk create-snapshots \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --snapshot-name-prefix "instance-backup"
 ```
 
-### 查询快照
+### Query Snapshots
 
 ```bash
-# 查询快照列表
+# List snapshots
 jdc disk describe-snapshots \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 查询指定快照
+# Query a specific snapshot
 jdc disk describe-snapshots \
   --region-id cn-north-1 \
   --snapshot-ids '["snap-xxxxx"]'
 
-# 查询指定云硬盘的快照
+# Query snapshots for a specific cloud disk
 jdc disk describe-snapshots \
   --region-id cn-north-1 \
   --filters '[{"name":"disk-id","values":["vol-xxxxx"]}]'
 ```
 
-### 删除快照
+### Delete Snapshot
 
 ```bash
 jdc disk delete-snapshot \
@@ -323,7 +323,7 @@ jdc disk delete-snapshot \
   --snapshot-id snap-xxxxx
 ```
 
-### 基于快照创建云硬盘
+### Create Cloud Disk from Snapshot
 
 ```bash
 jdc disk create-disk \
@@ -334,24 +334,24 @@ jdc disk create-disk \
   --charge-mode "postpaid_by_duration"
 ```
 
-## 安全组管理
+## Security Group Management
 
-### 查询安全组
+### Query Security Groups
 
 ```bash
-# 查询安全组列表
+# List security groups
 jdc vpc describe-security-groups \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 查询指定安全组详情
+# Query specific security group details
 jdc vpc describe-security-group \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx
 ```
 
-### 创建安全组
+### Create Security Group
 
 ```bash
 jdc vpc create-security-group \
@@ -361,10 +361,10 @@ jdc vpc create-security-group \
   --description "Security group for web servers"
 ```
 
-### 添加安全组规则
+### Add Security Group Rules
 
 ```bash
-# 添加入站规则 - 允许HTTP访问
+# Add inbound rule - Allow HTTP access
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
@@ -377,7 +377,7 @@ jdc vpc add-security-group-rules \
     "description": "Allow HTTP"
   }]'
 
-# 添加入站规则 - 允许SSH访问（建议限制IP范围）
+# Add inbound rule - Allow SSH access (recommend restricting IP range)
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
@@ -390,7 +390,7 @@ jdc vpc add-security-group-rules \
     "description": "Allow SSH from office"
   }]'
 
-# 添加入站规则 - 允许HTTPS访问
+# Add inbound rule - Allow HTTPS access
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
@@ -403,7 +403,7 @@ jdc vpc add-security-group-rules \
     "description": "Allow HTTPS"
   }]'
 
-# 添加出站规则 - 允许所有出站流量
+# Add outbound rule - Allow all outbound traffic
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
@@ -417,7 +417,7 @@ jdc vpc add-security-group-rules \
   }]'
 ```
 
-### 删除安全组规则
+### Delete Security Group Rules
 
 ```bash
 jdc vpc remove-security-group-rules \
@@ -426,54 +426,54 @@ jdc vpc remove-security-group-rules \
   --rule-ids '["rule-xxxxx"]'
 ```
 
-### 将实例加入安全组
+### Assign Instance to Security Group
 
 ```bash
-# 为网络接口分配安全组
+# Assign security group to network interface
 jdc vpc assign-security-group \
   --region-id cn-north-1 \
   --network-interface-id "eni-xxxxx" \
   --security-group-id sg-xxxxx
 ```
 
-## 密钥对管理
+## Key Pair Management
 
-### 创建密钥对
+### Create Key Pair
 
 ```bash
-# 创建密钥对（私钥会自动下载）
+# Create a key pair (private key will be downloaded automatically)
 jdc vm create-keypair \
   --region-id cn-north-1 \
   --key-name "my-keypair" \
   --description "Key pair for production servers"
 ```
 
-### 查询密钥对
+### Query Key Pairs
 
 ```bash
-# 查询密钥对列表
+# List key pairs
 jdc vm describe-keypairs \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 查询指定密钥对
+# Query a specific key pair
 jdc vm describe-keypairs \
   --region-id cn-north-1 \
   --key-names '["my-keypair"]'
 ```
 
-### 导入公钥
+### Import Public Key
 
 ```bash
-# 导入已有的公钥
+# Import an existing public key
 jdc vm import-keypair \
   --region-id cn-north-1 \
   --key-name "existing-keypair" \
   --public-key "ssh-rsa AAAAB3NzaC1yc2E... user@host"
 ```
 
-### 删除密钥对
+### Delete Key Pair
 
 ```bash
 jdc vm delete-keypair \
@@ -481,9 +481,9 @@ jdc vm delete-keypair \
   --key-name "my-keypair"
 ```
 
-## 弹性公网IP管理
+## Elastic IP Management
 
-### 申请EIP
+### Apply for EIP
 
 ```bash
 jdc vpc create-elastic-ip \
@@ -493,37 +493,37 @@ jdc vpc create-elastic-ip \
   --description "EIP for web server"
 ```
 
-### 查询EIP
+### Query EIPs
 
 ```bash
-# 查询EIP列表
+# List EIPs
 jdc vpc describe-elastic-ips \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
-# 查询指定EIP
+# Query a specific EIP
 jdc vpc describe-elastic-ips \
   --region-id cn-north-1 \
   --elastic-ip-ids '["eip-xxxxx"]'
 ```
 
-### 绑定/解绑EIP
+### Associate / Disassociate EIP
 
 ```bash
-# 绑定EIP到实例
+# Associate EIP with instance
 jdc vpc associate-elastic-ip \
   --region-id cn-north-1 \
   --elastic-ip-id eip-xxxxx \
   --instance-id i-xxxxx
 
-# 解绑EIP
+# Disassociate EIP
 jdc vpc disassociate-elastic-ip \
   --region-id cn-north-1 \
   --elastic-ip-id eip-xxxxx
 ```
 
-### 调整带宽
+### Modify Bandwidth
 
 ```bash
 jdc vpc modify-elastic-ip-bandwidth \
@@ -532,7 +532,7 @@ jdc vpc modify-elastic-ip-bandwidth \
   --bandwidth-mbps 20
 ```
 
-### 释放EIP
+### Release EIP
 
 ```bash
 jdc vpc delete-elastic-ip \
@@ -540,9 +540,9 @@ jdc vpc delete-elastic-ip \
   --elastic-ip-id eip-xxxxx
 ```
 
-## 实用命令组合
+## Useful Command Combinations
 
-### 查看实例详细信息（包括IP、状态等）
+### View Instance Details (including IP, status, etc.)
 
 ```bash
 jdc vm describe-instances \
@@ -558,10 +558,10 @@ jdc vm describe-instances \
   }'
 ```
 
-### 批量停止实例
+### Batch Stop Instances
 
 ```bash
-# 获取所有运行中的实例ID并停止
+# Get all running instance IDs and stop them
 jdc vm describe-instances \
   --region-id cn-north-1 \
   --filters '[{"name":"status","values":["running"]}]' \
@@ -572,10 +572,10 @@ jdc vm describe-instances \
     done
 ```
 
-### 清理未使用的EIP
+### Clean Up Unused EIPs
 
 ```bash
-# 查找未绑定的EIP并释放
+# Find and release unbound EIPs
 jdc vpc describe-elastic-ips \
   --region-id cn-north-1 \
   | jq -r '.result.elasticIps[] | select(.instanceId == null) | .elasticIpId' \
@@ -585,10 +585,10 @@ jdc vpc describe-elastic-ips \
     done
 ```
 
-### 监控实例资源使用
+### Monitor Instance Resource Usage
 
 ```bash
-# 查询实例CPU使用率（最近1小时）
+# Query CPU usage (last 1 hour)
 jdc monitor describe-metric-data \
   --region-id cn-north-1 \
   --metric "vm.cpu.util" \
@@ -599,37 +599,37 @@ jdc monitor describe-metric-data \
   --aggr-type avg
 ```
 
-## 常见问题排查
+## Common Issue Troubleshooting
 
-### 实例无法连接
+### Instance Cannot Connect
 
 ```bash
-# 1. 检查实例状态
+# 1. Check instance status
 jdc vm describe-instances --region-id cn-north-1 --instance-ids '["i-xxxxx"]'
 
-# 2. 检查安全组规则
+# 2. Check security group rules
 jdc vpc describe-security-group --region-id cn-north-1 --security-group-id sg-xxxxx
 
-# 3. 检查网络接口
+# 3. Check network interface
 jdc vpc describe-network-interface --region-id cn-north-1 --network-interface-id eni-xxxxx
 ```
 
-### 磁盘空间不足
+### Disk Space Full
 
 ```bash
-# 1. 查看当前磁盘信息
+# 1. View current disk information
 jdc disk describe-disks --region-id cn-north-1 --filters '[{"name":"instance-id","values":["i-xxxxx"]}]'
 
-# 2. 扩容磁盘
+# 2. Resize disk
 jdc disk resize-disk --region-id cn-north-1 --disk-id vol-xxxxx --disk-size-gb 200
 ```
 
-## 最佳实践提示
+## Best Practice Tips
 
-1. **使用标签管理资源**: 为实例、磁盘等资源添加标签，便于管理和成本分析
-2. **定期创建快照**: 重要数据定期备份，建议使用自动化脚本
-3. **合理配置安全组**: 遵循最小权限原则，仅开放必要端口
-4. **监控资源使用**: 设置告警规则，及时发现异常
-5. **使用密钥对登录**: 比密码更安全，避免暴力破解
-6. **多可用区部署**: 提高应用可用性
-7. **清理未使用资源**: 定期检查并释放未使用的EIP、磁盘等
+1. **Use Tags for Resource Management**: Add tags to resources for better management and cost analysis
+2. **Regular Snapshot Creation**: Regularly back up important data, preferably using automated scripts
+3. **Proper Security Group Configuration**: Follow the principle of least privilege, only open necessary ports
+4. **Monitor Resource Usage**: Set up alert rules to detect anomalies in time
+5. **Use Key Pairs for Login**: More secure than passwords, prevents brute force attacks
+6. **Multi-AZ Deployment**: Improve application availability
+7. **Clean Up Unused Resources**: Regularly check and release unused EIPs, disks, etc.

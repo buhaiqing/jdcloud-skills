@@ -1,77 +1,77 @@
 # JD Cloud VM Troubleshooting Guide
 
-## 常见问题速查表
+## Common Issues Quick Reference
 
-| 问题类型 | 可能原因 | 解决方案 |
-|---------|---------|---------|
-| 无法SSH连接 | 安全组未开放22端口 | 检查并添加安全组规则 |
-| 实例启动失败 | 资源不足或配置错误 | 检查配额和配置参数 |
-| 磁盘挂载失败 | 设备名冲突或格式错误 | 检查设备名和文件系统 |
-| 网络不通 | 路由表或ACL配置错误 | 检查VPC网络配置 |
-| 性能下降 | 资源使用率过高 | 监控并优化资源配置 |
+| Issue Type | Possible Cause | Solution |
+|-----------|---------------|----------|
+| Cannot SSH | Security group port 22 not open | Check and add security group rule |
+| Instance launch fails | Insufficient resources or configuration error | Check quota and configuration parameters |
+| Disk attachment fails | Device name conflict or format error | Check device name and filesystem |
+| Network unreachable | Route table or ACL configuration error | Check VPC network configuration |
+| Performance degradation | High resource utilization | Monitor and optimize resource configuration |
 
-## 连接问题排查
+## Connectivity Issues
 
-### 1. SSH连接失败
+### 1. SSH Connection Failure
 
-#### 症状
+#### Symptoms
 ```bash
 ssh: connect to host x.x.x.x port 22: Connection timed out
-# 或
+# or
 ssh: connect to host x.x.x.x port 22: Connection refused
 ```
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 检查实例状态**
+**Step 1: Check Instance Status**
 ```bash
 jdc vm describe-instances \
   --region-id cn-north-1 \
   --instance-ids '["i-xxxxx"]' \
   | jq '.result.instances[0].status'
 ```
-期望输出: `"running"`
+Expected output: `"running"`
 
-**步骤2: 检查安全组规则**
+**Step 2: Check Security Group Rules**
 ```bash
-# 获取实例的网络接口ID
+# Get the instance's network interface ID
 jdc vm describe-instances \
   --region-id cn-north-1 \
   --instance-ids '["i-xxxxx"]' \
   | jq '.result.instances[0].primaryNetworkInterface.networkInterfaceId'
 
-# 检查安全组入站规则
+# Check security group inbound rules
 jdc vpc describe-security-group \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
   | jq '.result.securityGroup.rules[] | select(.direction == "ingress")'
 ```
 
-确保存在以下规则：
-- 协议: TCP
-- 端口: 22
-- 源地址: 您的IP地址范围
+Ensure the following rule exists:
+- Protocol: TCP
+- Port: 22
+- Source: Your IP range
 
-**步骤3: 检查EIP绑定**
+**Step 3: Check EIP Binding**
 ```bash
 jdc vpc describe-elastic-ips \
   --region-id cn-north-1 \
   | jq '.result.elasticIps[] | select(.instanceId == "i-xxxxx")'
 ```
 
-**步骤4: 测试网络连通性**
+**Step 4: Test Network Connectivity**
 ```bash
-# 从本地测试
-ping <EIP地址>
-telnet <EIP地址> 22
+# Test from local machine
+ping <EIP address>
+telnet <EIP address> 22
 
-# 从同VPC的其他实例测试
-ssh -i ~/.ssh/your-key.pem centos@<内网IP>
+# Test from another instance in the same VPC
+ssh -i ~/.ssh/your-key.pem centos@<private IP>
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 添加安全组规则**
+**Solution 1: Add Security Group Rule**
 ```bash
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
@@ -86,14 +86,14 @@ jdc vpc add-security-group-rules \
   }]'
 ```
 
-**方案2: 使用VNC登录（紧急情况下）**
-1. 登录京东云控制台
-2. 进入云主机详情页
-3. 点击"远程连接" -> "VNC登录"
-4. 使用用户名和密码登录
+**Solution 2: Use VNC Login (Emergency)**
+1. Log in to the JD Cloud Console
+2. Go to the VM instance details page
+3. Click "Remote Connection" -> "VNC Login"
+4. Log in with username and password
 
-**方案3: 检查防火墙配置**
-通过VNC登录后，检查系统防火墙：
+**Solution 3: Check Firewall Configuration**
+After logging in via VNC, check the system firewall:
 ```bash
 # CentOS/RHEL
 sudo systemctl status firewalld
@@ -103,15 +103,15 @@ sudo firewall-cmd --list-all
 sudo ufw status
 ```
 
-### 2. RDP连接失败（Windows实例）
+### 2. RDP Connection Failure (Windows Instances)
 
-#### 症状
-远程桌面连接超时或被拒绝
+#### Symptoms
+Remote Desktop connection timeout or refused
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 检查安全组规则**
-确保开放3389端口：
+**Step 1: Check Security Group Rules**
+Ensure port 3389 is open:
 ```bash
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
@@ -126,84 +126,84 @@ jdc vpc add-security-group-rules \
   }]'
 ```
 
-**步骤2: 检查Windows防火墙**
-通过VNC登录，确认远程桌面服务已启用：
+**Step 2: Check Windows Firewall**
+Log in via VNC and verify Remote Desktop service is enabled:
 ```powershell
 # PowerShell
 Get-Service TermService
 Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
 ```
 
-## 实例启动问题
+## Instance Launch Issues
 
-### 1. 实例创建失败
+### 1. Instance Creation Failed
 
-#### 常见错误码
+#### Common Error Codes
 
-| 错误码 | 说明 | 解决方案 |
-|--------|------|---------|
-| `InvalidInstanceType` | 实例规格不存在或不支持 | 查询可用的实例规格列表 |
-| `InvalidImageId` | 镜像ID无效 | 检查镜像ID是否正确 |
-| `InsufficientResource` | 可用区资源不足 | 切换到其他可用区 |
-| `InvalidSubnetId` | 子网ID无效 | 检查子网是否存在于指定VPC |
-| `QuotaExceeded` | 超出配额限制 | 申请提升配额 |
+| Error Code | Description | Solution |
+|-----------|-------------|----------|
+| `InvalidInstanceType` | Instance type does not exist or is not supported | Query available instance types |
+| `InvalidImageId` | Invalid image ID | Check if the image ID is correct |
+| `InsufficientResource` | Insufficient resources in the availability zone | Switch to another availability zone |
+| `InvalidSubnetId` | Invalid subnet ID | Check if the subnet exists in the specified VPC |
+| `QuotaExceeded` | Quota limit exceeded | Apply for a quota increase |
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 验证实例规格**
+**Step 1: Verify Instance Type**
 ```bash
 jdc vm describe-instance-types \
   --region-id cn-north-1 \
   | jq '.result.instanceTypes[] | select(.instanceType == "g.n2.medium")'
 ```
 
-**步骤2: 验证镜像**
+**Step 2: Verify Image**
 ```bash
 jdc vm describe-images \
   --region-id cn-north-1 \
   --image-ids '["img-xxxxx"]'
 ```
 
-**步骤3: 验证子网**
+**Step 3: Verify Subnet**
 ```bash
 jdc vpc describe-subnet \
   --region-id cn-north-1 \
   --subnet-id subnet-xxxxx
 ```
 
-**步骤4: 检查配额**
+**Step 4: Check Quota**
 ```bash
 jdc vm describe-quota \
   --region-id cn-north-1
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 选择其他可用区**
+**Solution 1: Choose Another Availability Zone**
 ```bash
-# 查询可用区
+# Query availability zones
 jdc vm describe-azs --region-id cn-north-1
 
-# 在另一个可用区创建实例
+# Create instance in another AZ
 jdc vm create-instances \
   --region-id cn-north-1 \
   --az "cn-north-1b" \
   ...
 ```
 
-**方案2: 申请提升配额**
-联系京东云客服或通过控制台提交工单申请提升配额。
+**Solution 2: Request Quota Increase**
+Contact JD Cloud customer service or submit a ticket through the console to request a quota increase.
 
-### 2. 实例启动后自动停止
+### 2. Instance Stops Automatically After Launch
 
-#### 可能原因
-- 系统崩溃
-- 内存不足导致OOM
-- 内核panic
+#### Possible Causes
+- System crash
+- Out of Memory (OOM)
+- Kernel panic
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 查看实例状态历史**
+**Step 1: View Instance Status History**
 ```bash
 jdc vm describe-instances \
   --region-id cn-north-1 \
@@ -211,58 +211,58 @@ jdc vm describe-instances \
   | jq '.result.instances[0]'
 ```
 
-**步骤2: 通过VNC查看系统日志**
-1. 使用VNC登录实例
-2. 查看系统日志：
+**Step 2: Check System Logs via VNC**
+1. Log in to the instance using VNC
+2. Check system logs:
 ```bash
 # Linux
 dmesg | tail -50
 journalctl -xe --no-pager | tail -100
 
-# 检查是否有OOM记录
+# Check for OOM records
 grep -i "out of memory" /var/log/messages
 ```
 
-**步骤3: 检查资源使用**
+**Step 3: Check Resource Usage**
 ```bash
-# 查看内存使用
+# Check memory usage
 free -h
 
-# 查看CPU负载
+# Check CPU load
 top -bn1 | head -20
 
-# 查看磁盘空间
+# Check disk space
 df -h
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 升级实例规格**
+**Solution 1: Upgrade Instance Specification**
 ```bash
 jdc vm stop-instance --region-id cn-north-1 --instance-id i-xxxxx
 jdc vm resize-instance --region-id cn-north-1 --instance-id i-xxxxx --instance-type "g.n2.large"
 jdc vm start-instance --region-id cn-north-1 --instance-id i-xxxxx
 ```
 
-**方案2: 优化应用配置**
-- 调整应用程序内存限制
-- 优化数据库配置
-- 清理不必要的进程和服务
+**Solution 2: Optimize Application Configuration**
+- Adjust application memory limits
+- Optimize database configuration
+- Clean up unnecessary processes and services
 
-## 磁盘问题排查
+## Disk Issues
 
-### 1. 磁盘挂载失败
+### 1. Disk Attachment Failed
 
-#### 症状
+#### Symptoms
 ```bash
 Error attaching disk: Device or resource busy
-# 或
+# or
 mount: wrong fs type, bad option, bad superblock
 ```
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 检查磁盘状态**
+**Step 1: Check Disk Status**
 ```bash
 jdc disk describe-disks \
   --region-id cn-north-1 \
@@ -270,171 +270,171 @@ jdc disk describe-disks \
   | jq '.result.disks[0] | {status, instanceId}'
 ```
 
-**步骤2: 检查设备名是否冲突**
+**Step 2: Check Device Name Conflict**
 ```bash
-# 在实例内查看已使用的设备
+# Check used devices inside the instance
 lsblk
 fdisk -l
 ```
 
-**步骤3: 检查文件系统**
+**Step 3: Check Filesystem**
 ```bash
-# 检查文件系统类型
+# Check filesystem type
 file -s /dev/vdb
 
-# 如果是新盘，需要创建文件系统
+# If it's a new disk, create a filesystem
 sudo mkfs.ext4 /dev/vdb
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 使用正确的设备名**
+**Solution 1: Use Correct Device Name**
 ```bash
-# 卸载后重新挂载，指定不同的设备名
+# Detach and reattach with a different device name
 jdc disk detach-disk --region-id cn-north-1 --disk-id vol-xxxxx --instance-id i-xxxxx
 jdc disk attach-disk --region-id cn-north-1 --disk-id vol-xxxxx --instance-id i-xxxxx --device-name "/dev/vdc"
 ```
 
-**方案2: 格式化新磁盘**
+**Solution 2: Format New Disk**
 ```bash
-# 创建ext4文件系统
+# Create ext4 filesystem
 sudo mkfs.ext4 /dev/vdb
 
-# 创建挂载点
+# Create mount point
 sudo mkdir /data
 
-# 挂载磁盘
+# Mount the disk
 sudo mount /dev/vdb /data
 
-# 设置开机自动挂载
+# Configure auto-mount on boot
 echo '/dev/vdb /data ext4 defaults 0 0' | sudo tee -a /etc/fstab
 ```
 
-### 2. 磁盘空间不足
+### 2. Disk Space Full
 
-#### 症状
+#### Symptoms
 ```bash
 No space left on device
 ```
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 查看磁盘使用情况**
+**Step 1: Check Disk Usage**
 ```bash
 df -h
 du -sh /* | sort -rh | head -10
 ```
 
-**步骤2: 查找大文件**
+**Step 2: Find Large Files**
 ```bash
-# 查找大于100MB的文件
+# Find files larger than 100MB
 find / -type f -size +100M -exec ls -lh {} \; 2>/dev/null
 
-# 查找最大的10个目录
+# Find the 10 largest directories
 du -ah / | sort -rh | head -10
 ```
 
-**步骤3: 检查日志文件**
+**Step 3: Check Log Files**
 ```bash
-# 查看日志文件大小
+# Check log file sizes
 ls -lh /var/log/
 
-# 清理旧日志
+# Clean up old logs
 sudo journalctl --vacuum-time=7d
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 清理空间**
+**Solution 1: Clean Up Space**
 ```bash
-# 清理包管理器缓存
+# Clean package manager cache
 sudo yum clean all  # CentOS
 sudo apt-get clean  # Ubuntu
 
-# 删除临时文件
+# Delete temporary files
 sudo rm -rf /tmp/*
 
-# 清理Docker资源（如使用）
+# Clean Docker resources (if used)
 docker system prune -a
 ```
 
-**方案2: 扩容磁盘**
+**Solution 2: Resize Disk**
 ```bash
-# 在控制台或CLI扩容磁盘
+# Resize disk via console or CLI
 jdc disk resize-disk \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --disk-size-gb 200
 
-# 在操作系统内扩展文件系统
-# 对于ext4
+# Extend filesystem inside the OS
+# For ext4
 sudo growpart /dev/vda 1
 sudo resize2fs /dev/vda1
 
-# 对于xfs
+# For xfs
 sudo growpart /dev/vda 1
 sudo xfs_growfs /
 ```
 
-## 网络问题排查
+## Network Issues
 
-### 1. 实例无法访问外网
+### 1. Instance Cannot Access Internet
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 检查路由表**
+**Step 1: Check Route Table**
 ```bash
-# 在实例内
+# Inside the instance
 ip route show
 route -n
 
-# 应该有默认路由指向网关
+# Should have a default route pointing to the gateway
 default via 192.168.1.1 dev eth0
 ```
 
-**步骤2: 检查DNS配置**
+**Step 2: Check DNS Configuration**
 ```bash
 cat /etc/resolv.conf
 
-# 测试DNS解析
+# Test DNS resolution
 nslookup www.jdcloud.com
 dig www.jdcloud.com
 ```
 
-**步骤3: 检查NAT网关**
+**Step 3: Check NAT Gateway**
 ```bash
-# 如果使用NAT网关，检查配置
+# If using NAT gateway, check configuration
 jdc vpc describe-nat-gateways \
   --region-id cn-north-1 \
   --vpc-id vpc-xxxxx
 ```
 
-**步骤4: 测试网络连通性**
+**Step 4: Test Network Connectivity**
 ```bash
-# 测试内网连通性
+# Test internal network connectivity
 ping 192.168.1.1
 
-# 测试外网连通性
+# Test external network connectivity
 ping 8.8.8.8
 
-# 跟踪路由
+# Trace route
 traceroute www.jdcloud.com
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 配置DNS**
+**Solution 1: Configure DNS**
 ```bash
-# 编辑DNS配置
+# Edit DNS configuration
 sudo vi /etc/resolv.conf
 
-# 添加京东云DNS
+# Add JD Cloud DNS
 nameserver 10.0.0.2
 nameserver 8.8.8.8
 ```
 
-**方案2: 配置NAT网关**
-如果子网没有公网访问能力，需要配置NAT网关：
+**Solution 2: Configure NAT Gateway**
+If the subnet has no public internet access, configure a NAT gateway:
 ```bash
 jdc vpc create-nat-gateway \
   --region-id cn-north-1 \
@@ -443,38 +443,38 @@ jdc vpc create-nat-gateway \
   --spec "small"
 ```
 
-### 2. VPC内实例间无法通信
+### 2. Instances in VPC Cannot Communicate
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 检查安全组规则**
+**Step 1: Check Security Group Rules**
 ```bash
-# 确保安全组允许VPC内通信
+# Ensure security group allows VPC internal communication
 jdc vpc describe-security-group \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
   | jq '.result.securityGroup.rules[]'
 ```
 
-**步骤2: 检查网络ACL**
+**Step 2: Check Network ACLs**
 ```bash
 jdc vpc describe-network-acls \
   --region-id cn-north-1 \
   --vpc-id vpc-xxxxx
 ```
 
-**步骤3: 测试连通性**
+**Step 3: Test Connectivity**
 ```bash
-# 从实例A ping 实例B
-ping <实例B的内网IP>
+# Ping instance B from instance A
+ping <Instance B's private IP>
 
-# 使用telnet测试特定端口
-telnet <实例B的内网IP> 80
+# Test specific port using telnet
+telnet <Instance B's private IP> 80
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 添加安全组规则允许VPC内通信**
+**Solution 1: Add Security Group Rule for VPC Internal Communication**
 ```bash
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
@@ -489,18 +489,18 @@ jdc vpc add-security-group-rules \
   }]'
 ```
 
-## 性能问题排查
+## Performance Issues
 
-### 1. CPU使用率过高
+### 1. High CPU Usage
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 查看CPU使用详情**
+**Step 1: View CPU Usage Details**
 ```bash
-# 实时监控
+# Real-time monitoring
 top
 
-# 查看历史数据
+# View historical data
 jdc monitor describe-metric-data \
   --region-id cn-north-1 \
   --metric "vm.cpu.util" \
@@ -511,32 +511,32 @@ jdc monitor describe-metric-data \
   --aggr-type avg
 ```
 
-**步骤2: 识别高CPU进程**
+**Step 2: Identify High CPU Processes**
 ```bash
-# 按CPU使用率排序
+# Sort by CPU usage
 ps aux --sort=-%cpu | head -10
 
-# 查看进程树
+# View process tree
 pstree -p
 ```
 
-**步骤3: 分析系统调用**
+**Step 3: Analyze System Calls**
 ```bash
-# 安装sysstat
+# Install sysstat
 sudo yum install sysstat
 
-# 查看CPU详细使用情况
+# View detailed CPU usage
 mpstat -P ALL 1 5
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 优化应用程序**
-- 分析并优化高CPU消耗的代码
-- 调整线程池大小
-- 优化算法复杂度
+**Solution 1: Optimize Application**
+- Analyze and optimize high CPU-consuming code
+- Adjust thread pool size
+- Optimize algorithm complexity
 
-**方案2: 升级实例规格**
+**Solution 2: Upgrade Instance Specification**
 ```bash
 jdc vm resize-instance \
   --region-id cn-north-1 \
@@ -544,75 +544,75 @@ jdc vm resize-instance \
   --instance-type "g.n2.xlarge"
 ```
 
-### 2. 内存使用率过高
+### 2. High Memory Usage
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 查看内存使用**
+**Step 1: View Memory Usage**
 ```bash
 free -h
 cat /proc/meminfo
 ```
 
-**步骤2: 识别内存泄漏**
+**Step 2: Identify Memory Leaks**
 ```bash
-# 按内存使用排序
+# Sort by memory usage
 ps aux --sort=-%mem | head -10
 
-# 监控内存变化
+# Monitor memory changes
 watch -n 1 'free -h'
 ```
 
-**步骤3: 检查Swap使用**
+**Step 3: Check Swap Usage**
 ```bash
 swapon --show
 cat /proc/swaps
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 释放缓存**
+**Solution 1: Clear Cache**
 ```bash
-# 清理页面缓存
+# Clean page cache
 sudo sync
 sudo echo 3 > /proc/sys/vm/drop_caches
 ```
 
-**方案2: 重启应用**
+**Solution 2: Restart Application**
 ```bash
-# 重启占用内存过多的服务
+# Restart memory-heavy services
 sudo systemctl restart your-service
 ```
 
-**方案3: 增加内存**
+**Solution 3: Increase Memory**
 ```bash
 jdc vm resize-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
-  --instance-type "r.n2.large"  # 内存型实例
+  --instance-type "r.n2.large"  # Memory-optimized instance
 ```
 
-### 3. 磁盘I/O性能低
+### 3. Low Disk I/O Performance
 
-#### 排查步骤
+#### Troubleshooting Steps
 
-**步骤1: 监控磁盘I/O**
+**Step 1: Monitor Disk I/O**
 ```bash
-# 实时I/O监控
+# Real-time I/O monitoring
 iostat -x 1 5
 
-# 查看I/O等待
+# Check I/O wait
 vmstat 1 10
 ```
 
-**步骤2: 识别I/O密集进程**
+**Step 2: Identify I/O Intensive Processes**
 ```bash
-# 使用iotop
+# Use iotop
 sudo yum install iotop
 sudo iotop
 ```
 
-**步骤3: 检查磁盘类型**
+**Step 3: Check Disk Type**
 ```bash
 jdc disk describe-disks \
   --region-id cn-north-1 \
@@ -620,37 +620,37 @@ jdc disk describe-disks \
   | jq '.result.disks[0].diskType'
 ```
 
-#### 解决方案
+#### Solutions
 
-**方案1: 升级到SSD云盘**
+**Solution 1: Upgrade to SSD Cloud Disk**
 ```bash
-# 创建新的SSD云盘
+# Create a new SSD cloud disk
 jdc disk create-disk \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
   --disk-type "ssd" \
   --disk-size-gb 100
 
-# 迁移数据后切换
+# Migrate data and switch
 ```
 
-**方案2: 优化应用I/O**
-- 使用异步I/O
-- 增加缓存层
-- 批量写入代替频繁小文件写入
+**Solution 2: Optimize Application I/O**
+- Use asynchronous I/O
+- Add caching layers
+- Batch writes instead of frequent small file writes
 
-## 快照和备份问题
+## Snapshot and Backup Issues
 
-### 1. 快照创建失败
+### 1. Snapshot Creation Failed
 
-#### 可能原因
-- 磁盘正在执行其他操作
-- 配额不足
-- 磁盘状态异常
+#### Possible Causes
+- Disk is performing another operation
+- Insufficient quota
+- Abnormal disk status
 
-#### 解决方案
+#### Solutions
 
-**步骤1: 检查磁盘状态**
+**Step 1: Check Disk Status**
 ```bash
 jdc disk describe-disks \
   --region-id cn-north-1 \
@@ -658,7 +658,7 @@ jdc disk describe-disks \
   | jq '.result.disks[0].status'
 ```
 
-**步骤2: 重试创建**
+**Step 2: Retry Creating Snapshot**
 ```bash
 jdc disk create-snapshot \
   --region-id cn-north-1 \
@@ -666,11 +666,11 @@ jdc disk create-snapshot \
   --snapshot-name "retry-snapshot"
 ```
 
-### 2. 从快照恢复失败
+### 2. Snapshot Restore Failed
 
-#### 解决方案
+#### Solutions
 
-**步骤1: 验证快照完整性**
+**Step 1: Verify Snapshot Integrity**
 ```bash
 jdc disk describe-snapshots \
   --region-id cn-north-1 \
@@ -678,99 +678,99 @@ jdc disk describe-snapshots \
   | jq '.result.snapshots[0].status'
 ```
 
-**步骤2: 检查目标可用区资源**
+**Step 2: Check Target Availability Zone Resources**
 ```bash
 jdc vm describe-azs --region-id cn-north-1
 ```
 
-## 常用诊断命令汇总
+## Common Diagnostic Commands
 
-### 系统层面
+### System Level
 ```bash
-# 系统信息
+# System information
 uname -a
 cat /etc/os-release
 
-# CPU信息
+# CPU information
 lscpu
 cat /proc/cpuinfo
 
-# 内存信息
+# Memory information
 free -h
 cat /proc/meminfo
 
-# 磁盘信息
+# Disk information
 lsblk
 fdisk -l
 df -h
 
-# 网络信息
+# Network information
 ip addr show
 ip route show
 cat /etc/resolv.conf
 
-# 进程信息
+# Process information
 ps aux
 top -bn1
 
-# 系统负载
+# System load
 uptime
 w
 ```
 
-### 日志查看
+### Log Viewing
 ```bash
-# 系统日志
+# System logs
 tail -f /var/log/messages      # CentOS
 tail -f /var/log/syslog        # Ubuntu
 
-# 内核日志
+# Kernel logs
 dmesg | tail -50
 
-# 认证日志
+# Authentication logs
 tail -f /var/log/secure        # CentOS
 tail -f /var/log/auth.log      # Ubuntu
 
-# systemd日志
+# systemd logs
 journalctl -xe --no-pager
 journalctl -u your-service -f
 ```
 
-### 网络诊断
+### Network Diagnostics
 ```bash
-# 连通性测试
+# Connectivity test
 ping -c 4 <target>
 traceroute <target>
 
-# 端口测试
+# Port test
 telnet <host> <port>
 nc -zv <host> <port>
 
-# DNS测试
+# DNS test
 nslookup <domain>
 dig <domain>
 
-# 网络统计
+# Network statistics
 netstat -tuln
 ss -tuln
 ```
 
-## 获取技术支持
+## Getting Technical Support
 
-### 自助服务
-1. **京东云文档**: https://docs.jdcloud.com
-2. **API文档**: https://docs.jdcloud.com/cn/api
-3. **CLI文档**: https://docs.jdcloud.com/cn/cli
+### Self-Service
+1. **JD Cloud Documentation**: https://docs.jdcloud.com
+2. **API Documentation**: https://docs.jdcloud.com/cn/api
+3. **CLI Documentation**: https://docs.jdcloud.com/cn/cli
 
-### 联系支持
-1. **控制台工单**: 登录京东云控制台提交工单
-2. **客服热线**: 400-606-5500
-3. **在线客服**: 京东云官网右下角在线客服
+### Contact Support
+1. **Console Tickets**: Log in to JD Cloud Console to submit a ticket
+2. **Customer Service Hotline**: 400-606-5500
+3. **Online Chat**: Click the online chat button at the bottom right of the JD Cloud official website
 
-### 提供信息清单
-提交工单时请提供以下信息：
-- 实例ID
-- 问题发生时间
-- 错误信息截图
-- 已执行的排查步骤
-- 相关日志片段
+### Information to Provide
+When submitting a ticket, please provide the following information:
+- Instance ID
+- Time the issue occurred
+- Screenshot of error message
+- Troubleshooting steps already performed
+- Relevant log snippets
