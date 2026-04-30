@@ -87,7 +87,7 @@ Every operation follows the pattern: Pre-flight → Execute → Validate → Rec
 | Check | Command | Expected | On Failure |
 |-------|---------|----------|------------|
 | CLI installed | `jdc --version` | exit code 0 | Guide user to install jdcloud-cli |
-| Credentials valid | `jdc config validate --output json` | `$.valid == true` | Prompt user to run `jdc config init` |
+| Credentials valid | `jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1 --output json` | `$.error == null` | Prompt user to run `jdc config init` |
 | Region available | `jdc vpc describe-regions --output json` | `{{user.region}}` in list | Suggest nearest available region |
 | Quota available | `jdc vpc describe-quota --region {{user.region}} --output json` | `$.available > 0` | Inform user of quota limit, suggest increase |
 
@@ -298,7 +298,7 @@ done
 ## Prerequisites
 1. **Install JD Cloud CLI**:
    ```bash
-   pip install jdcloud-cli
+   pip install jdcloud_cli
    jdc config init
    ```
 2. **Configure Credentials**:
@@ -376,24 +376,6 @@ done
 ## references/integration.md Template
 ```markdown
 # Integration & Tooling
-
-## MCP Server Configuration
-```json
-{
-  "mcpServers": {
-    "jdcloud-vpc": {
-      "command": "uvx", 
-      "args": ["run", "--python", "3.10", "@jdcloud/vpc-mcp"],
-      "env": {
-        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
-        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
-        "JDC_REGION": "{{env.JDC_REGION}}"
-      }
-    }
-  }
-}
-```
-> Note: MCP servers are developed with Python 3.10+ and launched using `uvx` command. Environment variables MUST be set in the Agent runtime environment. NEVER hardcode credentials in configuration files. The `{{env.*}}` placeholders are resolved by the Agent harness at runtime.
 
 ## SDK Initialization (Python)
 ```python

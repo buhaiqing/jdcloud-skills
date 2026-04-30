@@ -33,7 +33,7 @@ jdcloud-vm-ops/
 ### 1. Install JD Cloud CLI
 
 ```bash
-pip install jdcloud-cli
+pip install jdcloud_cli
 jdc config init
 ```
 

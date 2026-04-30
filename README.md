@@ -89,7 +89,7 @@ Skill 是一种结构化的 Markdown 文档，用于指导 AI Agent 完成特定
 
 ```bash
 # 安装 JD Cloud CLI
-pip install jdcloud-cli
+pip install jdcloud_cli
 
 # 验证安装
 jdc --version
@@ -170,7 +170,7 @@ jdcloud-[product]-ops/
 └── references/                 # 参考文档
     ├── cli-usage.md           # CLI 详细用法
     ├── core-concepts.md       # 核心概念解释
-    ├── integration.md         # SDK/MCP 集成
+    ├── integration.md         # SDK 集成指南
     ├── monitoring.md          # 监控告警配置
     └── troubleshooting.md     # 故障排查指南
 ```
@@ -280,29 +280,9 @@ jdc config init
 # 配置文件位置：~/.jdc/config
 ```
 
-**方式四：MCP Server 配置（AI Agent 使用）**
-
-```json
-{
-  "mcpServers": {
-    "jdcloud-vm": {
-      "command": "uvx",
-      "args": ["run", "--python", "3.10", "@jdcloud/vm-mcp"],
-      "env": {
-        "JDC_ACCESS_KEY": "${JDC_ACCESS_KEY}",
-        "JDC_SECRET_KEY": "${JDC_SECRET_KEY}",
-        "JDC_REGION": "${JDC_REGION:-cn-north-1}"
-      }
-    }
-  }
-}
-```
-
-> **注意**：MCP 配置中的 `${JDC_ACCESS_KEY}` 表示引用系统环境变量，需要在启动 MCP Server 前配置好对应的环境变量。
-
 ##### 安全最佳实践
 
-- ✅ **推荐**：使用环境变量或密钥管理服务（如 AWS Secrets Manager、HashiCorp Vault）
+- ✅ **推荐**：使用环境变量或密钥管理服务（如 HashiCorp Vault、京东云密钥管理服务）
 - ✅ **推荐**：为不同环境（开发/测试/生产）创建不同的 Access Key
 - ✅ **推荐**：定期轮换 Access Key（建议每 90 天）
 - ❌ **禁止**：将凭证硬编码在代码中
@@ -364,6 +344,18 @@ jdc [product] describe-[resources] \
 
 #### 6.1 格式检查
 
+**安装 markdownlint（首次使用）：**
+
+```bash
+# 使用 npm 安装
+npm install -g markdownlint-cli
+
+# 或使用 Homebrew (macOS)
+brew install markdownlint-cli
+```
+
+**检查 Markdown 语法：**
+
 ```bash
 # 检查 Markdown 语法
 markdownlint jdcloud-[product]-ops/SKILL.md
@@ -403,8 +395,9 @@ head -10 jdcloud-[product]-ops/SKILL.md
 # 1. 创建目录结构
 mkdir -p jdcloud-vm-ops/references jdcloud-vm-ops/assets
 
-# 2. 使用 create-skill 生成基础内容
-create-skill --product "云主机 VM" --name "jdcloud-vm-ops"
+# 2. 使用 jdcloud-skill-generator 生成基础内容
+# 在 AI 对话中引用 @jdcloud-skill-generator/SKILL.md 并提供产品信息
+# 示例提示词："请帮我生成一个京东云云主机 VM 的 Skill，名称为 jdcloud-vm-ops"
 
 # 3. 完善内容
 # - 添加云主机特有的 CLI 命令

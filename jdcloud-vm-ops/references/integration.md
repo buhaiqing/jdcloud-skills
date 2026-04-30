@@ -216,138 +216,6 @@ if (response.getError() == null) {
 }
 ```
 
-## MCP Server Integration
-
-### What is MCP Server
-
-Model Context Protocol (MCP) Server is a standardized way for AI assistants to interact with external systems. Through MCP Server, AI can directly operate JD Cloud resources.
-
-### Configure MCP Server
-
-Add the JD Cloud VM Server to your MCP client configuration file:
-
-```json
-{
-  "mcpServers": {
-    "jdcloud-vm": {
-      "command": "uvx",
-      "args": ["run", "--python", "3.10", "@jdcloud/vm-mcp"],
-      "env": {
-        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
-        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
-        "JDC_REGION": "{{env.JDC_REGION}}"
-      }
-    }
-  }
-}
-```
-
-> **Note**:
-> - MCP Server is developed with Python 3.10+
-> - Uses the `uvx` command to start
-> - Environment variables should be set in shell configuration files or CI/CD systems
-> - **Never** hardcode credentials in configuration files
-
-### Available MCP Tools
-
-Once configured, the AI assistant can use the following tools:
-
-#### 1. Query Instance
-
-```
-Description: Query VM instance list or details
-Parameters:
-  - region_id: Region ID (required)
-  - instance_ids: List of instance IDs (optional)
-  - filters: Filter conditions (optional)
-  
-Example: Query all running instances
-```
-
-#### 2. Create Instance
-
-```
-Description: Create a new VM instance
-Parameters:
-  - region_id: Region ID (required)
-  - az: Availability zone (required)
-  - instance_type: Instance specification (required)
-  - image_id: Image ID (required)
-  - name: Instance name (required)
-  - subnet_id: Subnet ID (required)
-  - security_group_ids: Security group ID list (required)
-  - key_name: Key pair name (optional)
-  
-Example: Create a general-purpose instance
-```
-
-#### 3. Start / Stop Instance
-
-```
-Description: Start or stop a VM instance
-Parameters:
-  - region_id: Region ID (required)
-  - instance_id: Instance ID (required)
-  - action: start or stop (required)
-  
-Example: Stop a specified instance
-```
-
-#### 4. Query Monitoring Data
-
-```
-Description: Query instance monitoring metric data
-Parameters:
-  - region_id: Region ID (required)
-  - instance_id: Instance ID (required)
-  - metric: Metric name (required)
-  - start_time: Start time (optional)
-  - end_time: End time (optional)
-  
-Example: Query CPU usage for the last 1 hour
-```
-
-#### 5. Create Snapshot
-
-```
-Description: Create a snapshot for a cloud disk
-Parameters:
-  - region_id: Region ID (required)
-  - disk_id: Cloud disk ID (required)
-  - snapshot_name: Snapshot name (required)
-  
-Example: Create a backup snapshot for the system disk
-```
-
-### Usage Example Scenarios
-
-#### Scenario 1: Daily Inspection
-
-User: "Check the status and resource usage of all VM instances in the production environment"
-
-The AI assistant will:
-1. Call `list_instances` to get all instances
-2. Call `get_metrics` for each instance to get CPU and memory usage
-3. Aggregate and display results
-
-#### Scenario 2: Troubleshooting
-
-User: "Instance i-xxxxx cannot connect, please help me diagnose"
-
-The AI assistant will:
-1. Call `describe_instance` to check instance status
-2. Call `describe_security_group` to check security group rules
-3. Call `describe_network_interface` to check network configuration
-4. Provide diagnostic recommendations
-
-#### Scenario 3: Batch Operations
-
-User: "Stop all test environment instances at 10 PM"
-
-The AI assistant will:
-1. Call `list_instances` to filter test environment instances
-2. Call `stop_instance` for each instance
-3. Confirm the operation is complete
 
 ## Terraform Integration
 
@@ -703,7 +571,7 @@ jobs:
       
       - name: Verify Deployment
         run: |
-          pip install jdcloud-cli
+          pip install jdcloud_cli
           export JDC_ACCESS_KEY=${{ secrets.JDC_ACCESS_KEY }}
           export JDC_SECRET_KEY=${{ secrets.JDC_SECRET_KEY }}
           
@@ -741,7 +609,7 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        pip install jdcloud-cli
+                        pip install jdcloud_cli
                         export JDC_ACCESS_KEY=$JDC_ACCESS_KEY
                         export JDC_SECRET_KEY=$JDC_SECRET_KEY
                         

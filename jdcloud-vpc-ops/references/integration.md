@@ -41,42 +41,6 @@ client = VpcClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
 vpc_id = create_vpc_idempotent(client, 'cn-north-1', 'my-vpc', '10.0.0.0/16')
 ```
 
-## MCP Server Configuration
-
-### VPC MCP Server
-```json
-{
-  "mcpServers": {
-    "jdcloud-vpc": {
-      "command": "uvx", 
-      "args": ["run", "--python", "3.10", "@jdcloud/vpc-mcp"],
-      "env": {
-        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
-        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
-        "JDC_REGION": "{{env.JDC_REGION}}"
-      }
-    }
-  }
-}
-```
-> Note: MCP servers are developed with Python 3.10+ and launched using `uvx` command. Environment variables MUST be set in the Agent runtime environment. NEVER hardcode credentials in configuration files. The `{{env.*}}` placeholders are resolved by the Agent harness at runtime.
-
-### Monitoring MCP Server
-```json
-{
-  "mcpServers": {
-    "jdcloud-monitor": {
-      "command": "uvx", 
-      "args": ["run", "--python", "3.10", "@jdcloud/monitor-mcp"],
-      "env": {
-        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
-        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
-        "JDC_REGION": "{{env.JDC_REGION}}"
-      }
-    }
-  }
-}
-```
 
 ## SDK Integration
 
@@ -272,7 +236,7 @@ jobs:
       
       - name: Setup JD Cloud CLI
         run: |
-          pip install jdcloud-cli
+          pip install jdcloud_cli
           echo "JDC_ACCESS_KEY=${{ secrets.JDC_ACCESS_KEY }}" >> $GITHUB_ENV
           echo "JDC_SECRET_KEY=${{ secrets.JDC_SECRET_KEY }}" >> $GITHUB_ENV
           echo "JDC_REGION=cn-north-1" >> $GITHUB_ENV
@@ -292,7 +256,7 @@ deploy-vpc:
   stage: deploy
   image: python:3.10
   script:
-    - pip install jdcloud-cli
+    - pip install jdcloud_cli
     - jdc vpc create-vpc
         --region cn-north-1
         --vpc-name "ci-vpc"

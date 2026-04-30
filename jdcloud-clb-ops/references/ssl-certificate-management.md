@@ -263,7 +263,7 @@ jobs:
       - name: Upload to JD Cloud CLB
         if: env.NEEDS_RENEWAL == 'true'
         run: |
-          pip install jdcloud-cli
+          pip install jdcloud_cli
           jdc config init --access-key ${{ secrets.JDC_ACCESS_KEY }} \
                           --secret-key ${{ secrets.JDC_SECRET_KEY }}
           

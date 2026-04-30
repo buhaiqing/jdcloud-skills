@@ -6,7 +6,7 @@ Ensure that the JD Cloud CLI is installed and configured:
 
 ```bash
 # Install CLI
-pip install jdcloud-cli
+pip install jdcloud_cli
 
 # Initialize configuration
 jdc config init

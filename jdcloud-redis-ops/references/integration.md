@@ -1,43 +1,5 @@
 # Integration & Tooling
 
-## MCP Server Configuration
-
-### MCP Server for JD Cloud Redis
-
-```json
-{
-  "mcpServers": {
-    "jdcloud-redis": {
-      "command": "uvx", 
-      "args": ["run", "--python", "3.10", "@jdcloud/redis-mcp"],
-      "env": {
-        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
-        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
-        "JDC_REGION": "{{env.JDC_REGION}}"
-      }
-    }
-  }
-}
-```
-
-> Note: MCP servers are developed with Python 3.10+ and launched using `uvx` command. Environment variables MUST be set in the Agent runtime environment. NEVER hardcode credentials in configuration files. The `{{env.*}}` placeholders are resolved by the Agent harness at runtime.
-
-### Available MCP Tools
-
-The JD Cloud Redis MCP server provides the following tools:
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `describe_cache_instances` | List Redis instances | region_id, status, page_number, page_size |
-| `describe_cache_instance` | Get instance details | region_id, cache_instance_id |
-| `create_cache_instance` | Create new instance | region_id, az_id, cache_instance_name, instance_class, vpc_id, subnet_id, password, redis_version |
-| `delete_cache_instance` | Delete instance | region_id, cache_instance_id |
-| `modify_cache_instance_class` | Resize instance | region_id, cache_instance_id, instance_class |
-| `create_backup` | Create backup | region_id, cache_instance_id, backup_name |
-| `describe_backups` | List backups | region_id, cache_instance_id |
-| `restore_instance` | Restore from backup | region_id, cache_instance_id, backup_id |
-| `reset_password` | Reset password | region_id, cache_instance_id, new_password |
-| `modify_ip_white_list` | Update whitelist | region_id, cache_instance_id, ip_white_list |
 
 ## SDK Initialization
 
@@ -581,7 +543,7 @@ jobs:
       
       - name: Setup JD Cloud CLI
         run: |
-          pip install jdcloud-cli
+          pip install jdcloud_cli
           jdc configure add \
             --access-key ${{ secrets.JDC_ACCESS_KEY }} \
             --secret-key ${{ secrets.JDC_SECRET_KEY }} \
@@ -615,7 +577,7 @@ deploy-redis:
   stage: deploy
   image: python:3.10
   script:
-    - pip install jdcloud-cli
+    - pip install jdcloud_cli
     - jdc configure add --access-key $JDC_ACCESS_KEY --secret-key $JDC_SECRET_KEY --region-id cn-north-1
     - jdc redis create-cache-instance --region-id cn-north-1 --az-id "cn-north-1a" --cache-instance-name "ci-redis-$CI_COMMIT_SHA" --instance-class "redis.sw.4g" --vpc-id "vpc-abc123" --subnet-id "subnet-def456" --password "$REDIS_PASSWORD" --redis-version "6.2" --charge-mode "postpaid_by_duration" --output json
   only:

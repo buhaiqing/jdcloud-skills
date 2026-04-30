@@ -93,7 +93,7 @@ description: >-
 | 检查项 | 命令 | 期望 | 失败处理 |
 |--------|------|------|---------|
 | CLI 已安装 | `jdc --version` | exit code 0 | 引导用户安装 jdcloud-cli |
-| 凭证有效 | `jdc config validate --output json` | `$.valid == true` | 提示用户执行 `jdc config init` |
+| 凭证有效 | `jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1 --output json` | `$.error == null` | 提示用户执行 `jdc config init` |
 | 区域可用 | `jdc monitor describe-services --region-id {{user.region}} --output json` | 返回服务列表非空 | 建议最近可用区域 |
 
 #### 执行
@@ -196,7 +196,7 @@ jdc monitor delete-alarms \
 
 ```bash
 # 安装京东云 CLI
-pip install jdcloud-cli
+pip install jdcloud_cli
 
 # 验证安装
 jdc --version

@@ -85,7 +85,7 @@ Every operation follows the pattern: Pre-flight → Execute → Validate → Rec
 | Check | Command | Expected | On Failure |
 |-------|---------|----------|------------|
 | CLI installed | `jdc --version` | exit code 0 | Guide user to install jdcloud-cli |
-| Credentials valid | `jdc config validate --output json` | `$.valid == true` | Prompt user to run `jdc config init` |
+| Credentials valid | `jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1 --output json` | `$.error == null` | Prompt user to run `jdc config init` |
 | Instance types available | `jdc vm describe-instance-types --region-id {{user.region}} --output json` | list non-empty | Suggest another region |
 | Image exists | `jdc vm describe-images --region-id {{user.region}} --image-ids '["{{user.image_id}}"]' --output json` | returns image | Suggest available public image |
 | Subnet exists | `jdc vpc describe-subnet --region-id {{user.region}} --subnet-id {{user.subnet_id}} --output json` | returns subnet | Suggest creating subnet first |
@@ -191,7 +191,7 @@ jdc vm delete-instance \
 1. **Install JD Cloud CLI**:
    ```bash
    # Install JD Cloud CLI
-   pip install jdcloud-cli
+   pip install jdcloud_cli
    jdc config init
    ```
 

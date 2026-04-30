@@ -1,45 +1,5 @@
 # 云监控集成指南
 
-## MCP Server 配置
-
-云监控 MCP Server 允许通过 MCP 协议与云监控服务交互。
-
-### 配置示例
-
-```json
-{
-  "mcpServers": {
-    "jdcloud-monitor": {
-      "command": "uvx",
-      "args": [
-        "run",
-        "--python",
-        "3.10",
-        "@jdcloud/monitor-mcp"
-      ],
-      "env": {
-        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
-        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
-        "JDC_REGION": "{{env.JDC_REGION}}"
-      }
-    }
-  }
-}
-```
-
-> **注意**：MCP servers 使用 Python 3.10+ 开发，通过 `uvx` 命令启动。环境变量必须在 Agent 运行时环境中设置。切勿在配置文件中硬编码凭证。`{{env.*}}` 占位符由 Agent harness 在运行时解析。
-
-### 环境变量配置
-
-Agent 运行时必须已配置以下环境变量：
-
-```bash
-export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-export JDC_REGION="cn-north-1"
-```
-
-> Agent 不得向用户索取上述变量值。若未设置，引导用户通过 `jdc config init` 配置。
 
 ## SDK 集成
 
@@ -48,7 +8,7 @@ export JDC_REGION="cn-north-1"
 #### 安装 SDK
 
 ```bash
-pip install jdcloud-sdk
+pip install jdcloud_sdk
 ```
 
 #### SDK 初始化
@@ -490,7 +450,7 @@ jobs:
     steps:
       - name: Setup JDCloud CLI
         run: |
-          pip install jdcloud-cli
+          pip install jdcloud_cli
           jdc config init --access-key ${{ secrets.JDC_ACCESS_KEY }} --secret-key ${{ secrets.JDC_SECRET_KEY }} --region cn-north-1
       
       - name: Check Resource Status
@@ -533,7 +493,7 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        pip install jdcloud-cli
+                        pip install jdcloud_cli
                         export JDC_ACCESS_KEY=$JDC_ACCESS_KEY
                         export JDC_SECRET_KEY=$JDC_SECRET_KEY
                         

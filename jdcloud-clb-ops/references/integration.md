@@ -1,22 +1,5 @@
 # JD Cloud CLB Integration & Tooling
 
-## MCP Server Configuration
-```json
-{
-  "mcpServers": {
-    "jdcloud-clb": {
-      "command": "uvx", 
-      "args": ["run", "--python", "3.10", "@jdcloud/clb-mcp"],
-      "env": {
-        "JDC_ACCESS_KEY": "{{env.JDC_ACCESS_KEY}}",
-        "JDC_SECRET_KEY": "{{env.JDC_SECRET_KEY}}",
-        "JDC_REGION": "{{env.JDC_REGION}}"
-      }
-    }
-  }
-}
-```
-> Note: MCP servers are developed with Python 3.10+ and launched using `uvx` command. Environment variables MUST be set in the Agent runtime environment. NEVER hardcode credentials in configuration files. The `{{env.*}}` placeholders are resolved by the Agent harness at runtime.
 
 ## SDK Initialization (Python)
 ```python
@@ -251,7 +234,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Setup JD Cloud CLI
         run: |
-          pip install jdcloud-cli
+          pip install jdcloud_cli
           echo "${{ secrets.JDC_ACCESS_KEY }}" > access_key
           echo "${{ secrets.JDC_SECRET_KEY }}" > secret_key
       - name: Create CLB

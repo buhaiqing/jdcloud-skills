@@ -2,7 +2,7 @@
 
 ## Installation
 ```bash
-pip install jdcloud-cli
+pip install jdcloud_cli
 jdc config init
 ```
 
