@@ -4,7 +4,20 @@ description: >-
   Manages JD Cloud [Product Name] resources. Use when you need to deploy, 
   configure, troubleshoot, or monitor [Product Name] instances on JD Cloud.
   Includes CLI usage, SDK integration, and operational best practices.
+license: MIT
+compatibility: Requires jdcloud-cli, Python 3.10+, and JD Cloud account credentials
+metadata:
+  author: jdcloud
+  version: "1.0.0"
+  last_updated: "2026-04-30"
+  runtime: Harness AI Agent
+  environment:
+    - JDC_ACCESS_KEY
+    - JDC_SECRET_KEY
+    - JDC_REGION
 ---
+
+> This template follows the [Agent Skill OpenSpec](https://agentskills.io/specification) specification.
 
 # JD Cloud [Product Name] Operations Skill
 
