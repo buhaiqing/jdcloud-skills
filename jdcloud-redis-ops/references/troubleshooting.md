@@ -1,453 +1,337 @@
 # Troubleshooting JD Cloud Redis
 
-## Common Error Codes
+## Common API Error Codes
 
-### API Errors
+| Code / HTTP | Meaning | Agent Action |
+|-------------|---------|--------------|
+| InvalidParameter / 400 | Request parameter validation failed | Check parameter format, values, and required fields per OpenAPI spec |
+| QuotaExceeded / 400 | User resource quota limit reached | HALT; instruct user to request quota increase via console or support |
+| ResourceAlreadyExists / 400 | Instance name or resource already exists | Ask user to choose different name or verify existing resource |
+| SubnetIpInsufficient / 400 | Subnet has insufficient IP addresses for instance nodes | HALT; user must expand subnet CIDR range or use different subnet |
+| InsufficientBalance / 400 | Account balance insufficient for operation | HALT; user must top up account balance |
+| PermissionDenied / 403 | IAM policy denies this operation | HALT; user must check IAM permissions or contact admin |
+| ResourceNotFound / 404 | Instance or resource ID does not exist | Verify instance ID; check if instance was deleted |
+| OperationNotSupported / 400 | Operation not supported for this instance type | Check instance architecture compatibility with operation |
+| RateLimitExceeded / 429 | API rate limit exceeded | Retry with exponential backoff; respect Retry-After header |
+| InternalError / 500 | Server internal error | Retry up to 3 times with backoff; report requestId if persists |
+| ServiceUnavailable / 503 | Service temporarily unavailable | Retry after delay; check service status page |
 
-| Error Code | HTTP Status | Description | Solution |
-|------------|-------------|-------------|----------|
-| `InvalidParameter` | 400 | A required parameter is missing or invalid | Check CLI command syntax and parameter format |
-| `InvalidParameter.Password` | 400 | Password does not meet complexity requirements | Use 8-32 chars with letters, numbers, and special chars |
-| `InvalidParameter.Whitelist` | 400 | IP whitelist format is invalid | Use valid IP or CIDR notation (e.g., 192.168.1.0/24) |
-| `ResourceNotFound` | 404 | Instance does not exist | Verify instance ID and region |
-| `ResourceAlreadyExists` | 409 | Instance with same name already exists | Use a different name or reuse existing instance |
-| `QuotaExceeded` | 403 | Instance quota exceeded | Request quota increase or delete unused instances |
-| `InsufficientBalance` | 403 | Account balance insufficient | Top up account |
-| `InsufficientResource` | 403 | Spec not available in AZ | Try different AZ or spec |
-| `OperationDenied.InstanceStatus` | 403 | Instance not in correct state for operation | Wait for instance to reach target state |
-| `InternalError` | 500 | Internal service error | Retry with backoff, contact support if persists |
+## Diagnostic Order
 
-### Connection Errors
+When troubleshooting Redis issues, follow this systematic approach:
 
-| Error | Description | Solution |
-|-------|-------------|----------|
-| `Connection refused` | Cannot connect to Redis endpoint | Check whitelist, network, and instance status |
-| `NOAUTH Authentication required` | Password not provided | Provide password in connection string |
-| `WRONGPASS invalid username-password pair` | Incorrect password | Reset password or verify credentials |
-| `DENIED Redis is running in protected mode` | Protected mode enabled | Configure whitelist or disable protected mode |
-| `MAXCLIENTS reached` | Max connections reached | Increase instance spec or optimize connection pool |
-| `OOM command not allowed` | Out of memory | Delete unused keys or scale up instance |
-| `BUSY Redis is busy` | Running blocking command | Wait for command to complete or optimize query |
-| `LOADING Redis is loading` | Instance loading dataset | Wait for loading to complete |
+### 1. Verify Instance Status
 
-## Diagnostic Steps
-
-### Step 1: Check Instance Status
+**Step**: Describe the Redis instance to check current state.
 
 ```bash
 jdc redis describe-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json | jq '.result.cacheInstance.status'
-```
-
-**Expected states:**
-- `running`: Normal operation
-- `creating`: Wait for provisioning to complete
-- `changing`: Configuration change in progress
-- `error`: Contact support
-
-### Step 2: Verify Network Connectivity
-
-From application server:
-
-```bash
-# Test TCP connectivity
-telnet <redis-endpoint> 6379
-
-# Or use nc
-nc -zv <redis-endpoint> 6379
-
-# Test with redis-cli
-redis-cli -h <redis-endpoint> -p 6379 -a <password> ping
-```
-
-**Expected response:** `PONG`
-
-### Step 3: Check IP Whitelist
-
-```bash
-jdc redis describe-ip-white-list \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}" \
   --output json
 ```
 
-**Verify:**
-- Application server IP is in whitelist
-- CIDR notation is correct
-- No conflicting rules
+**Check**:
+- Status field: `running`, `creating`, `error`, `modifying`, `deleted`
+- If `error`: Check `errorMessage` field for details
+- If `modifying`: Wait for operation completion
 
-### Step 4: Check Memory Usage
+### 2. Check Instance Configuration
+
+**Step**: Query instance configuration parameters.
 
 ```bash
-# Via CLI
-jdc redis describe-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json | jq '.result.cacheInstance.usedMemoryMB, .result.cacheInstance.capacityMB'
-
-# Via redis-cli
-redis-cli -h <endpoint> -p 6379 -a <password> INFO memory
+jdc redis describe-instance-config \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}" \
+  --output json
 ```
 
-**Key metrics:**
-- `used_memory`: Current memory usage
-- `maxmemory`: Configured max memory
-- `mem_fragmentation_ratio`: Memory fragmentation (>1.5 is concerning)
+**Check**:
+- `maxmemory-policy`: Memory eviction strategy
+- `timeout`: Connection timeout
+- `maxclients`: Maximum connection limit
 
-### Step 5: Check Slow Logs
+### 3. Analyze Performance Metrics
+
+**Step**: Query Cloud Monitor metrics (delegate to `jdcloud-cloudmonitor-ops`).
+
+**Check**:
+- CPU utilization
+- Memory usage percentage
+- Connection count vs. max connections
+- QPS and bandwidth usage
+- Slow log count
+
+### 4. Examine Slow Log
+
+**Step**: Query slow operation logs.
 
 ```bash
 jdc redis describe-slow-log \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --start-time "2026-04-30T00:00:00+08:00" \
-  --end-time "2026-04-30T23:59:59+08:00" \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}" \
+  --start-time "2026-05-01T00:00:00Z" \
+  --end-time "2026-05-03T00:00:00Z" \
   --output json
 ```
 
-**Look for:**
-- Commands with high execution time (>100ms)
-- Blocking commands: KEYS, FLUSHALL, HGETALL (large hashes)
-- Optimizable patterns: multiple small commands vs pipeline
+**Check**:
+- Commands with high execution time
+- Frequent slow operations patterns
+- Key names causing slow operations
 
-### Step 6: Check Connected Clients
+### 5. Check Network Connectivity
+
+**Step**: Verify VPC/subnet configuration and IP whitelist.
 
 ```bash
-# Via CLI
-jdc redis describe-client-list \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
+jdc redis describe-ip-white-list \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}" \
   --output json
-
-# Via redis-cli
-redis-cli -h <endpoint> -p 6379 -a <password> CLIENT LIST
 ```
 
-**Check for:**
-- Too many idle connections (connection leak)
-- Single client with excessive connections
-- Unexpected client IPs
+**Check**:
+- Client IP is in whitelist
+- VPC/subnet routing is correct
+- Security groups allow Redis port (6379)
+
+### 6. Query Connected Clients
+
+**Step**: Check active client connections.
+
+```bash
+jdc redis describe-client-list \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}" \
+  --output json
+```
+
+**Check**:
+- Number of connected clients vs. max limit
+- Client IP addresses
+- Idle or stuck connections
 
 ## Common Issues and Solutions
 
-### Issue 1: Cannot Connect to Redis Instance
+### Issue: Instance Creation Failed
 
-**Symptoms:**
-- Connection timeout or refused
-- Application logs show connection errors
+**Symptoms**: Instance status shows `error` after creation.
 
-**Possible Causes & Solutions:**
+**Possible Causes**:
+- Insufficient subnet IP addresses
+- Invalid specification code
+- VPC/subnet mismatch
+- Quota exceeded
 
-1. **Whitelist not configured**
+**Resolution**:
+1. Check error message in `describeCacheInstance` response
+2. Verify subnet has available IPs (delegate to `jdcloud-vpc-ops`)
+3. Validate spec code via `describeSpecConfig`
+4. Check quota via `describeUserQuota`
+5. Retry creation with corrected parameters
+
+### Issue: High Memory Usage
+
+**Symptoms**: Memory usage >90%, eviction occurring, OOM errors.
+
+**Possible Causes**:
+- Large number of keys
+- Big keys consuming memory
+- Insufficient memory allocation
+- No eviction policy set
+
+**Resolution**:
+1. Run big key analysis:
    ```bash
-   # Add application server IP to whitelist
-   jdc redis modify-ip-white-list \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --ip-white-list '["10.0.1.100"]' \
-     --output json
-   ```
-
-2. **Wrong endpoint or port**
-   ```bash
-   # Get correct connection info
-   jdc redis describe-cache-instance \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --output json | jq '{
-       domain: .result.cacheInstance.connectionDomain,
-       port: .result.cacheInstance.connectionPort
-     }'
-   ```
-
-3. **Instance not in running state**
-   ```bash
-   # Check status
-   jdc redis describe-cache-instance \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --output json | jq '.result.cacheInstance.status'
-   ```
-
-4. **VPC/subnet mismatch**
-   - Ensure application server and Redis are in same VPC
-   - Check subnet routing and security groups
-
-### Issue 2: High Memory Usage
-
-**Symptoms:**
-- Memory usage > 90%
-- OOM errors
-- Keys being evicted unexpectedly
-
-**Solutions:**
-
-1. **Analyze memory usage**
-   ```bash
-   redis-cli -h <endpoint> -p 6379 -a <password> INFO memory
-   redis-cli -h <endpoint> -p 6379 -a <password> DBSIZE
-   ```
-
-2. **Find big keys**
-   ```bash
-   # Use JD Cloud analysis feature
    jdc redis create-big-key-analysis \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --output json
-   
-   # Or use redis-cli
-   redis-cli -h <endpoint> -p 6379 -a <password> --bigkeys
-   ```
-
-3. **Optimize eviction policy**
-   ```bash
-   jdc redis modify-instance-config \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --instance-config '[{"parameterName":"maxmemory-policy","parameterValue":"allkeys-lru"}]' \
+     --region-id "{{user.region}}" \
+     --cache-instance-id "{{user.instance_id}}" \
      --output json
    ```
+2. Check memory eviction policy
+3. Scale up instance if needed (modifyCacheInstanceClass)
+4. Delete unused keys or optimize data structures
 
-4. **Scale up instance**
-   ```bash
-   jdc redis modify-cache-instance-class \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --instance-class "redis.sw.16g" \
-     --output json
-   ```
+### Issue: Connection Refused
 
-### Issue 3: High CPU Usage
+**Symptoms**: Clients cannot connect to Redis.
 
-**Symptoms:**
-- CPU usage > 80%
-- High latency
-- Slow command execution
+**Possible Causes**:
+- IP not in whitelist
+- Wrong connection address/port
+- Password authentication failure
+- Instance not in `running` state
 
-**Solutions:**
+**Resolution**:
+1. Verify instance is `running`
+2. Check connection domain and port from `describeCacheInstance`
+3. Add client IP to whitelist via `modifyIpWhiteList`
+4. Reset password if authentication fails
 
-1. **Check slow logs**
-   ```bash
-   jdc redis describe-slow-log \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --output json
-   ```
+### Issue: High Latency
 
-2. **Avoid blocking commands**
-   - Replace `KEYS pattern` with `SCAN`
-   - Avoid `HGETALL` on large hashes (use `HSCAN`)
-   - Avoid `SMEMBERS` on large sets (use `SSCAN`)
+**Symptoms**: Slow response times, high execution time.
 
-3. **Optimize application code**
-   - Use pipeline for batch operations
-   - Avoid frequent small commands
-   - Use appropriate data structures
+**Possible Causes**:
+- Slow commands (e.g., KEYS, HGETALL on large keys)
+- Network latency
+- CPU saturation
+- Insufficient bandwidth
 
-4. **Check for hot keys**
+**Resolution**:
+1. Analyze slow log to identify slow commands
+2. Check CPU and bandwidth metrics via Cloud Monitor
+3. Optimize commands (avoid KEYS, use SCAN)
+4. Scale up instance if CPU/bandwidth saturated
+
+### Issue: Hot Key Problem
+
+**Symptoms**: Uneven load, single shard overloaded.
+
+**Possible Causes**:
+- Frequently accessed single key
+- Poor key distribution in cluster
+
+**Resolution**:
+1. Run cache analysis for hot keys:
    ```bash
    jdc redis create-cache-analysis \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
+     --region-id "{{user.region}}" \
+     --cache-instance-id "{{user.instance_id}}" \
      --output json
    ```
+2. Identify hot keys from analysis results
+3. Redistribute keys using hash tags
+4. Split hot keys into multiple keys
 
-### Issue 4: Connection Pool Exhaustion
+### Issue: Instance Cannot Be Deleted
 
-**Symptoms:**
-- MAXCLIENTS errors
-- Cannot create new connections
-- Application connection timeout
+**Symptoms**: Delete operation fails or blocked.
 
-**Solutions:**
+**Possible Causes**:
+- Deletion protection enabled
+- Instance in `modifying` state
+- Backup restore in progress
+- Account balance issue (prepaid instances)
 
-1. **Check current connections**
-   ```bash
-   redis-cli -h <endpoint> -p 6379 -a <password> INFO clients
-   ```
+**Resolution**:
+1. Wait for any ongoing modifications
+2. Check if deletion protection is enabled
+3. Verify account balance for prepaid instances
+4. Retry delete after resolving blockers
 
-2. **Optimize connection pool**
-   ```python
-   # Python example (redis-py)
-   import redis
-   
-   pool = redis.ConnectionPool(
-       host='<endpoint>',
-       port=6379,
-       password='<password>',
-       max_connections=50,  # Adjust based on needs
-       socket_timeout=5,
-       socket_connect_timeout=5
-   )
-   r = redis.Redis(connection_pool=pool)
-   ```
+### Issue: Backup Restore Failed
 
-3. **Check for connection leaks**
-   - Ensure connections are properly closed
-   - Use connection pool instead of creating new connections
-   - Monitor idle connections
+**Symptoms**: Restore operation fails or instance stuck in restoring.
 
-4. **Scale up instance** (higher specs support more connections)
+**Possible Causes**:
+- Backup file corrupted
+- Backup incompatible with instance version
+- Insufficient memory for backup data
 
-### Issue 5: Replication Lag
+**Resolution**:
+1. Check backup file size vs. instance memory
+2. Verify backup Redis version matches instance
+3. Try different backup if available
+4. Create new instance from backup (clone)
 
-**Symptoms:**
-- Master-slave replication delay > 10 seconds
-- Read inconsistency
-- Failover risk
+### Issue: Client Disconnection
 
-**Solutions:**
+**Symptoms**: Clients disconnected frequently.
 
-1. **Check replication status**
-   ```bash
-   redis-cli -h <endpoint> -p 6379 -a <password> INFO replication
-   ```
+**Possible Causes**:
+- Connection timeout too short
+- Max connection limit reached
+- Network instability
+- Client idle timeout
 
-2. **Identify causes:**
-   - Network bandwidth saturation
-   - Large write operations (big key creation)
-   - Slow disk I/O (AOF persistence)
+**Resolution**:
+1. Check connection count vs. maxclients
+2. Increase `timeout` parameter if needed
+3. Scale up instance for more connections
+4. Optimize client connection pooling
 
-3. **Optimize:**
-   - Reduce write throughput
-   - Avoid big keys
-   - Monitor network bandwidth
-   - Consider cluster architecture for high write load
+## Error Recovery Procedures
 
-### Issue 6: Backup Failures
+### Recovery: Rate Limit Exceeded
 
-**Symptoms:**
-- Backup status shows "failed"
-- Backup size is 0
-- Backup takes too long
+**Procedure**:
+1. Stop sending requests immediately
+2. Wait for `Retry-After` duration (if provided)
+3. Implement exponential backoff in retry logic
+4. Reduce request frequency
 
-**Solutions:**
+### Recovery: InternalError
 
-1. **Check backup policy**
-   ```bash
-   jdc redis describe-backup-policy \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --output json
-   ```
+**Procedure**:
+1. Retry request after 2 seconds
+2. If retry fails, wait 4 seconds and retry
+3. If retry fails, wait 8 seconds and retry
+4. If all retries fail, HALT and report requestId to support
 
-2. **Verify storage quota**
-   ```bash
-   jdc redis describe-user-quota \
-     --region-id cn-north-1 \
-     --output json
-   ```
+### Recovery: Instance in Error State
 
-3. **Retry manual backup**
-   ```bash
-   jdc redis create-backup \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --backup-name "retry-backup-$(date +%Y%m%d%H%M%S)" \
-     --output json
-   ```
+**Procedure**:
+1. Query instance details to identify error cause
+2. If recoverable (e.g., config error), fix and retry operation
+3. If unrecoverable, delete and recreate instance
+4. Restore data from backup if available
 
-4. **Contact support** if backup consistently fails
+### Recovery: Network Connectivity Failure
 
-## Performance Optimization Checklist
+**Procedure**:
+1. Verify VPC/subnet configuration
+2. Check IP whitelist configuration
+3. Test connectivity from same VPC
+4. Delegate network troubleshooting to `jdcloud-vpc-ops`
 
-### Application Level
-- [ ] Use connection pooling
-- [ ] Implement retry logic with exponential backoff
-- [ ] Use pipeline for batch operations
-- [ ] Avoid blocking commands (KEYS, FLUSHALL)
-- [ ] Set appropriate timeouts (connection, socket, command)
-- [ ] Handle connection errors gracefully
-- [ ] Use SCAN instead of KEYS for pattern matching
+## Prevention Best Practices
 
-### Instance Level
-- [ ] Choose appropriate instance spec (memory, connections)
-- [ ] Configure eviction policy (allkeys-lru recommended)
-- [ ] Enable AOF for data durability (if needed)
-- [ ] Set maxmemory appropriately (70-80% of total)
-- [ ] Disable dangerous commands (FLUSHALL, KEYS, CONFIG)
-- [ ] Configure whitelist (least privilege)
-- [ ] Enable monitoring and alerts
+### Prevent Creation Failures
 
-### Architecture Level
-- [ ] Use master-slave for high availability
-- [ ] Use cluster for horizontal scaling
-- [ ] Deploy across multiple AZs for disaster recovery
-- [ ] Implement read/write splitting if applicable
-- [ ] Use local cache for hot keys
-- [ ] Plan for capacity growth
+- Verify subnet IP availability before creation
+- Check quota limits before large deployments
+- Use valid spec codes from `describeSpecConfig`
+- Test small instance first before scaling
 
-## Emergency Procedures
+### Prevent Performance Issues
 
-### Procedure 1: Instance Unresponsive
+- Regularly analyze slow logs
+- Monitor memory usage trends
+- Run periodic hot key/big key analysis
+- Set appropriate eviction policy
+- Scale proactively before saturation
 
-1. **Check status**
-   ```bash
-   jdc redis describe-cache-instance \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --output json
-   ```
+### Prevent Connectivity Issues
 
-2. **Try restart** (if status allows)
-   - Contact JD Cloud support for forced restart
-   - Do NOT delete instance (data loss)
+- Configure IP whitelist before deployment
+- Use VPC endpoints for internal access
+- Test connectivity after creation
+- Monitor connection metrics
 
-3. **Failover to backup** (if available)
-   ```bash
-   jdc redis restore-instance \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --backup-id <latest-backup-id> \
-     --output json
-   ```
+### Prevent Data Loss
 
-### Procedure 2: Data Corruption
+- Enable automatic backups
+- Test restore procedures regularly
+- Use multi-AZ deployment for HA
+- Keep backups in different region if critical
 
-1. **Stop writes** to prevent further corruption
-2. **Identify corruption scope**
-3. **Restore from backup**
-   ```bash
-   jdc redis restore-instance \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --backup-id <backup-id-before-corruption> \
-     --output json
-   ```
-4. **Verify data integrity**
-5. **Resume operations**
+## Support Escalation
 
-### Procedure 3: Accidental Data Deletion
+When to escalate to JD Cloud support:
 
-1. **Immediately stop application writes**
-2. **Check available backups**
-   ```bash
-   jdc redis describe-backups \
-     --region-id cn-north-1 \
-     --cache-instance-id jcs-redis-abc123 \
-     --output json
-   ```
-3. **Restore from latest backup before deletion**
-4. **Replay recent writes** (if applicable)
-5. **Implement safeguards** (disable FLUSHALL, use multiple accounts)
+- Persistent InternalError with multiple requestId failures
+- Unknown error codes not in documentation
+- Instance stuck in unrecoverable state
+- Data recovery needed after critical failure
+- Quota increase requests
+- Advanced technical issues requiring backend investigation
 
-## Getting Help
-
-### JD Cloud Support Channels
-
-1. **Console**: Submit ticket via JD Cloud Console
-2. **Phone**: Contact JD Cloud support hotline
-3. **Documentation**: https://docs.jdcloud.com/cn/jcs-for-redis
-
-### Information to Provide
-
-When contacting support, include:
+**Information to provide**:
+- requestId from failed operations
 - Instance ID and region
-- Error messages and codes
-- Timestamp of issue
-- Steps to reproduce
-- Application logs (if applicable)
-- Network topology (VPC, subnet, security groups)
+- Error code and message
+- Operation attempted
+- Timestamp of occurrence

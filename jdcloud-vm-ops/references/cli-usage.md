@@ -633,3 +633,34 @@ jdc disk resize-disk --region-id cn-north-1 --disk-id vol-xxxxx --disk-size-gb 2
 5. **Use Key Pairs for Login**: More secure than passwords, prevents brute force attacks
 6. **Multi-AZ Deployment**: Improve application availability
 7. **Clean Up Unused Resources**: Regularly check and release unused EIPs, disks, etc.
+
+## CLI vs SDK Coverage Gap
+
+| Operation | SDK Available | CLI Available | Notes |
+|-----------|---------------|---------------|-------|
+| Create Instance | Yes | Yes | Full coverage |
+| Describe Instances | Yes | Yes | Full coverage |
+| Start/Stop/Reboot Instance | Yes | Yes | Full coverage |
+| Delete Instance | Yes | Yes | Full coverage |
+| Resize Instance | Yes | Yes | Full coverage |
+| Describe Instance Types | Yes | Yes | Full coverage |
+| Describe Images | Yes | Yes | Full coverage |
+| Create/Delete Image | Yes | Yes | Full coverage |
+| Key Pair Operations | Yes | Yes | Full coverage |
+| Disk Operations | Yes | Yes | Use `disk` subcommand |
+| Snapshot Operations | Yes | Yes | Use `disk` subcommand |
+
+> **Note**: VM and Disk operations are fully covered by both SDK and CLI. No SDK-only operations for this product.
+
+## Path Preference (CLI vs SDK)
+
+| Scenario | Recommended Path | Reason |
+|----------|------------------|--------|
+| Quick ad-hoc operations | CLI | Faster iteration, less code |
+| Automation scripts / CI/CD | SDK | Better error handling, retry logic |
+| Complex multi-step workflows | SDK | Easier state management, conditional logic |
+| No Python runtime available | CLI | CLI is standalone tool |
+| Resource querying with jq | CLI | Native JSON output + jq pipeline |
+| Integration tests | SDK | Easier to mock/assert responses |
+
+> **Default preference for agent execution**: Prefer **SDK** for complex workflows; prefer **CLI** for simple queries.

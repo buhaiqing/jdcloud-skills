@@ -1,15 +1,40 @@
 ---
 name: jdcloud-vm-ops
 description: >-
-  Manages JD Cloud Virtual Machine resources. Use when you need to deploy, 
-  configure, troubleshoot, or monitor VM instances on JD Cloud.
-  Includes CLI usage, SDK integration, and operational best practices.
+  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
+  Virtual Machine (VM) via official API/SDK or official `jdc` CLI; user mentions
+  VM, 云主机, CVM, or tasks target VM instances.
+license: MIT
+compatibility: >-
+  Official JD Cloud SDK (Python 3.10+), valid API credentials, network
+  access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
+metadata:
+  author: jdcloud
+  version: "1.1.0"
+  last_updated: "2026-05-03"
+  runtime: Harness AI Agent
+  api_profile: "VM API v1.0 - https://docs.jdcloud.com/cn/virtual-machines/api"
+  cli_applicability: dual-path
+  cli_support_evidence: >-
+    Official `jdc` CLI supports VM operations. Verified via `jdc vm --help`
+    and documentation at https://docs.jdcloud.com/cn/cli
+  environment:
+    - JDC_ACCESS_KEY
+    - JDC_SECRET_KEY
+    - JDC_REGION
 ---
+
+> This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
 
 # JD Cloud VM Operations Skill
 
 ## Overview
 JD Cloud Virtual Machine (VM) is a core computing service that provides elastic, scalable, and secure cloud servers. This skill enables efficient operations, including automated deployment, real-time monitoring, and rapid troubleshooting of VM resources.
+
+### CLI applicability (repository policy)
+
+- **`cli_applicability: dual-path`:** Official `jdc` CLI supports VM operations. This skill provides **both SDK/API and CLI execution paths** for every operation.
+- **Path Preference:** For automated agent execution, prefer **SDK** for complex workflows (better error handling, retry logic); prefer **CLI** for simple queries and quick operations. See [API & SDK Usage](references/api-sdk-usage.md) for detailed comparison.
 
 ## Trigger & Scope (Agent-Readable)
 
@@ -73,6 +98,7 @@ This Skill uses structured placeholders to avoid prompt injection and parsing am
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-05-03 | Added dual-path execution (SDK + CLI), complete frontmatter, api-sdk-usage.md, path preference |
 | 1.0.0 | 2026-04-28 | Initial version, includes basic operational guide and reference templates |
 | 1.0.1 | 2026-04-28 | Added VM instance management, network configuration, and security group operations guide |
 
@@ -90,7 +116,43 @@ Every operation follows the pattern: Pre-flight → Execute → Validate → Rec
 | Image exists | `jdc vm describe-images --region-id {{user.region}} --image-ids '["{{user.image_id}}"]' --output json` | returns image | Suggest available public image |
 | Subnet exists | `jdc vpc describe-subnet --region-id {{user.region}} --subnet-id {{user.subnet_id}} --output json` | returns subnet | Suggest creating subnet first |
 
-#### Execution
+#### Execution — SDK (Python)
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.vm.client import VmClient
+from jdcloud_sdk.services.vm.apis.CreateInstancesRequest import CreateInstancesRequest
+
+credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
+client = VmClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
+
+request = CreateInstancesRequest({
+    "regionId": "{{user.region}}",
+    "az": "{{user.az}}",
+    "instanceType": "{{user.instance_type}}",
+    "imageId": "{{user.image_id}}",
+    "name": "{{user.instance_name}}",
+    "primaryNetworkInterface": {
+        "subnetId": "{{user.subnet_id}}",
+        "securityGroupIds": ["{{user.sg_id}}"]
+    },
+    "systemDisk": {
+        "diskCategory": "cloud_ssd",
+        "diskSizeGB": {{user.disk_size}}
+    },
+    "chargeMode": "postpaid_by_duration"
+})
+
+response = client.create_instances(request)
+if response.error is None:
+    instance_id = response.result.instanceIds[0]
+    print(f"Created instance: {instance_id}")
+else:
+    print(f"Error: {response.error.code} - {response.error.message}")
+```
+
+#### Execution — CLI (`jdc`)
 ```bash
 jdc vm create-instances \
   --region-id {{user.region}} \
@@ -133,7 +195,28 @@ jdc vm create-instances \
 
 ### Operation: Describe VM Instance
 
-#### Execution
+#### Execution — SDK (Python)
+
+```python
+from jdcloud_sdk.services.vm.apis.DescribeInstancesRequest import DescribeInstancesRequest
+
+request = DescribeInstancesRequest({
+    "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
+    "instanceIds": ["{{user.instance_id}}"]
+})
+
+response = client.describe_instances(request)
+if response.error is None:
+    instance = response.result.instances[0]
+    print(f"ID: {instance.instanceId}")
+    print(f"Name: {instance.name}")
+    print(f"Status: {instance.status}")
+    print(f"Private IP: {instance.primaryNetworkInterface.privateIpAddress}")
+else:
+    print(f"Error: {response.error.message}")
+```
+
+#### Execution — CLI (`jdc`)
 ```bash
 jdc vm describe-instances \
   --region-id {{env.JDC_REGION}} \
@@ -157,7 +240,24 @@ jdc vm describe-instances \
 - **MUST** ask user: "Are you sure you want to stop `{{user.instance_name}}` ({{user.instance_id}})? Running services will be interrupted."
 - **MUST** wait for explicit "yes" / "confirm" before proceeding
 
-#### Execution
+#### Execution — SDK (Python)
+
+```python
+from jdcloud_sdk.services.vm.apis.StopInstanceRequest import StopInstanceRequest
+
+request = StopInstanceRequest({
+    "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
+    "instanceId": "{{user.instance_id}}"
+})
+
+response = client.stop_instance(request)
+if response.error is None:
+    print(f"Stop request accepted: {response.requestId}")
+else:
+    print(f"Error: {response.error.message}")
+```
+
+#### Execution — CLI (`jdc`)
 ```bash
 jdc vm stop-instance \
   --region-id {{env.JDC_REGION}} \
@@ -175,7 +275,24 @@ jdc vm stop-instance \
 - **MUST** ask user: "Are you sure you want to delete `{{user.instance_name}}` ({{user.instance_id}})? This is IRREVERSIBLE and will release all associated resources."
 - **MUST** wait for explicit "yes" / "confirm" before proceeding
 
-#### Execution
+#### Execution — SDK (Python)
+
+```python
+from jdcloud_sdk.services.vm.apis.DeleteInstanceRequest import DeleteInstanceRequest
+
+request = DeleteInstanceRequest({
+    "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
+    "instanceId": "{{user.instance_id}}"
+})
+
+response = client.delete_instance(request)
+if response.error is None:
+    print(f"Delete request accepted: {response.requestId}")
+else:
+    print(f"Error: {response.error.message}")
+```
+
+#### Execution — CLI (`jdc`)
 ```bash
 jdc vm delete-instance \
   --region-id {{env.JDC_REGION}} \
@@ -188,9 +305,14 @@ jdc vm delete-instance \
 1. Poll `describe-instances` until HTTP 404 (max 300s)
 
 ## Prerequisites
-1. **Install JD Cloud CLI**:
+1. **Install JD Cloud SDK (Python)**:
    ```bash
-   # Install JD Cloud CLI
+   pip install jdcloud_sdk
+   ```
+   See [Integration](references/integration.md) for SDK version pinning.
+
+2. **Install JD Cloud CLI (for dual-path)**:
+   ```bash
    pip install jdcloud_cli
    jdc config init
    ```
@@ -216,6 +338,7 @@ jdc vm delete-instance \
 
 ## Reference Directory
 - [Core Concepts](references/core-concepts.md)
+- [API & SDK Usage](references/api-sdk-usage.md)
 - [CLI Usage](references/cli-usage.md)
 - [Troubleshooting Guide](references/troubleshooting.md)
 - [Monitoring & Alerts](references/monitoring.md)

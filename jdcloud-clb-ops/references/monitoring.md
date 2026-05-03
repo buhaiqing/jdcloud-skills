@@ -1,127 +1,203 @@
-# JD Cloud CLB Monitoring
+# Monitoring JD Cloud Load Balancer
 
 ## Key Metrics
-JD Cloud CLB provides comprehensive monitoring metrics to track performance and health:
 
-### Connection Metrics
-- **ActiveConnections**: Current number of active connections
-- **NewConnections**: Rate of new connections per second
-- **TotalConnections**: Total number of connections over time
-- **ConnectionSuccessRate**: Percentage of successful connections
+Load Balancer metrics are collected via JD Cloud Monitor service. Query metrics using the Cloud Monitor API or delegate to `jdcloud-cloudmonitor-ops`.
 
-### Traffic Metrics
-- **BandwidthIn**: Incoming bandwidth usage (bits per second)
-- **BandwidthOut**: Outgoing bandwidth usage (bits per second)
-- **TotalTraffic**: Total data transferred
-- **RequestCount**: Number of HTTP/HTTPS requests
+### Application Load Balancer (ALB) Metrics
 
-### Performance Metrics
-- **ResponseTime**: Average response time from backend servers
-- **ServerResponseTime**: Time taken by backend servers to respond
-- **ProcessingTime**: Total processing time including CLB overhead
+| Metric | Namespace | Dimensions | Description |
+|--------|-----------|------------|-------------|
+| Active Connections | `alb` | `loadBalancerId` | Current active TCP connections |
+| Connection Rate | `alb` | `loadBalancerId` | New connections per second |
+| Request Count (HTTP) | `alb` | `loadBalancerId`, `listenerId` | HTTP requests per second |
+| Response Time (HTTP) | `alb` | `loadBalancerId`, `listenerId` | Average HTTP response latency (ms) |
+| Upstream Response Time | `alb` | `loadBalancerId` | Backend server response time |
+| HTTP 2xx Rate | `alb` | `loadBalancerId` | 2xx response percentage |
+| HTTP 4xx Rate | `alb` | `loadBalancerId` | 4xx response percentage |
+| HTTP 5xx Rate | `alb` | `loadBalancerId` | 5xx response percentage |
+| Traffic In | `alb` | `loadBalancerId` | Inbound traffic (bytes/sec) |
+| Traffic Out | `alb` | `loadBalancerId` | Outbound traffic (bytes/sec) |
+| Healthy Target Count | `alb` | `targetGroupId` | Number of healthy backends |
+| Unhealthy Target Count | `alb` | `targetGroupId` | Number of unhealthy backends |
 
-### Health Metrics
-- **HealthyServerCount**: Number of healthy backend servers
-- **UnhealthyServerCount**: Number of unhealthy backend servers
-- **HealthCheckSuccessRate**: Percentage of successful health checks
+### Network Load Balancer (NLB) Metrics
 
-### Error Metrics
-- **HTTP5xxErrorCount**: Number of 5xx errors from backend servers
-- **HTTP4xxErrorCount**: Number of 4xx errors from clients
-- **DroppedConnections**: Number of dropped connections
+| Metric | Namespace | Dimensions | Description |
+|--------|-----------|------------|-------------|
+| Active Connections | `nlb` | `loadBalancerId` | Current active connections |
+| Connection Rate | `nlb` | `loadBalancerId` | New connections per second |
+| Connection Drop Rate | `nlb` | `loadBalancerId` | Connections dropped per second |
+| Traffic In | `nlb` | `loadBalancerId` | Inbound traffic (bytes/sec) |
+| Traffic Out | `nlb` | `loadBalancerId` | Outbound traffic (bytes/sec) |
+| Healthy Target Count | `nlb` | `targetGroupId` | Healthy backend count |
+| Unhealthy Target Count | `nlb` | `targetGroupId` | Unhealthy backend count |
+| Source IP Connection Count | `nlb` | `loadBalancerId` | Connections per source IP |
 
-### SSL Certificate Metrics
-- **CertificateExpirationDays**: Days until certificate expiration
-- **SSLHandshakeFailures**: Number of failed SSL handshakes
-- **SSLCipherSuiteUsage**: Distribution of cipher suites used
-- **TLSVersionDistribution**: Distribution of TLS versions used
+## Querying Metrics via SDK
+
+### Example: Query ALB Active Connections
+
+```python
+from jdcloud_sdk.services.monitor.apis.DescribeMetricDataRequest import DescribeMetricDataRequest
+
+req = DescribeMetricDataRequest(
+    namespace="alb",
+    metric="activeConnections",
+    dimensions=[{"loadBalancerId": "lb-abc"}],
+    startTime="2026-05-01T00:00:00Z",
+    endTime="2026-05-03T00:00:00Z",
+    period="60"  # 60-second granularity
+)
+
+resp = monitor_client.describeMetricData(req)
+for point in resp.result.metricData:
+    print(f"Time: {point.timestamp}, Value: {point.value}")
+```
+
+### Example: Query HTTP 5xx Rate
+
+```python
+req = DescribeMetricDataRequest(
+    namespace="alb",
+    metric="http5xxRate",
+    dimensions=[{"loadBalancerId": "lb-abc"}],
+    startTime="2026-05-01T00:00:00Z",
+    endTime="2026-05-03T00:00:00Z",
+    period="300"  # 5-minute granularity
+)
+
+resp = monitor_client.describeMetricData(req)
+```
 
 ## Alert Configuration
 
-### Basic Alert Rules
+### Recommended Alert Rules
+
+| Alert | Metric | Threshold | Period | Description |
+|-------|--------|-----------|--------|-------------|
+| High Error Rate | HTTP 5xx Rate | > 5% | 5 min | Backend errors exceeding threshold |
+| Low Health Ratio | Healthy Target Count | < 50% of targets | 3 min | Insufficient healthy backends |
+| High Latency | Response Time | > 1000ms | 5 min | Slow backend responses |
+| Connection Surge | Connection Rate | > 10000/s | 1 min | Abnormal traffic spike |
+| All Backends Unhealthy | Healthy Target Count | = 0 | 1 min | Complete backend failure |
+
+### Alert Rule Structure (via Cloud Monitor)
+
 ```json
 {
-  "metricName": "ActiveConnections",
-  "threshold": 10000,
-  "comparisonOperator": ">",
+  "ruleName": "alb-high-error-rate",
+  "namespace": "alb",
+  "metric": "http5xxRate",
+  "dimensions": [{"loadBalancerId": "lb-abc"}],
+  "threshold": 5.0,
+  "comparisonOperator": "greaterThan",
   "period": 300,
   "evaluationCount": 3,
-  "alertAction": {
-    "type": "notify",
-    "contacts": ["admin@example.com"]
-  }
+  "notificationChannels": ["email", "sms"]
 }
 ```
 
-### Recommended Alert Thresholds
-| Metric | Warning Threshold | Critical Threshold | Period |
-|--------|-------------------|-------------------|--------|
-| ActiveConnections | 8000 | 10000 | 300s |
-| BandwidthIn | 800Mbps | 950Mbps | 300s |
-| BandwidthOut | 800Mbps | 950Mbps | 300s |
-| ResponseTime | 1000ms | 3000ms | 300s |
-| HTTP5xxErrorCount | 10 | 50 | 300s |
-| UnhealthyServerCount | 1 | 2 | 300s |
-| CertificateExpirationDays | 30 days | 7 days | 86400s (daily) |
+### Creating Alert Rule via SDK
 
-## Monitoring Dashboard
+Delegate alert creation to `jdcloud-cloudmonitor-ops` for full Cloud Monitor integration:
 
-### CLB Overview Dashboard
-- CLB instance status
-- Connection metrics over time
-- Traffic patterns
-- Error rates
-- Backend server health
+```
+User: "Set up an alert for high 5xx error rate on my ALB"
 
-### Listener-Specific Dashboard
-- Per-listener connection counts
-- Listener traffic distribution
-- Protocol-specific metrics
-- SSL handshake performance
-
-### Backend Server Group Dashboard
-- Server health status
-- Traffic distribution per server
-- Server response times
-- Load balancing effectiveness
-
-## Custom Monitoring
-
-### Query CLB Metrics via CLI
-```bash
-jdc clb describe-clb-metrics \
-  --clb-id clb-xxxxx \
-  --start-time "2026-04-28T00:00:00+08:00" \
-  --end-time "2026-04-28T23:59:59+08:00" \
-  --metric-name "ActiveConnections" \
-  --period 300 \
-  --region cn-north-1 \
-  --output json
+Agent:
+1. Use jdcloud-clb-ops to identify the LB ID.
+2. Delegate to jdcloud-cloudmonitor-ops to create the alert rule with:
+   - namespace: alb
+   - metric: http5xxRate
+   - threshold: 5%
+   - period: 300s
 ```
 
-### Set Up CloudWatch Alarms
-```bash
-jdc monitor put-metric-alarm \
-  --alarm-name "clb-high-connections" \
-  --namespace "JDCloud/CLB" \
-  --metric-name "ActiveConnections" \
-  --statistic Average \
-  --period 300 \
-  --threshold 10000 \
-  --comparison-operator GreaterThanThreshold \
-  --evaluation-periods 3 \
-  --alarm-actions "arn:aws:sns:cn-north-1:123456789012:clb-alerts" \
-  --region cn-north-1
+## Dashboards
+
+### Recommended Dashboard Panels
+
+1. **LB Overview**: Active connections, connection rate, traffic (in/out)
+2. **HTTP Performance**: Request rate, response time, error rates (2xx, 4xx, 5xx)
+3. **Backend Health**: Healthy/unhealthy target counts, health check failures
+4. **Traffic Analysis**: Geographic distribution, protocol breakdown
+5. **Certificate Status**: SSL certificate expiration countdown
+
+### Custom Dashboard Creation
+
+Use JD Cloud Monitor console or delegate to `jdcloud-cloudmonitor-ops` for dashboard configuration.
+
+## Health Check Integration
+
+Load Balancer health check results are reflected in `healthyTargetCount` and `unhealthyTargetCount` metrics.
+
+### Health Check Monitoring Pattern
+
+1. **Poll describeTargetHealth** for real-time backend status.
+2. **Monitor healthyTargetCount metric** for historical trends.
+3. **Alert on unhealthyTargetCount > 0** to catch backend failures early.
+
+```python
+# Real-time health check via LB SDK
+from jdcloud_sdk.services.alb.apis.DescribeTargetHealthRequest import DescribeTargetHealthRequest
+
+req = DescribeTargetHealthRequest(
+    regionId="cn-north-1",
+    loadBalancerId="lb-abc"
+)
+
+resp = client.describeTargetHealth(req)
+for target in resp.result.targets:
+    status = target.healthStatus  # "healthy" / "unhealthy" / "initializing"
+    print(f"Target {target.targetId}: {status}")
 ```
 
-## Best Practices
-- Monitor connection counts to detect capacity issues early
-- Set up alerts for backend server health degradation
-- Track response times to identify performance bottlenecks
-- Monitor error rates to detect application issues
-- Review traffic patterns for capacity planning
-- Use custom metrics for application-specific monitoring
-- **Monitor certificate expiration** and set alerts at 30 and 7 days before expiry
-- Implement automated certificate rotation where possible
-- Regularly audit SSL policies to ensure compliance with security standards
-- Monitor SSL handshake failures to detect client compatibility issues
+## Access Log Collection (ALB)
+
+ALB supports access log collection via JD Cloud Log Service.
+
+### Enabling Access Logs
+
+1. Create log service topic (delegate to log service skill).
+2. Configure ALB access log export via console or API.
+3. Query logs via Log Service API for traffic analysis.
+
+### Log Fields
+
+| Field | Description |
+|-------|-------------|
+| timestamp | Request time |
+| client_ip | Source IP address |
+| listener_port | Listener port |
+| protocol | HTTP / HTTPS |
+| method | HTTP method |
+| host | Request host header |
+| path | Request path |
+| status_code | Response status |
+| response_time | Response latency (ms) |
+| upstream_ip | Backend server IP |
+| upstream_response_time | Backend latency |
+
+## Monitoring Best Practices
+
+1. **Set up alerts before production**: Configure health and error rate alerts immediately after LB creation.
+2. **Monitor backend health separately**: Alert when any backend becomes unhealthy.
+3. **Track certificate expiration**: Monitor SSL certificate validity days.
+4. **Baseline performance**: Record normal connection rates and response times for anomaly detection.
+5. **Cross-AZ monitoring**: Ensure traffic distribution across AZs is balanced.
+
+## Integration with jdcloud-cloudmonitor-ops
+
+For comprehensive monitoring configuration, delegate metric queries and alert creation to `jdcloud-cloudmonitor-ops`:
+
+| Task | Delegation |
+|------|------------|
+| Query LB metrics | `jdcloud-cloudmonitor-ops` with namespace `alb` or `nlb` |
+| Create alert rules | `jdcloud-cloudmonitor-ops` with LB dimension |
+| Configure dashboards | `jdcloud-cloudmonitor-ops` dashboard skill |
+
+## See Also
+
+- [JD Cloud Monitor Documentation](https://docs.jdcloud.com/cn/cloudmonitor/)
+- [ALB Access Log](https://docs.jdcloud.com/cn/application-load-balancer/configure-access-log)

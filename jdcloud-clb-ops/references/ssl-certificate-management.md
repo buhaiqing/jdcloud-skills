@@ -1,426 +1,290 @@
-# JD Cloud CLB SSL Certificate Management Best Practices
+# SSL Certificate Management for JD Cloud Load Balancer
 
 ## Overview
-This guide provides comprehensive best practices for managing SSL/TLS certificates with JD Cloud CLB, including security recommendations, automation strategies, and compliance guidelines.
 
-## Certificate Lifecycle Management
+SSL/TLS certificates are required for HTTPS and TLS listeners on Application Load Balancer (ALB). This document covers certificate binding, renewal, and multi-certificate (SNI) configurations.
 
-### 1. Certificate Acquisition
-- **Use Trusted CAs**: Obtain certificates from reputable Certificate Authorities (Let's Encrypt, DigiCert, GlobalSign, etc.)
-- **Certificate Type Selection**:
-  - **Domain Validation (DV)**: For basic encryption needs
-  - **Organization Validation (OV)**: For business websites requiring identity verification
-  - **Extended Validation (EV)**: For high-security applications requiring maximum trust
-- **Wildcard Certificates**: Use `*.example.com` for multiple subdomains (cost-effective but higher risk if compromised)
+## Certificate Sources
 
-### 2. Certificate Upload Process
+JD Cloud Load Balancer supports certificates from:
 
-#### Pre-upload Validation Checklist
-```bash
-# 1. Verify certificate format (PEM)
-openssl x509 -in cert.pem -text -noout
+1. **JD Cloud SSL Certificate Service**: Certificates purchased or uploaded via JD Cloud SSL Certificate Management.
+2. **External CA Certificates**: Upload external certificates (PEM format) to JD Cloud SSL service.
 
-# 2. Check expiration date
-openssl x509 -in cert.pem -noout -dates
+### Certificate Service Location
 
-# 3. Verify domain coverage
-openssl x509 -in cert.pem -noout -subject -ext subjectAltName
+Certificates are managed in **JD Cloud SSL Certificate Service** (云安全-SSL数字证书), not directly in Load Balancer.
 
-# 4. Validate private key matches certificate
-CERT_MODULUS=$(openssl x509 -noout -modulus -in cert.pem | openssl md5)
-KEY_MODULUS=$(openssl rsa -noout -modulus -in key.pem | openssl md5)
-[ "$CERT_MODULUS" = "$KEY_MODULUS" ] && echo "Match" || echo "Mismatch"
+- Console: JD Cloud Console → 安全 → SSL数字证书
+- API: SSL Certificate Service API (separate from LB API)
 
-# 5. Check certificate chain completeness
-openssl verify -CAfile ca-bundle.crt cert.pem
-```
+## Certificate Binding Workflow
 
-#### Secure File Handling
-- Store certificate files with restricted permissions: `chmod 600 *.pem`
-- Never commit certificates to version control systems
-- Use encrypted storage for certificate backups
-- Implement secure deletion after upload (`shred` command)
+### Step 1: Obtain or Upload Certificate
 
-### 3. Certificate Rotation Strategy
+**Purchase Certificate (JD Cloud Console)**:
+1. Navigate to SSL Certificate Service.
+2. Purchase or request certificate for domain.
+3. Wait for certificate issuance.
 
-#### Automated Rotation Workflow
-1. **Proactive Monitoring**: Set alerts at 30, 14, and 7 days before expiration
-2. **Preparation Phase** (30 days before):
-   - Request new certificate from CA
-   - Validate new certificate locally
-   - Upload to JD Cloud CLB with different name
-3. **Testing Phase** (14 days before):
-   - Test new certificate on staging environment
-   - Verify all domains and SANs work correctly
-   - Test with various client types (browsers, mobile apps, APIs)
-4. **Deployment Phase** (7 days before):
-   - Schedule maintenance window
-   - Update HTTPS listener with new certificate
-   - Monitor for errors during transition
-5. **Cleanup Phase** (after successful rotation):
-   - Verify old certificate is no longer in use
-   - Delete old certificate from CLB
-   - Archive old certificate securely for audit trail
+**Upload External Certificate**:
+1. Prepare PEM-encoded certificate and private key.
+2. Upload via SSL Certificate Service console or API.
 
-#### Zero-Downtime Rotation
-```bash
-# Step 1: Upload new certificate
-jdc clb upload-certificate \
-  --region cn-north-1 \
-  --certificate-name "prod-cert-2026-v2" \
-  --certificate-content "$(cat new-cert.pem)" \
-  --private-key "$(cat new-key.pem)" \
-  --output json
+### Step 2: Create HTTPS Listener with Certificate
 
-# Step 2: Update listener (atomic operation)
-jdc clb modify-listener \
-  --clb-id clb-xxxxx \
-  --listener-id listener-xxxxx \
-  --region cn-north-1 \
-  --certificate-id cert-yyyyy \
-  --output json
-
-# Step 3: Verify immediately
-curl -I https://your-domain.com --resolve your-domain.com:443:<clb-ip>
-```
-
-## Security Best Practices
-
-### 1. TLS Protocol Configuration
-- **Recommended SSL Policy**: `tls-1-2` or `tls-1-3`
-- **Deprecated Protocols**: Disable TLS 1.0 and 1.1 (PCI DSS compliance)
-- **Cipher Suite Selection**:
-  - Prioritize ECDHE and AES-GCM ciphers
-  - Avoid RC4, DES, 3DES, MD5
-  - Enable Perfect Forward Secrecy (PFS)
-
-#### Recommended Cipher Suites (TLS 1.2)
-```
-ECDHE-ECDSA-AES256-GCM-SHA384
-ECDHE-RSA-AES256-GCM-SHA384
-ECDHE-ECDSA-CHACHA20-POLY1305
-ECDHE-RSA-CHACHA20-POLY1305
-ECDHE-ECDSA-AES128-GCM-SHA256
-ECDHE-RSA-AES128-GCM-SHA256
-```
-
-### 2. Certificate Chain Management
-- **Include Intermediate Certificates**: Upload full chain (server + intermediate CAs)
-- **Chain Order**: Server cert → Intermediate CA(s) → Root CA (optional)
-- **Validate Chain**: Ensure clients can build complete trust chain
-
-```bash
-# Create certificate bundle
-cat server.crt intermediate-ca.crt > full-chain.pem
-
-# Verify chain
-openssl verify -CAfile root-ca.crt -untrusted intermediate-ca.crt server.crt
-```
-
-### 3. HSTS Implementation
-- Enable HTTP Strict Transport Security (HSTS) on backend servers
-- Recommended header: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
-- Ensures browsers always use HTTPS
-
-### 4. OCSP Stapling
-- Enable OCSP stapling on CLB if supported
-- Improves SSL handshake performance
-- Reduces latency for certificate validation
-
-## Monitoring and Alerting
-
-### 1. Certificate Expiration Monitoring
-
-#### CLI-based Check
-```bash
-#!/bin/bash
-# Check certificate expiration
-CERT_ID="cert-xxxxx"
-EXPIRY_DATE=$(jdc clb describe-certificate \
-  --certificate-id $CERT_ID \
-  --region cn-north-1 \
-  --output json | jq -r '.data.expireTime')
-
-EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s)
-CURRENT_EPOCH=$(date +%s)
-DAYS_REMAINING=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
-
-echo "Certificate expires in $DAYS_REMAINING days"
-
-if [ $DAYS_REMAINING -lt 7 ]; then
-  echo "CRITICAL: Certificate expires in less than 7 days!"
-  exit 2
-elif [ $DAYS_REMAINING -lt 30 ]; then
-  echo "WARNING: Certificate expires in less than 30 days!"
-  exit 1
-fi
-```
-
-#### Cloud Monitor Alert Rule
-```json
-{
-  "alarmName": "ssl-cert-expiration-warning",
-  "namespace": "JDCloud/CLB",
-  "metricName": "CertificateExpirationDays",
-  "statistic": "Minimum",
-  "period": 86400,
-  "threshold": 30,
-  "comparisonOperator": "LessThanThreshold",
-  "evaluationPeriods": 1,
-  "alarmActions": [
-    "arn:aws:sns:cn-north-1:123456789012:ssl-alerts"
-  ]
-}
-```
-
-### 2. SSL Handshake Monitoring
-- Monitor SSL handshake failure rate
-- Track TLS version distribution
-- Identify clients using deprecated protocols
-
-### 3. Performance Metrics
-- SSL handshake time
-- Certificate validation time
-- Impact of different cipher suites on performance
-
-## Compliance and Audit
-
-### 1. Regulatory Requirements
-- **PCI DSS**: Requires TLS 1.2+, strong cipher suites, annual certificate audits
-- **HIPAA**: Encryption in transit for protected health information
-- **GDPR**: Appropriate security measures for personal data transmission
-- **SOC 2**: Documented certificate management procedures
-
-### 2. Audit Trail
-Maintain records of:
-- Certificate issuance dates and sources
-- Upload timestamps and operators
-- Rotation history and reasons
-- Incident reports for certificate-related issues
-- Decommissioning records
-
-### 3. Access Control
-- Implement least-privilege IAM policies for certificate operations
-- Require MFA for certificate management actions
-- Log all certificate upload/delete operations
-- Regular access reviews for certificate management permissions
-
-## Automation Strategies
-
-### 1. Infrastructure as Code (Terraform)
-```hcl
-resource "jdcloud_clb_certificate" "main" {
-  certificate_name    = "prod-web-cert"
-  certificate_content = file("${path.module}/certs/server.crt")
-  private_key         = file("${path.module}/certs/server.key")
-  region              = "cn-north-1"
-}
-
-resource "jdcloud_clb_listener" "https" {
-  clb_id                 = jdcloud_clb.main.id
-  listener_name          = "https-listener"
-  protocol               = "HTTPS"
-  listener_port          = 443
-  backend_server_group_id = jdcloud_clb_backend_server_group.main.id
-  certificate_id         = jdcloud_clb_certificate.main.id
-  ssl_policy             = "tls-1-2"
-}
-```
-
-### 2. CI/CD Integration
-```yaml
-# GitHub Actions example for automated certificate deployment
-name: Deploy SSL Certificate
-on:
-  schedule:
-    - cron: '0 0 * * 0'  # Weekly check
-  workflow_dispatch:
-
-jobs:
-  check-and-update:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Check Certificate Expiration
-        run: |
-          EXPIRY=$(openssl x509 -enddate -noout -in cert.pem | cut -d= -f2)
-          EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
-          CURRENT_EPOCH=$(date +%s)
-          DAYS_LEFT=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
-          
-          if [ $DAYS_LEFT -lt 30 ]; then
-            echo "Certificate expires in $DAYS_LEFT days. Initiating renewal..."
-            echo "NEEDS_RENEWAL=true" >> $GITHUB_ENV
-          fi
-      
-      - name: Renew Certificate (if needed)
-        if: env.NEEDS_RENEWAL == 'true'
-        run: |
-          # Use Let's Encrypt or your CA's API
-          certbot renew --force-renewal
-          
-      - name: Upload to JD Cloud CLB
-        if: env.NEEDS_RENEWAL == 'true'
-        run: |
-          pip install jdcloud_cli
-          jdc config init --access-key ${{ secrets.JDC_ACCESS_KEY }} \
-                          --secret-key ${{ secrets.JDC_SECRET_KEY }}
-          
-          jdc clb upload-certificate \
-            --region cn-north-1 \
-            --certificate-name "auto-renewed-cert-$(date +%Y%m%d)" \
-            --certificate-content "$(cat fullchain.pem)" \
-            --private-key "$(cat privkey.pem)" \
-            --output json
-```
-
-### 3. Automated Testing
 ```python
-import subprocess
-import sys
+from jdcloud_sdk.services.alb.apis.CreateListenerRequest import (
+    CreateListenerRequest,
+    CreateListenerSpec,
+    CertificateSpec
+)
 
-def test_ssl_certificate(clb_ip, domain):
-    """Test SSL certificate configuration"""
-    
-    # Test 1: Check certificate served
-    result = subprocess.run([
-        'openssl', 's_client',
-        '-connect', f'{clb_ip}:443',
-        '-servername', domain
-    ], input=b'', capture_output=True)
-    
-    cert_info = subprocess.run([
-        'openssl', 'x509', '-noout', '-dates', '-subject'
-    ], input=result.stdout, capture_output=True, text=True)
-    
-    print("Certificate Info:")
-    print(cert_info.stdout)
-    
-    # Test 2: Check TLS version
-    for tls_version in ['tls1', 'tls1_1', 'tls1_2', 'tls1_3']:
-        result = subprocess.run([
-            'openssl', 's_client',
-            '-connect', f'{clb_ip}:443',
-            '-servername', domain,
-            f'-{tls_version}'
-        ], input=b'', capture_output=True)
-        
-        status = "✓ Supported" if result.returncode == 0 else "✗ Not supported"
-        print(f"{tls_version}: {status}")
-    
-    # Test 3: Check cipher suites
-    result = subprocess.run([
-        'nmap', '--script', 'ssl-enum-ciphers',
-        '-p', '443', clb_ip
-    ], capture_output=True, text=True)
-    
-    print("\nCipher Suites:")
-    print(result.stdout)
+cert_spec = CertificateSpec(
+    certificateId="cert-abc123",  # From SSL Certificate Service
+    tlsSecurityPolicyId="tls-2022-policy"
+)
 
-if __name__ == '__main__':
-    test_ssl_certificate(sys.argv[1], sys.argv[2])
+listener_spec = CreateListenerSpec(
+    loadBalancerId="lb-prod",
+    protocol="https",
+    port=443,
+    certificateSpec=cert_spec
+)
+
+req = CreateListenerRequest(regionId="cn-north-1", spec=listener_spec)
+resp = client.createListener(req)
 ```
 
-## Troubleshooting Common Issues
+### Step 3: Verify Certificate Binding
 
-### Issue 1: Certificate Not Recognized
-**Symptoms**: Browser shows "Invalid Certificate" error
+```python
+from jdcloud_sdk.services.alb.apis.DescribeListenerRequest import DescribeListenerRequest
 
-**Resolution**:
-1. Verify certificate chain is complete
-2. Check certificate format (must be PEM)
-3. Ensure certificate matches the domain
-4. Verify intermediate certificates are included
+req = DescribeListenerRequest(
+    regionId="cn-north-1",
+    loadBalancerId="lb-prod",
+    listenerId="listener-https"
+)
 
-### Issue 2: Mixed Content Warnings
-**Symptoms**: HTTPS page loads but shows security warnings
-
-**Resolution**:
-1. Ensure all resources (images, scripts, stylesheets) use HTTPS
-2. Update hardcoded HTTP URLs to HTTPS or protocol-relative URLs
-3. Implement Content Security Policy (CSP) headers
-
-### Issue 3: SSL Handshake Failures
-**Symptoms**: Clients cannot establish HTTPS connection
-
-**Resolution**:
-1. Check TLS protocol compatibility
-2. Verify cipher suite support on client side
-3. Review CLB SSL policy configuration
-4. Check for firewall/proxy interference
-
-### Issue 4: Certificate Name Mismatch
-**Symptoms**: "Certificate name mismatch" error
-
-**Resolution**:
-1. Verify certificate CN and SANs match the domain
-2. Check for www vs non-www discrepancies
-3. Ensure wildcard certificates cover the subdomain
-4. Use correct domain in DNS resolution
-
-## Performance Optimization
-
-### 1. Session Resumption
-- Enable TLS session tickets for faster reconnections
-- Configure appropriate session timeout (typically 1 hour)
-- Monitor session cache hit rate
-
-### 2. OCSP Stapling
-- Reduces certificate validation latency
-- Improves initial connection time
-- Decreases load on CA's OCSP responders
-
-### 3. Certificate Size
-- Use ECDSA certificates (smaller than RSA, same security level)
-- Minimize certificate chain length
-- Compress certificate data where possible
-
-### 4. Connection Reuse
-- Enable HTTP/2 for multiplexing
-- Configure appropriate keep-alive timeouts
-- Monitor connection reuse rates
-
-## Disaster Recovery
-
-### 1. Certificate Backup Strategy
-- Maintain offline backups of all certificates and private keys
-- Store backups in geographically distributed locations
-- Encrypt backups with strong encryption (AES-256)
-- Test restoration procedures regularly
-
-### 2. Emergency Rollback Plan
-```bash
-# Keep track of previous certificate ID
-OLD_CERT_ID="cert-xxxxx"
-NEW_CERT_ID="cert-yyyyy"
-
-# If new certificate causes issues, rollback immediately
-jdc clb modify-listener \
-  --clb-id clb-xxxxx \
-  --listener-id listener-xxxxx \
-  --region cn-north-1 \
-  --certificate-id $OLD_CERT_ID \
-  --output json
+resp = client.describeListener(req)
+cert_id = resp.result.listener.certificateSpec.certificateId
+print(f"Bound certificate: {cert_id}")
 ```
 
-### 3. Incident Response
-1. **Detection**: Monitor alerts for certificate issues
-2. **Assessment**: Determine scope and impact
-3. **Containment**: Rollback to working certificate if needed
-4. **Resolution**: Fix underlying issue and deploy corrected certificate
-5. **Post-mortem**: Document incident and update procedures
+## Multi-Certificate Support (SNI)
 
-## Resources and References
+### SNI Overview
 
-- [JD Cloud CLB Documentation](https://docs.jdcloud.com/clb)
-- [Mozilla SSL Configuration Generator](https://ssl-config.mozilla.org/)
-- [SSL Labs Server Test](https://www.ssllabs.com/ssltest/)
-- [Let's Encrypt Documentation](https://letsencrypt.org/docs/)
-- [OWASP TLS Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Protection_Cheat_Sheet.html)
+Server Name Indication (SNI) allows a single HTTPS listener to serve multiple domains with different certificates. ALB selects the appropriate certificate based on the TLS handshake hostname.
 
-## Version History
+### SNI Configuration
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2026-04-28 | Initial SSL certificate management best practices guide |
+```python
+from jdcloud_sdk.services.alb.apis.AddListenerCertificatesRequest import (
+    AddListenerCertificatesRequest,
+    CertificateSpec
+)
+
+# Add additional certificates for SNI
+sni_certs = [
+    CertificateSpec(certificateId="cert-api-example-com"),
+    CertificateSpec(certificateId="cert-www-example-com"),
+]
+
+req = AddListenerCertificatesRequest(
+    regionId="cn-north-1",
+    loadBalancerId="lb-prod",
+    listenerId="listener-https",
+    certificates=sni_certs
+)
+
+resp = client.addListenerCertificates(req)
+```
+
+### SNI Domain Mapping
+
+Each certificate is associated with its domain(s) in SSL Certificate Service. ALB automatically matches:
+
+| Certificate | Domain(s) |
+|-------------|-----------|
+| cert-default | *.example.com (fallback) |
+| cert-api | api.example.com |
+| cert-www | www.example.com, example.com |
+
+## Certificate Update/Renewal
+
+### Renewal Workflow
+
+1. **Renew certificate** in SSL Certificate Service before expiration.
+2. **Update listener certificate** binding to use renewed certificate.
+
+```python
+from jdcloud_sdk.services.alb.apis.UpdateListenerCertificatesRequest import (
+    UpdateListenerCertificatesRequest,
+    CertificateSpec
+)
+
+# Update to renewed certificate
+new_cert_spec = CertificateSpec(
+    certificateId="cert-renewed-abc123",
+    tlsSecurityPolicyId="tls-2022-policy"
+)
+
+req = UpdateListenerCertificatesRequest(
+    regionId="cn-north-1",
+    loadBalancerId="lb-prod",
+    listenerId="listener-https",
+    certificateSpec=new_cert_spec
+)
+
+resp = client.updateListenerCertificates(req)
+```
+
+### Certificate Expiration Monitoring
+
+Monitor certificate expiration via:
+
+1. **SSL Certificate Service alerts**: Configure expiration alerts in certificate service.
+2. **Custom monitoring**: Track certificate validity days.
+
+Recommended threshold: Alert when certificate expires in < 30 days.
+
+## TLS Security Policies
+
+### Predefined Policies
+
+JD Cloud provides predefined TLS security policies:
+
+| Policy ID | Description |
+|-----------|-------------|
+| tls-2022-policy | TLS 1.2+ with modern ciphers (recommended) |
+| tls-2020-policy | TLS 1.2+ with broader compatibility |
+| tls-compat-policy | TLS 1.0+ for legacy clients |
+
+### Custom TLS Policy
+
+```python
+from jdcloud_sdk.services.alb.apis.CreateSecurityPolicyRequest import (
+    CreateSecurityPolicyRequest,
+    SecurityPolicySpec
+)
+
+policy_spec = SecurityPolicySpec(
+    name="tls-custom-secure",
+    minTlsVersion="TLS_1_2",
+    ciphers=[
+        "ECDHE-RSA-AES256-GCM-SHA384",
+        "ECDHE-RSA-AES128-GCM-SHA256",
+        "AES256-GCM-SHA384",
+        "AES128-GCM-SHA256"
+    ]
+)
+
+req = CreateSecurityPolicyRequest(regionId="cn-north-1", spec=policy_spec)
+resp = client.createSecurityPolicy(req)
+
+policy_id = resp.result.securityPolicyId
+print(f"Created TLS policy: {policy_id}")
+```
+
+### Cipher Suite Reference
+
+| Cipher Suite | Security Level | Recommendation |
+|--------------|----------------|----------------|
+| ECDHE-RSA-AES256-GCM-SHA384 | Strong | Recommended |
+| ECDHE-RSA-CHACHA20-POLY1305 | Strong | Recommended |
+| ECDHE-RSA-AES128-GCM-SHA256 | Strong | Recommended |
+| AES256-GCM-SHA384 | Moderate | Acceptable |
+| AES128-GCM-SHA256 | Moderate | Acceptable |
+| RSA-AES256-CBC-SHA | Weak | Avoid (CBC mode) |
+| RSA-AES128-CBC-SHA | Weak | Avoid |
+
+## Certificate Removal
+
+### Remove Certificate from Listener
+
+```python
+from jdcloud_sdk.services.alb.apis.DeleteListenerCertificatesRequest import DeleteListenerCertificatesRequest
+
+req = DeleteListenerCertificatesRequest(
+    regionId="cn-north-1",
+    loadBalancerId="lb-prod",
+    listenerId="listener-https",
+    certificateIds=["cert-old-123"]
+)
+
+resp = client.deleteListenerCertificates(req)
+```
+
+**Note**: Removing the default certificate (the one set during listener creation) requires updating the listener with a new default certificate.
+
+## Certificate Troubleshooting
+
+### Common Issues
+
+| Issue | Symptoms | Resolution |
+|-------|----------|------------|
+| Certificate not found | 404 on create listener | Upload certificate to SSL service first |
+| Certificate domain mismatch | Client certificate error | Ensure certificate domain matches request host |
+| Certificate expired | TLS handshake failure | Renew certificate and update binding |
+| Weak cipher suite | Browser security warning | Update TLS policy to stronger ciphers |
+| SNI not working | Wrong certificate returned | Verify domain mapping in certificate metadata |
+
+### Certificate Validation
+
+```python
+# Check certificate validity via SSL service (if API available)
+# Or verify TLS handshake externally
+import ssl
+import socket
+
+def check_certificate(hostname, port=443):
+    context = ssl.create_default_context()
+    with socket.create_connection((hostname, port)) as sock:
+        with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+            cert = ssock.getpeercert()
+            print(f"Subject: {cert['subject']}")
+            print(f"Issuer: {cert['issuer']}")
+            print(f"Expires: {cert['notAfter']}")
+```
+
+## Best Practices
+
+1. **Use TLS 1.2+ minimum**: Configure TLS policy with minimum version 1.2.
+2. **Prefer ECDHE cipher suites**: Forward secrecy for enhanced security.
+3. **Enable SNI for multi-domain**: Use SNI for multiple domains on single listener.
+4. **Monitor expiration**: Set alerts for certificates expiring within 30 days.
+5. **Automate renewal**: Use certificate service auto-renewal or scripted renewal workflow.
+6. **Separate certificates per domain**: Avoid wildcard certificates for high-security applications.
+
+## Integration with ssl-certificate Skill
+
+For certificate issuance, upload, and renewal workflows, delegate to the `ssl-certificate` skill:
+
+| Task | Skill |
+|------|-------|
+| Purchase/request certificate | `ssl-certificate` |
+| Upload external certificate | `ssl-certificate` |
+| Configure expiration alerts | `ssl-certificate` |
+| Renew certificate | `ssl-certificate` |
+| Bind certificate to LB listener | `jdcloud-clb-ops` (this skill) |
+| Update LB listener certificate | `jdcloud-clb-ops` |
+
+## API Operations Summary
+
+| Operation | API | Purpose |
+|-----------|-----|---------|
+| Create listener with cert | `createListener` | Initial binding |
+| Add SNI certificates | `addListenerCertificates` | Multi-domain support |
+| Update listener cert | `updateListenerCertificates` | Renewal/replacement |
+| Delete listener cert | `deleteListenerCertificates` | Remove unused cert |
+| Describe listener cert | `describeListener` | Verify binding |
+| Create TLS policy | `createSecurityPolicy` | Custom cipher config |
+| Describe TLS policies | `describeSecurityPolicies` | List available policies |
+
+## See Also
+
+- [JD Cloud SSL Certificate Service](https://docs.jdcloud.com/cn/ssl-certificate/)
+- [ALB HTTPS Listener Configuration](https://docs.jdcloud.com/cn/application-load-balancer/create-listener)
+- [TLS Security Policy Reference](https://docs.jdcloud.com/cn/application-load-balancer/tls-security-policy)

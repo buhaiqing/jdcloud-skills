@@ -1,301 +1,142 @@
-# Integration & Tooling
+# Integration - JD Cloud Redis
 
+## Python SDK Bootstrap
 
-## SDK Initialization
+### Installation
 
-### Python SDK
+```bash
+pip install jdcloud-sdk
+```
+
+### Basic Setup
 
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.jcsforredis.client import JcsforredisClient
-from jdcloud_sdk.services.jcsforredis.models import CreateCacheInstanceRequest
+from jdcloud_sdk.services.redis.client import RedisClient
 
-# Initialize credential
 credential = Credential(
-    os.environ['JDC_ACCESS_KEY'],
-    os.environ['JDC_SECRET_KEY']
+    os.environ["JDC_ACCESS_KEY"],
+    os.environ["JDC_SECRET_KEY"]
 )
 
-# Initialize client
-client = JcsforredisClient(
-    credential, 
-    os.environ.get('JDC_REGION', 'cn-north-1')
-)
-
-# Create instance
-request = CreateCacheInstanceRequest(
-    region_id='cn-north-1',
-    az_id='cn-north-1a',
-    cache_instance_name='my-redis-instance',
-    instance_class='redis.sw.4g',
-    vpc_id='vpc-abc123',
-    subnet_id='subnet-def456',
-    password='MyStr0ng!Pass#2026',
-    redis_version='6.2',
-    charge_mode='postpaid_by_duration'
-)
-
-response = client.create_cache_instance(request)
-print(f"Instance ID: {response.result.instance_id}")
+client = RedisClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))
 ```
 
-> Rule: Use `os.environ['KEY']` (not `.get()`) for credentials to fail-fast if missing. Use `os.environ.get('KEY', default)` for optional config like region.
+### Environment Variables
 
-### Java SDK
-
-```java
-import com.jdcloud.sdk.auth.CredentialsProvider;
-import com.jdcloud.sdk.auth.StaticCredentialsProvider;
-import com.jdcloud.sdk.http.HttpRequestConfig;
-import com.jdcloud.sdk.http.Protocol;
-import com.jdcloud.sdk.client.Client;
-import com.jdcloud.sdk.client.DefaultClient;
-import com.jdcloud.sdk.client.Environment;
-import com.jdcloud.sdk.service.jcsforredis.client.JcsforredisClient;
-import com.jdcloud.sdk.service.jcsforredis.model.CreateCacheInstanceRequest;
-import com.jdcloud.sdk.service.jcsforredis.model.CreateCacheInstanceResponse;
-
-public class RedisExample {
-    public static void main(String[] args) {
-        // Initialize credentials
-        String accessKeyId = System.getenv("JDC_ACCESS_KEY");
-        String secretAccessKey = System.getenv("JDC_SECRET_KEY");
-        
-        CredentialsProvider credentialsProvider = new StaticCredentialsProvider(
-            accessKeyId, 
-            secretAccessKey
-        );
-        
-        // Initialize client
-        Client client = new DefaultClient.Builder()
-            .credentialsProvider(credentialsProvider)
-            .httpRequestConfig(new HttpRequestConfig.Builder()
-                .protocol(Protocol.HTTPS)
-                .build())
-            .environment(Environment.fromValue(System.getenv("JDC_REGION")))
-            .build();
-        
-        JcsforredisClient redisClient = new JcsforredisClient(client);
-        
-        // Create instance
-        CreateCacheInstanceRequest request = new CreateCacheInstanceRequest();
-        request.setRegionId("cn-north-1");
-        request.setAzId("cn-north-1a");
-        request.setCacheInstanceName("my-redis-instance");
-        request.setInstanceClass("redis.sw.4g");
-        request.setVpcId("vpc-abc123");
-        request.setSubnetId("subnet-def456");
-        request.setPassword("MyStr0ng!Pass#2026");
-        request.setRedisVersion("6.2");
-        request.setChargeMode("postpaid_by_duration");
-        
-        CreateCacheInstanceResponse response = redisClient.createCacheInstance(request);
-        System.out.println("Instance ID: " + response.getResult().getInstanceId());
-    }
-}
+```bash
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
+export JDC_REGION="cn-north-1"  # Default region
 ```
 
-### Go SDK
+> **Security Note**: Use `os.environ['KEY']` for secrets (fail-fast if missing). Use `.get` only for optional non-secret config.
 
-```go
-package main
+### SDK Package Structure
 
-import (
-    "fmt"
-    "os"
-    
-    "github.com/jdcloud-api/jdcloud-sdk-go/core"
-    "github.com/jdcloud-api/jdcloud-sdk-go/services/jcsforredis"
-)
+- `jdcloud_sdk.services.redis.client.RedisClient`: Main client class
+- `jdcloud_sdk.services.redis.apis.*`: Request classes for each API
+- `jdcloud_sdk.services.redis.models.*`: Response and data models
 
-func main() {
-    // Initialize credentials
-    accessKey := os.Getenv("JDC_ACCESS_KEY")
-    secretKey := os.Getenv("JDC_SECRET_KEY")
-    region := os.Getenv("JDC_REGION")
-    if region == "" {
-        region = "cn-north-1"
-    }
-    
-    // Initialize client
-    config := &core.Config{
-        AccessKey:  accessKey,
-        SecretKey:  secretKey,
-        Region:     region,
-        Scheme:     "https",
-    }
-    
-    redisClient := jcsforredis.NewJcsforredisClient(config)
-    
-    // Create instance
-    request := jcsforredis.NewCreateCacheInstanceRequest(
-        "cn-north-1",
-        "cn-north-1a",
-        "my-redis-instance",
-        "redis.sw.4g",
-        "vpc-abc123",
-        "subnet-def456",
-        "MyStr0ng!Pass#2026",
-        "6.2",
-        "postpaid_by_duration",
-    )
-    
-    response, err := redisClient.CreateCacheInstance(request)
-    if err != nil {
-        fmt.Printf("Error: %v\n", err)
-        return
-    }
-    
-    fmt.Printf("Instance ID: %s\n", response.Result.InstanceId)
-}
+## JD Cloud CLI Setup
+
+### Installation
+
+```bash
+pip install jdcloud_cli
 ```
 
-## Redis Client Connection Examples
+### Configuration
 
-### Python (redis-py)
+Interactive configuration:
+```bash
+jdc configure add \
+  --access-key YOUR_ACCESS_KEY \
+  --secret-key YOUR_SECRET_KEY \
+  --region-id cn-north-1
+```
+
+Non-interactive configuration (for automation):
+```bash
+export JDC_ACCESS_KEY="YOUR_ACCESS_KEY"
+export JDC_SECRET_KEY="YOUR_SECRET_KEY"
+export JDC_REGION="cn-north-1"
+```
+
+### Verify Installation
+
+```bash
+jdc --version
+jdc redis help
+```
+
+### Auto-Complete Setup (Optional)
+
+```bash
+# Bash
+echo 'eval "$(register-python-argcomplete jdc)"' >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh (macOS)
+echo 'eval "$(register-python-argcomplete jdc)"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+## Redis Client Connection
+
+After creating a Redis instance, connect using standard Redis clients:
+
+### Connection Parameters
+
+From `describeCacheInstance` response:
+- `connectionDomain`: Redis connection address
+- `port`: Redis port (default: 6379)
+- `password`: Redis authentication password
+
+### Python Redis Client (redis-py)
 
 ```python
 import redis
-import os
 
-# Connection configuration
-REDIS_HOST = os.environ.get('REDIS_HOST', 'your-redis-endpoint')
-REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
-REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', 'your-password')
+# Get connection info from JD Cloud Redis API
+# connection_domain = resp.result.cacheInstance.connectionDomain
+# port = resp.result.cacheInstance.port
+# password = user_provided_password
 
-# Create connection pool
-pool = redis.ConnectionPool(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
-    password=REDIS_PASSWORD,
-    max_connections=50,
-    socket_timeout=5,
-    socket_connect_timeout=5,
-    retry_on_timeout=True,
+r = redis.Redis(
+    host='redis-xxx.redis.jdcloud.com',
+    port=6379,
+    password='YourPassword',
     decode_responses=True
 )
 
-# Create Redis client
-r = redis.Redis(connection_pool=pool)
-
 # Test connection
-try:
-    r.ping()
-    print("Connected to Redis successfully")
-except redis.ConnectionError as e:
-    print(f"Failed to connect to Redis: {e}")
-
-# Example operations
-r.set('mykey', 'myvalue', ex=3600)  # Set with 1 hour TTL
-value = r.get('mykey')
-print(f"Value: {value}")
-
-# Use pipeline for batch operations
-pipe = r.pipeline()
-pipe.set('key1', 'value1')
-pipe.set('key2', 'value2')
-pipe.incr('counter')
-results = pipe.execute()
-print(f"Pipeline results: {results}")
+r.ping()  # Returns True if successful
 ```
 
-### Java (Jedis)
+### Jedis (Java)
 
 ```java
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
-public class RedisClientExample {
-    private static JedisPool pool;
-    
-    public static void initPool() {
-        String host = System.getenv("REDIS_HOST");
-        int port = Integer.parseInt(System.getenv("REDIS_PORT"));
-        String password = System.getenv("REDIS_PASSWORD");
-        
-        JedisPoolConfig poolConfig = new JedisPoolConfig();
-        poolConfig.setMaxTotal(50);
-        poolConfig.setMaxIdle(20);
-        poolConfig.setMinIdle(10);
-        poolConfig.setMaxWaitMillis(3000);
-        poolConfig.setTestOnBorrow(true);
-        poolConfig.setTestOnReturn(true);
-        
-        pool = new JedisPool(poolConfig, host, port, 3000, password);
-    }
-    
-    public static void main(String[] args) {
-        initPool();
-        
-        try (Jedis jedis = pool.getResource()) {
-            // Test connection
-            System.out.println(jedis.ping());
-            
-            // Set with TTL
-            jedis.setex("mykey", 3600, "myvalue");
-            
-            // Get value
-            String value = jedis.get("mykey");
-            System.out.println("Value: " + value);
-            
-            // Use pipeline
-            Pipeline pipeline = jedis.pipelined();
-            pipeline.set("key1", "value1");
-            pipeline.set("key2", "value2");
-            pipeline.incr("counter");
-            List<Object> results = pipeline.syncAndReturnAll();
-            System.out.println("Pipeline results: " + results);
-        }
-    }
-}
-```
+JedisPoolConfig poolConfig = new JedisPoolConfig();
+poolConfig.setMaxTotal(100);
+poolConfig.setMaxIdle(20);
+poolConfig.setMinIdle(5);
 
-### Java (Lettuce)
+JedisPool jedisPool = new JedisPool(
+    poolConfig,
+    "redis-xxx.redis.jdcloud.com",
+    6379,
+    2000,  // timeout
+    "YourPassword"
+);
 
-```java
-import io.lettuce.core.RedisClient;
-import io.lettuce.core.RedisURI;
-import io.lettuce.core.api.StatefulRedisConnection;
-import io.lettuce.core.api.sync.RedisCommands;
-import io.lettuce.core.resource.ClientResources;
-import io.lettuce.core.resource.DefaultClientResources;
-
-public class LettuceExample {
-    public static void main(String[] args) {
-        String host = System.getenv("REDIS_HOST");
-        int port = Integer.parseInt(System.getenv("REDIS_PORT"));
-        String password = System.getenv("REDIS_PASSWORD");
-        
-        // Build Redis URI
-        RedisURI redisUri = RedisURI.builder()
-            .withHost(host)
-            .withPort(port)
-            .withPassword(password.toCharArray())
-            .build();
-        
-        // Create client with resources
-        ClientResources resources = DefaultClientResources.create();
-        RedisClient client = RedisClient.create(resources, redisUri);
-        
-        // Connect
-        StatefulRedisConnection<String, String> connection = client.connect();
-        RedisCommands<String, String> commands = connection.sync();
-        
-        // Test connection
-        System.out.println(commands.ping());
-        
-        // Operations
-        commands.setex("mykey", 3600, "myvalue");
-        String value = commands.get("mykey");
-        System.out.println("Value: " + value);
-        
-        // Close
-        connection.close();
-        client.shutdown();
-        resources.shutdown();
-    }
+try (Jedis jedis = jedisPool.getResource()) {
+    jedis.ping();
 }
 ```
 
@@ -304,490 +145,319 @@ public class LettuceExample {
 ```javascript
 const Redis = require('ioredis');
 
-// Create Redis client
 const redis = new Redis({
-  host: process.env.REDIS_HOST || 'your-redis-endpoint',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD || 'your-password',
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  reconnectOnError: (err) => {
-    const targetError = 'READONLY';
-    if (err.message.includes(targetError)) {
-      return true;
-    }
-    return false;
-  },
+  host: 'redis-xxx.redis.jdcloud.com',
+  port: 6379,
+  password: 'YourPassword',
+  // For cluster version
+  // slotsRefreshTimeout: 1000,
 });
 
-redis.on('connect', () => {
-  console.log('Connected to Redis');
+redis.ping().then(result => {
+  console.log('Connected:', result);
 });
-
-redis.on('error', (err) => {
-  console.error('Redis connection error:', err);
-});
-
-// Test connection
-redis.ping((err, result) => {
-  if (err) {
-    console.error('Ping failed:', err);
-  } else {
-    console.log('Ping result:', result);
-  }
-});
-
-// Operations
-async function example() {
-  // Set with TTL
-  await redis.setex('mykey', 3600, 'myvalue');
-  
-  // Get value
-  const value = await redis.get('mykey');
-  console.log('Value:', value);
-  
-  // Use pipeline
-  const pipeline = redis.pipeline();
-  pipeline.set('key1', 'value1');
-  pipeline.set('key2', 'value2');
-  pipeline.incr('counter');
-  const results = await pipeline.exec();
-  console.log('Pipeline results:', results);
-}
-
-example();
 ```
 
 ### Go (go-redis)
 
 ```go
-package main
+import "github.com/go-redis/redis/v8"
 
-import (
-    "context"
-    "fmt"
-    "os"
-    "time"
-    
-    "github.com/go-redis/redis/v8"
-)
+rdb := redis.NewClient(&redis.Options{
+    Addr:     "redis-xxx.redis.jdcloud.com:6379",
+    Password: "YourPassword",
+    DB:       0,
+})
 
-var ctx = context.Background()
-
-func main() {
-    // Create Redis client
-    rdb := redis.NewClient(&redis.Options{
-        Addr:         os.Getenv("REDIS_HOST") + ":" + os.Getenv("REDIS_PORT"),
-        Password:     os.Getenv("REDIS_PASSWORD"),
-        DB:           0,
-        MaxRetries:   3,
-        DialTimeout:  5 * time.Second,
-        ReadTimeout:  3 * time.Second,
-        WriteTimeout: 3 * time.Second,
-        PoolSize:     50,
-        MinIdleConns: 10,
-    })
-    
-    // Test connection
-    pong, err := rdb.Ping(ctx).Result()
-    if err != nil {
-        fmt.Printf("Failed to connect: %v\n", err)
-        return
-    }
-    fmt.Println("Connected:", pong)
-    
-    // Set with TTL
-    err = rdb.Set(ctx, "mykey", "myvalue", 1*time.Hour).Err()
-    if err != nil {
-        fmt.Printf("Set error: %v\n", err)
-        return
-    }
-    
-    // Get value
-    val, err := rdb.Get(ctx, "mykey").Result()
-    if err != nil {
-        fmt.Printf("Get error: %v\n", err)
-        return
-    }
-    fmt.Println("Value:", val)
-    
-    // Use pipeline
-    pipe := rdb.Pipeline()
-    pipe.Set(ctx, "key1", "value1", 0)
-    pipe.Set(ctx, "key2", "value2", 0)
-    pipe.Incr(ctx, "counter")
-    cmds, err := pipe.Exec(ctx)
-    if err != nil {
-        fmt.Printf("Pipeline error: %v\n", err)
-        return
-    }
-    fmt.Println("Pipeline results:", cmds)
+ctx := context.Background()
+status, err := rdb.Ping(ctx).Result()
+if err != nil {
+    panic(err)
 }
+fmt.Println("Connected:", status)
 ```
 
-## Infrastructure as Code
+### Cluster Version Connection
 
-### Terraform
-
-```hcl
-provider "jdcloud" {
-  access_key = var.jdcloud_access_key
-  secret_key = var.jdcloud_secret_key
-  region     = var.jdcloud_region
-}
-
-variable "jdcloud_access_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "jdcloud_secret_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "jdcloud_region" {
-  type    = string
-  default = "cn-north-1"
-}
-
-resource "jdcloud_jcsforredis_cache_instance" "redis_prod" {
-  az_id              = "cn-north-1a"
-  cache_instance_name = "prod-redis-01"
-  instance_class     = "redis.sw.8g"
-  vpc_id             = jdcloud_vpc.main.id
-  subnet_id          = jdcloud_subnet.redis.id
-  password           = var.redis_password
-  redis_version      = "6.2"
-  charge_mode        = "postpaid_by_duration"
-  
-  tags = {
-    Environment = "production"
-    ManagedBy   = "terraform"
-  }
-}
-
-resource "jdcloud_jcsforredis_ip_white_list" "redis_whitelist" {
-  cache_instance_id = jdcloud_jcsforredis_cache_instance.redis_prod.id
-  ip_white_list     = ["10.0.1.0/24", "10.0.2.0/24"]
-}
-
-output "redis_endpoint" {
-  value = "${jdcloud_jcsforredis_cache_instance.redis_prod.connection_domain}:${jdcloud_jcsforredis_cache_instance.redis_prod.connection_port}"
-}
-
-output "redis_instance_id" {
-  value = jdcloud_jcsforredis_cache_instance.redis_prod.id
-}
-```
-
-### Pulumi (Python)
+For native-cluster instances, use cluster-aware clients:
 
 ```python
-import pulumi
-import pulumi_jdcloud as jdcloud
+from redis.cluster import RedisCluster as Redis
 
-# Create VPC
-vpc = jdcloud.vpc.Vpc("redis-vpc",
-    vpc_name="redis-vpc",
-    address_cidr="10.0.0.0/16"
+# Native cluster connection
+rc = Redis(
+    host='redis-xxx.redis.jdcloud.com',
+    port=6379,
+    password='YourPassword',
+    decode_responses=True
 )
-
-# Create subnet
-subnet = jdcloud.vpc.Subnet("redis-subnet",
-    vpc_id=vpc.id,
-    subnet_name="redis-subnet",
-    address_cidr="10.0.1.0/24",
-    az_id="cn-north-1a"
-)
-
-# Create Redis instance
-redis_instance = jdcloud.jcsforredis.CacheInstance("prod-redis",
-    az_id="cn-north-1a",
-    cache_instance_name="prod-redis-01",
-    instance_class="redis.sw.8g",
-    vpc_id=vpc.id,
-    subnet_id=subnet.id,
-    password=pulumi.Config("redis").get("password"),
-    redis_version="6.2",
-    charge_mode="postpaid_by_duration"
-)
-
-# Export connection info
-pulumi.export("redis_endpoint", 
-    redis_instance.connection_domain.apply(lambda d: f"{d}:6379"))
-pulumi.export("redis_instance_id", redis_instance.id)
 ```
 
-## CI/CD Integration
+Or use SmartProxy for standard client compatibility (if enabled during creation).
 
-### GitHub Actions
+## VPC Network Integration
 
-```yaml
-name: Deploy Redis Infrastructure
+### Prerequisites
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'infrastructure/redis/**'
+Redis instances must be created in a VPC with subnet:
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup JD Cloud CLI
-        run: |
-          pip install jdcloud_cli
-          jdc configure add \
-            --access-key ${{ secrets.JDC_ACCESS_KEY }} \
-            --secret-key ${{ secrets.JDC_SECRET_KEY }} \
-            --region-id cn-north-1
-      
-      - name: Deploy Redis Instance
-        run: |
-          jdc redis create-cache-instance \
-            --region-id cn-north-1 \
-            --az-id "cn-north-1a" \
-            --cache-instance-name "ci-redis-${{ github.sha }}" \
-            --instance-class "redis.sw.4g" \
-            --vpc-id "vpc-abc123" \
-            --subnet-id "subnet-def456" \
-            --password "${{ secrets.REDIS_PASSWORD }}" \
-            --redis-version "6.2" \
-            --charge-mode "postpaid_by_duration" \
-            --output json
-        env:
-          JDC_ACCESS_KEY: ${{ secrets.JDC_ACCESS_KEY }}
-          JDC_SECRET_KEY: ${{ secrets.JDC_SECRET_KEY }}
-```
+1. Create or identify VPC via `jdcloud-vpc-ops`
+2. Create subnet with sufficient IP addresses
+3. Subnet CIDR must accommodate instance nodes (master + slaves + proxies)
 
-### GitLab CI
+### Network Requirements
 
-```yaml
-stages:
-  - deploy
+- Subnet must have available IPs (at least 4 for standard, more for cluster)
+- Application servers should be in same VPC for optimal latency
+- Security groups must allow Redis port (6379)
+- Cross-VPC access requires special configuration
 
-deploy-redis:
-  stage: deploy
-  image: python:3.10
-  script:
-    - pip install jdcloud_cli
-    - jdc configure add --access-key $JDC_ACCESS_KEY --secret-key $JDC_SECRET_KEY --region-id cn-north-1
-    - jdc redis create-cache-instance --region-id cn-north-1 --az-id "cn-north-1a" --cache-instance-name "ci-redis-$CI_COMMIT_SHA" --instance-class "redis.sw.4g" --vpc-id "vpc-abc123" --subnet-id "subnet-def456" --password "$REDIS_PASSWORD" --redis-version "6.2" --charge-mode "postpaid_by_duration" --output json
-  only:
-    - main
-  variables:
-    JDC_ACCESS_KEY: $JDC_ACCESS_KEY
-    JDC_SECRET_KEY: $JDC_SECRET_KEY
-    REDIS_PASSWORD: $REDIS_PASSWORD
-```
-
-## Testing
-
-### Connection Test Script
-
-```bash
-#!/bin/bash
-
-# Redis Connection Test Script
-# Usage: ./test-redis-connection.sh <endpoint> <port> <password>
-
-ENDPOINT=$1
-PORT=${2:-6379}
-PASSWORD=$3
-
-if [ -z "$ENDPOINT" ] || [ -z "$PASSWORD" ]; then
-  echo "Usage: $0 <endpoint> [port] <password>"
-  exit 1
-fi
-
-echo "Testing Redis connection..."
-echo "Endpoint: $ENDPOINT:$PORT"
-
-# Install redis-cli if not present
-if ! command -v redis-cli &> /dev/null; then
-  echo "Installing redis-cli..."
-  apt-get update && apt-get install -y redis-tools
-fi
-
-# Test connection
-RESULT=$(redis-cli -h "$ENDPOINT" -p "$PORT" -a "$PASSWORD" ping 2>&1)
-
-if [ "$RESULT" == "PONG" ]; then
-  echo "✅ Connection successful!"
-  
-  # Test write
-  redis-cli -h "$ENDPOINT" -p "$PORT" -a "$PASSWORD" set test_key "test_value" EX 60
-  echo "✅ Write test passed"
-  
-  # Test read
-  VALUE=$(redis-cli -h "$ENDPOINT" -p "$PORT" -a "$PASSWORD" get test_key)
-  if [ "$VALUE" == "test_value" ]; then
-    echo "✅ Read test passed"
-  else
-    echo "❌ Read test failed"
-    exit 1
-  fi
-  
-  # Test delete
-  redis-cli -h "$ENDPOINT" -p "$PORT" -a "$PASSWORD" del test_key
-  echo "✅ Delete test passed"
-  
-  # Get info
-  echo ""
-  echo "=== Redis Info ==="
-  redis-cli -h "$ENDPOINT" -p "$PORT" -a "$PASSWORD" INFO server | grep -E "redis_version|tcp_port|uptime"
-  redis-cli -h "$ENDPOINT" -p "$PORT" -a "$PASSWORD" INFO memory | grep -E "used_memory_human|maxmemory_human"
-  
-else
-  echo "❌ Connection failed: $RESULT"
-  exit 1
-fi
-```
-
-### Performance Test Script
-
-```bash
-#!/bin/bash
-
-# Redis Performance Test Script
-# Usage: ./test-redis-performance.sh <endpoint> <port> <password>
-
-ENDPOINT=$1
-PORT=${2:-6379}
-PASSWORD=$3
-
-echo "Running Redis performance test..."
-echo "Endpoint: $ENDPOINT:$PORT"
-
-# Install redis-tools if not present
-if ! command -v redis-benchmark &> /dev/null; then
-  echo "Installing redis-tools..."
-  apt-get update && apt-get install -y redis-tools
-fi
-
-# Run benchmark
-redis-benchmark \
-  -h "$ENDPOINT" \
-  -p "$PORT" \
-  -a "$PASSWORD" \
-  -t set,get,incr,lpush,lpop \
-  -c 50 \
-  -n 10000 \
-  -r 100000
-```
-
-## Security Best Practices
-
-### 1. Credential Management
-
-**NEVER** hardcode credentials in code or configuration files:
+### Network Configuration
 
 ```python
-# ❌ BAD
-password = "MyRedisPassword123"
-
-# ✅ GOOD
-password = os.environ['REDIS_PASSWORD']
+# When creating Redis instance, specify VPC/subnet
+cache_instance_spec = {
+    "vpcId": "{{user.vpc_id}}",  # From jdcloud-vpc-ops
+    "subnetId": "{{user.subnet_id}}",  # From jdcloud-vpc-ops
+    ...
+}
 ```
 
-### 2. Use Environment Variables
+## IAM Integration
 
-```bash
-# .env file (add to .gitignore)
-REDIS_HOST=your-redis-endpoint
-REDIS_PORT=6379
-REDIS_PASSWORD=your-secure-password
-JDC_ACCESS_KEY=your-access-key
-JDC_SECRET_KEY=your-secret-key
-JDC_REGION=cn-north-1
-```
+### Access Control
 
-### 3. Use Secret Management Services
+JD Cloud Redis supports IAM for access control:
 
-- **JD Cloud KMS**: Store and manage secrets
-- **HashiCorp Vault**: Centralized secret management
-- **AWS Secrets Manager**: If using multi-cloud
-- **Kubernetes Secrets**: For containerized applications
+- Access keys must have appropriate IAM permissions
+- IAM policies control who can create, modify, delete Redis instances
+- Account-level permissions (Redis 6.2+) for fine-grained Redis ACL
 
-### 4. Network Security
-
-- Use VPC private network (never public endpoint for production)
-- Configure IP whitelist (only allow application server IPs)
-- Use security groups to control access
-- Enable TLS if supported (for data in transit encryption)
-
-### 5. IAM Policies
-
-Create dedicated IAM user for Redis operations:
+### IAM Policy Example
 
 ```json
 {
-  "Version": "1",
+  "Version": "2019-05-01",
   "Statement": [
     {
       "Effect": "Allow",
       "Action": [
-        "jcsforredis:DescribeCacheInstance",
-        "jcsforredis:DescribeCacheInstances",
-        "jcsforredis:CreateCacheInstance",
-        "jcsforredis:DeleteCacheInstance"
+        "redis:createCacheInstance",
+        "redis:describeCacheInstance",
+        "redis:modifyCacheInstanceAttribute"
       ],
-      "Resource": "*"
+      "Resource": [
+        "redis:cn-north-1:*"
+      ]
     }
   ]
 }
 ```
 
-## Troubleshooting Integration Issues
+### Redis Account Management (Redis 6.2+)
 
-### Issue 1: SDK Authentication Failed
+```bash
+# Create Redis ACL account
+jdc redis create-account \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}" \
+  --account-name "readonly_user" \
+  --account-password "SecurePassword" \
+  --account-privilege "read" \
+  --output json
+```
 
-**Symptoms:**
-- `InvalidAccessKeyId` error
-- `SignatureDoesNotMatch` error
+## Cloud Monitor Integration
 
-**Solutions:**
-1. Verify access key and secret key are correct
-2. Check system time (must be synchronized)
-3. Verify region configuration
-4. Test with CLI first: `jdc redis describe-cache-instances --output json`
+### Delegate Monitoring Tasks
 
-### Issue 2: Connection Timeout
+Monitoring and alerting for Redis is handled by `jdcloud-cloudmonitor-ops`:
 
-**Symptoms:**
-- Client cannot connect to Redis
-- Timeout errors
+- Query Redis metrics (CPU, memory, connections, QPS)
+- Configure alert rules
+- View metric dashboards
+- Access historical metric data
 
-**Solutions:**
-1. Verify endpoint and port
-2. Check IP whitelist includes client IP
-3. Verify VPC and subnet configuration
-4. Test network connectivity: `telnet <endpoint> <port>`
-5. Check instance status is `running`
+### Example Integration
 
-### Issue 3: SDK Version Compatibility
+```python
+# When CPU alert triggers, scale up Redis
+# (Automated workflow integrating Cloud Monitor and Redis)
 
-**Symptoms:**
-- Import errors
-- Missing methods
+# 1. Cloud Monitor detects high CPU
+# 2. Trigger workflow to call modifyCacheInstanceClass
+# 3. Redis scales up
+# 4. Cloud Monitor continues tracking metrics
+```
 
-**Solutions:**
-1. Check SDK version compatibility with CLI version
-2. Update SDK: `pip install --upgrade jdcloud-sdk-python`
-3. Refer to SDK documentation for version matrix
+## Backup Integration with Object Storage
 
-## Additional Resources
+### Backup Storage
 
-- [JD Cloud CLI Documentation](https://docs.jdcloud.com/cn/cli/introduction)
-- [JD Cloud Python SDK](https://github.com/jdcloud-api/jdcloud-sdk-python)
-- [JD Cloud Java SDK](https://github.com/jdcloud-api/jdcloud-sdk-java)
-- [JD Cloud Go SDK](https://github.com/jdcloud-api/jdcloud-sdk-go)
-- [Redis Official Documentation](https://redis.io/documentation)
-- [Agent Skill OpenSpec](https://agentskills.io/specification)
+- Redis backups are stored in JD Cloud infrastructure
+- Backup files can be downloaded via `describeDownloadUrl`
+- For long-term retention, download and store in Object Storage
+
+### Download Backup
+
+```bash
+jdc redis describe-download-url \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}" \
+  --backup-id "{{backup_id}}" \
+  --output json
+```
+
+Store backup in Object Storage (delegate to `jdcloud-oss-ops` if skill exists):
+
+```bash
+# Download backup file
+curl -o backup.rdb "$(jq -r '.result.downloadUrl' response.json)"
+
+# Upload to Object Storage for long-term retention
+# Use jdcloud-oss-ops skill if available
+```
+
+## Data Migration Integration
+
+### Migration Tools
+
+JD Cloud provides RDTS (Redis Data Transfer Service) for migration:
+- Online migration with minimal downtime
+- Support for cross-cloud migration
+- Data verification after migration
+
+### Self-managed Migration
+
+Using redis-cli for offline migration:
+
+```bash
+# Source Redis
+redis-cli -h source.redis.host -p 6379 --rdb /tmp/dump.rdb
+
+# Import to JD Cloud Redis
+cat /tmp/dump.rdb | redis-cli -h redis-xxx.redis.jdcloud.com -p 6379 -a password --pipe
+```
+
+## Application Integration Patterns
+
+### Session Cache Pattern
+
+```python
+# Store user session in Redis
+session_key = f"session:{user_id}"
+r.setex(session_key, 3600, json.dumps(session_data))
+
+# Retrieve session
+session_data = r.get(session_key)
+if session_data:
+    session = json.loads(session_data)
+```
+
+### Data Cache Pattern
+
+```python
+# Cache database query results
+def get_user_info(user_id):
+    cache_key = f"user:{user_id}"
+    cached = r.get(cache_key)
+    if cached:
+        return json.loads(cached)
+    
+    # Query from database
+    user_info = db.query_user(user_id)
+    # Cache for 1 hour
+    r.setex(cache_key, 3600, json.dumps(user_info))
+    return user_info
+```
+
+### Rate Limiting Pattern
+
+```python
+# Rate limiting with Redis
+def check_rate_limit(user_id, limit=100):
+    key = f"ratelimit:{user_id}"
+    count = r.incr(key)
+    if count == 1:
+        r.expire(key, 60)  # 1 minute window
+    return count <= limit
+```
+
+### Leaderboard Pattern
+
+```python
+# Gaming leaderboard with Sorted Set
+r.zadd("leaderboard", {user_id: score})
+top_10 = r.zrevrange("leaderboard", 0, 9, withscores=True)
+```
+
+## Integration Testing
+
+### Test Connection
+
+```python
+def test_redis_connection():
+    try:
+        return r.ping()
+    except redis.ConnectionError:
+        return False
+```
+
+### Test Operations
+
+```python
+def test_redis_operations():
+    # Test basic operations
+    r.set("test_key", "test_value")
+    assert r.get("test_key") == "test_value"
+    r.delete("test_key")
+    assert r.get("test_key") is None
+    return True
+```
+
+## CI/CD Integration
+
+### Infrastructure as Code
+
+Use JD Cloud Redis API in deployment pipelines:
+
+```yaml
+# Example: Create Redis instance in deployment pipeline
+- name: Create Redis Instance
+  run: |
+    jdc redis create-cache-instance \
+      --region-id "${{ env.REGION }}" \
+      --cache-instance-name "app-redis-${{ env.ENV }}" \
+      --cache-instance-class "${{ env.REDIS_SPEC }}" \
+      --vpc-id "${{ env.VPC_ID }}" \
+      --subnet-id "${{ env.SUBNET_ID }}" \
+      --output json > redis_info.json
+    
+    REDIS_ID=$(jq -r '.result.cacheInstanceId' redis_info.json)
+    echo "REDIS_INSTANCE_ID=$REDIS_ID" >> $GITHUB_ENV
+```
+
+### Environment Configuration
+
+Configure application environment with Redis connection:
+
+```yaml
+- name: Configure Redis Connection
+  run: |
+    REDIS_HOST=$(jdc redis describe-cache-instance \
+      --region-id "${{ env.REGION }}" \
+      --cache-instance-id "${{ env.REDIS_INSTANCE_ID }}" \
+      --output json | jq -r '.result.cacheInstance.connectionDomain')
+    
+    echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
+    echo "REDIS_PORT=6379" >> $GITHUB_ENV
+```
+
+## MCP Server Integration
+
+If MCP server is configured for JD Cloud Redis, additional tools may be available for enhanced integration.
+
+Check MCP server capabilities:
+- List MCP servers in workspace
+- Review available tools for Redis operations
+- Integrate MCP tools into workflows if applicable

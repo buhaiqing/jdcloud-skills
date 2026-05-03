@@ -1,4 +1,36 @@
-# 云监控 CLI 使用指南
+# CLI — 云监控(CloudMonitor) (`jdc`)
+
+## 安装和配置
+
+- 安装: 参考 [京东云 CLI](https://github.com/jdcloud-api/jdcloud-cli)
+- 配置: `jdc config init` 或通过环境变量 `JDC_ACCESS_KEY` / `JDC_SECRET_KEY`
+
+## 约定（Agent 执行）
+
+- **必须** 追加 `--output json` 用于自动化解析
+- **必须** 追加 `--no-interactive`（或等价参数）避免阻塞
+- JSON 路径需通过实际调用验证，CLI 输出可能与原始 API 字段名不同
+
+## CLI vs API 覆盖对比
+
+| 操作 (API / SDK) | CLI 支持 | 说明 |
+|------------------|---------|------|
+| describeServices | ✓ | 查询监控服务列表 |
+| describeMetrics | ✓ | 查询监控项 |
+| describeMetricData | ✓ | 查询监控数据 |
+| lastDownsample | ✓ | 查询最新数据（降采样） |
+| createAlarm | ✓ | 创建告警规则 |
+| describeAlarms | ✓ | 查询告警列表 |
+| describeAlarm | ✓ | 查询告警详情 |
+| updateAlarm | ✓ | 修改告警规则 |
+| enableAlarm | ✓ | 启用/禁用告警 |
+| deleteAlarms | ✓ | 删除告警规则 |
+| describeAlarmHistory | ✓ | 查询告警历史 |
+| describeAlarmContacts | ✓ | 查询告警联系人 |
+| putMetricData | ✓ | 上报自定义数据 |
+| describeCustomMetricData | ✓ | 查询自定义数据 |
+
+> **覆盖率**: CLI 覆盖云监控所有核心 API 操作，无 SDK-only 操作。
 
 ## 命令概览
 

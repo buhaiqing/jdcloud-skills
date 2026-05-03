@@ -394,3 +394,36 @@ done
 - Monitor quota usage to avoid unexpected failures
 - Implement exponential backoff for retries
 - Log all operations for audit trail
+
+## CLI vs SDK Coverage Gap
+
+| Operation | SDK Available | CLI Available | Notes |
+|-----------|---------------|---------------|-------|
+| Create VPC | Yes | Yes | Full coverage |
+| Describe VPCs | Yes | Yes | Full coverage |
+| Describe VPC | Yes | Yes | Full coverage |
+| Modify VPC | Yes | Yes | Full coverage |
+| Delete VPC | Yes | Yes | Full coverage |
+| Create Subnet | Yes | Yes | Full coverage |
+| Describe Subnets | Yes | Yes | Full coverage |
+| Delete Subnet | Yes | Yes | Full coverage |
+| Security Group Operations | Yes | Yes | Full coverage |
+| Network ACL Operations | Yes | Yes | Full coverage |
+| Route Table Operations | Yes | Yes | Full coverage |
+| NAT Gateway Operations | Yes | Yes | Full coverage |
+| VPC Peering Operations | Yes | Yes | Full coverage |
+
+> **Note**: VPC operations are fully covered by both SDK and CLI. No SDK-only operations for this product.
+
+## Path Preference (CLI vs SDK)
+
+| Scenario | Recommended Path | Reason |
+|----------|------------------|--------|
+| Idempotent automation | SDK | Easier to implement check-before-create/delete patterns |
+| Quick ad-hoc operations | CLI | Faster iteration, less code |
+| Automation scripts / CI/CD | SDK | Better error handling, retry logic |
+| Complex multi-step workflows | SDK | Easier state management, conditional logic |
+| No Python runtime available | CLI | CLI is standalone tool |
+| Resource querying with jq | CLI | Native JSON output + jq pipeline |
+
+> **Default preference for agent execution**: Prefer **SDK** for idempotent operations and complex workflows; prefer **CLI** for simple queries.

@@ -1,15 +1,40 @@
 ---
 name: jdcloud-vpc-ops
 description: >-
-  Manages JD Cloud Virtual Private Cloud (VPC) resources. Use when you need to deploy, 
-  configure, troubleshoot, or monitor VPC instances on JD Cloud.
-  Includes CLI usage, SDK integration, and operational best practices.
+  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
+  Virtual Private Cloud (VPC) via official API/SDK or official `jdc` CLI; user mentions
+  VPC, 私有网络, or tasks target VPC/subnet/security-group resources.
+license: MIT
+compatibility: >-
+  Official JD Cloud SDK (Python 3.10+), valid API credentials, network
+  access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
+metadata:
+  author: jdcloud
+  version: "1.1.0"
+  last_updated: "2026-05-03"
+  runtime: Harness AI Agent
+  api_profile: "VPC API v1.0 - https://docs.jdcloud.com/cn/virtual-private-cloud/api"
+  cli_applicability: dual-path
+  cli_support_evidence: >-
+    Official `jdc` CLI supports VPC operations. Verified via `jdc vpc --help`
+    and documentation at https://docs.jdcloud.com/cn/cli
+  environment:
+    - JDC_ACCESS_KEY
+    - JDC_SECRET_KEY
+    - JDC_REGION
 ---
+
+> This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
 
 # JD Cloud Virtual Private Cloud (VPC) Operations Skill
 
 ## Overview
 Virtual Private Cloud (VPC) is a core service on JD Cloud that provides isolated cloud resources within a virtual network. This skill enables efficient operations, including automated deployment, real-time monitoring, and rapid troubleshooting of VPC resources.
+
+### CLI applicability (repository policy)
+
+- **`cli_applicability: dual-path`:** Official `jdc` CLI supports VPC operations. This skill provides **both SDK/API and CLI execution paths** for every operation.
+- **Path Preference:** For idempotent automation, prefer **SDK** (easier check-before-create/delete); for simple queries, prefer **CLI**. See [API & SDK Usage](references/api-sdk-usage.md) and [Idempotency Checklist](references/idempotency-checklist.md).
 
 ## Trigger & Scope (Agent-Readable)
 
@@ -76,6 +101,7 @@ This Skill uses structured placeholders to avoid prompt injection and parsing am
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| 1.1.0 | 2026-05-03 | Added dual-path execution (SDK + CLI), complete frontmatter, api-sdk-usage.md, path preference |
 | 1.0.0 | 2026-04-28 | 初始版本，包含VPC基础运维指南和参考模板 |
 
 ## Execution Flows (Agent-Readable)
@@ -91,7 +117,46 @@ Every operation follows the pattern: Pre-flight → Execute → Validate → Rec
 | Region available | `jdc vpc describe-regions --output json` | `{{user.region}}` in list | Suggest nearest available region |
 | Quota available | `jdc vpc describe-quota --region {{user.region}} --output json` | `$.available > 0` | Inform user of quota limit, suggest increase |
 
-#### Idempotent Execution
+#### Execution — SDK (Python) [Idempotent]
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.vpc.client import VpcClient
+from jdcloud_sdk.services.vpc.apis.DescribeVpcsRequest import DescribeVpcsRequest
+from jdcloud_sdk.services.vpc.apis.CreateVpcRequest import CreateVpcRequest
+
+credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
+client = VpcClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
+
+# Step 1: Check if VPC already exists (idempotent)
+describe_request = DescribeVpcsRequest({"regionId": "{{user.region}}"})
+describe_response = client.describe_vpcs(describe_request)
+
+if describe_response.error is None:
+    for vpc in describe_response.result.vpcs:
+        if vpc.vpc_name == "{{user.vpc_name}}":
+            print(f"VPC already exists: {vpc.vpc_id}")
+            vpc_id = vpc.vpc_id
+            break
+
+if vpc_id is None:
+    # Step 2: Create new VPC
+    create_request = CreateVpcRequest({
+        "regionId": "{{user.region}}",
+        "vpcName": "{{user.vpc_name}}",
+        "cidrBlock": "{{user.cidr_block}}"
+    })
+    create_response = client.create_vpc(create_request)
+    
+    if create_response.error is None:
+        vpc_id = create_response.result.vpc_id
+        print(f"Created VPC: {vpc_id}")
+    else:
+        print(f"Error: {create_response.error.message}")
+```
+
+#### Execution — CLI (`jdc`) [Idempotent]
 ```bash
 # Step 1: Check if VPC already exists (by name tag)
 EXISTING_VPC=$(jdc vpc describe-vpcs \
@@ -237,7 +302,28 @@ done
 
 ### Operation: Describe VPC
 
-#### Execution
+#### Execution — SDK (Python)
+
+```python
+from jdcloud_sdk.services.vpc.apis.DescribeVpcRequest import DescribeVpcRequest
+
+request = DescribeVpcRequest({
+    "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
+    "vpcId": "{{user.vpc_id}}"
+})
+
+response = client.describe_vpc(request)
+if response.error is None:
+    vpc = response.result
+    print(f"ID: {vpc.vpc_id}")
+    print(f"Name: {vpc.vpc_name}")
+    print(f"Status: {vpc.status}")
+    print(f"CIDR: {vpc.cidr_block}")
+else:
+    print(f"Error: {response.error.message}")
+```
+
+#### Execution — CLI (`jdc`)
 ```bash
 jdc vpc describe-vpc \
   --vpc-id {{user.vpc_id}} \
@@ -260,7 +346,39 @@ jdc vpc describe-vpc \
 - **MUST** ask user: "Are you sure you want to delete `{{user.vpc_name}}` ({{user.vpc_id}})? This is irreversible."
 - **MUST** wait for explicit "yes" / "confirm" before proceeding
 
-#### Idempotent Execution
+#### Execution — SDK (Python) [Idempotent]
+
+```python
+from jdcloud_sdk.services.vpc.apis.DescribeVpcRequest import DescribeVpcRequest
+from jdcloud_sdk.services.vpc.apis.DeleteVpcRequest import DeleteVpcRequest
+
+# Step 1: Check if VPC exists
+try:
+    describe_request = DescribeVpcRequest({
+        "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
+        "vpcId": "{{user.vpc_id}}"
+    })
+    describe_response = client.describe_vpc(describe_request)
+    
+    if describe_response.error is not None:
+        print(f"VPC {{user.vpc_id}} already deleted. Operation is idempotent.")
+    else:
+        # Step 2: Delete VPC
+        delete_request = DeleteVpcRequest({
+            "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
+            "vpcId": "{{user.vpc_id}}"
+        })
+        delete_response = client.delete_vpc(delete_request)
+        
+        if delete_response.error is None:
+            print(f"VPC deleted: {{user.vpc_id}}")
+        else:
+            print(f"Error: {delete_response.error.message}")
+except Exception as e:
+    print(f"VPC already deleted or error: {e}")
+```
+
+#### Execution — CLI (`jdc`) [Idempotent]
 ```bash
 # Step 1: Check if VPC exists
 VPC_EXISTS=$(jdc vpc describe-vpc \
@@ -296,12 +414,18 @@ done
 3. **Verification**: Confirm resource is no longer accessible
 
 ## Prerequisites
-1. **Install JD Cloud CLI**:
+1. **Install JD Cloud SDK (Python)**:
+   ```bash
+   pip install jdcloud_sdk
+   ```
+   See [Integration](references/integration.md) for SDK version pinning.
+
+2. **Install JD Cloud CLI (for dual-path)**:
    ```bash
    pip install jdcloud_cli
    jdc config init
    ```
-2. **Configure Credentials**:
+3. **Configure Credentials**:
    The Agent runtime MUST have the following environment variables set. These map to `{{env.*}}` placeholders used throughout this Skill:
    ```bash
    export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
@@ -312,7 +436,9 @@ done
 
 ## Reference Directory
 - [Core Concepts](references/core-concepts.md)
+- [API & SDK Usage](references/api-sdk-usage.md)
 - [CLI Usage](references/cli-usage.md)
+- [Idempotency Checklist](references/idempotency-checklist.md)
 - [Troubleshooting Guide](references/troubleshooting.md)
 - [Monitoring & Alerts](references/monitoring.md)
 - [Integration (MCP/SDK)](references/integration.md)

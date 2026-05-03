@@ -1,101 +1,432 @@
-# JD Cloud CLB Example Configuration
+# Example Configuration — JD Cloud Load Balancer
 
-# CLB Instance Configuration
-clb_instance:
-  name: "production-web-clb"
-  specification: "2"  # CLB specification level
-  network_type: "BGP"
+## Application Load Balancer (ALB) Configuration
+
+### Basic Web Application Setup
+
+```yaml
+loadBalancer:
+  name: "web-alb"
+  type: "application"  # ALB
   region: "cn-north-1"
-  description: "Production web application load balancer"
+  vpcId: "vpc-web-001"
+  chargeMode: "postpaid_by_usage"
   
-# Listener Configuration
+  availabilityZones:
+    - azId: "cn-north-1a"
+      subnetId: "subnet-web-a"
+    - azId: "cn-north-1b"
+      subnetId: "subnet-web-b"
+  
+  networkType: "public"  # Requires EIP binding
+  
 listeners:
-  - name: "http-listener"
-    protocol: "HTTP"
-    port: 80
-    backend_server_group: "web-servers"
-    health_check:
-      type: "HTTP"
-      path: "/health"
-      port: 80
-      healthy_threshold: 3
-      unhealthy_threshold: 3
-      timeout: 5
-      interval: 5
-      
   - name: "https-listener"
-    protocol: "HTTPS"
+    protocol: "https"
     port: 443
-    backend_server_group: "web-servers"
-    ssl_certificate_id: "cert-xxxxx"
-    health_check:
-      type: "HTTPS"
-      path: "/health"
+    certificateId: "cert-web-ssl"
+    tlsSecurityPolicyId: "tls-2022-policy"
+    defaultBackendServiceId: "backend-web"
+    
+  - name: "http-listener"
+    protocol: "http"
+    port: 80
+    redirectConfig:
+      protocol: "https"
       port: 443
-      healthy_threshold: 3
-      unhealthy_threshold: 3
-      timeout: 5
-      interval: 5
+      statusCode: 301
 
-# Backend Server Group Configuration
-backend_server_groups:
-  - name: "web-servers"
-    algorithm: "round_robin"  # round_robin, least_connections, weighted_round_robin
-    servers:
-      - id: "vm-web-001"
-        weight: 10
+backendServices:
+  - name: "backend-web"
+    targetGroupId: "tg-web-servers"
+    healthCheck:
+      protocol: "http"
+      port: 8080
+      path: "/health"
+      intervalSeconds: 10
+      healthyThreshold: 3
+      unhealthyThreshold: 3
+    sessionPersistence:
+      type: "cookie"
+      cookieName: "JSESSIONID"
+      persistenceTimeout: 3600
+
+targetGroups:
+  - name: "tg-web-servers"
+    targetType: "vm"
+    targets:
+      - targetId: "i-web-001"
         port: 8080
-      - id: "vm-web-002"
-        weight: 10
+        weight: 50
+      - targetId: "i-web-002"
         port: 8080
-      - id: "vm-web-003"
-        weight: 5
+        weight: 50
+      - targetId: "i-web-003"
         port: 8080
+        weight: 50
 
-# Health Check Configuration
-health_check:
-  enabled: true
-  type: "HTTP"
-  path: "/health"
-  port: 80
-  healthy_threshold: 3
-  unhealthy_threshold: 3
-  timeout: 5
-  interval: 5
+forwardingRules:
+  - listenerId: "https-listener"
+    urlMapId: "urlmap-web"
+    rules:
+      - name: "api-route"
+        priority: 10
+        conditions:
+          - type: "path"
+            values: ["/api/*"]
+        actions:
+          - type: "forward"
+            targetGroupId: "tg-api-servers"
+      - name: "static-route"
+        priority: 20
+        conditions:
+          - type: "path"
+            values: ["/static/*"]
+        actions:
+          - type: "forward"
+            targetGroupId: "tg-static-servers"
+```
 
-# Monitoring and Alerts
-monitoring:
-  metrics:
-    - name: "ActiveConnections"
-      threshold: 10000
-      period: 300
-    - name: "BandwidthIn"
-      threshold: 800000000  # 800 Mbps in bits
-      period: 300
-    - name: "ResponseTime"
-      threshold: 1000  # 1 second
-      period: 300
-  alerts:
-    - name: "high-connections"
-      metric: "ActiveConnections"
-      condition: "greater_than"
-      threshold: 8000
-      notification:
-        - email: "ops-team@example.com"
-        - sms: "+8613800138000"
+### Multi-Domain HTTPS Setup
 
-# Security Configuration
-security:
-  acl_id: "acl-xxxxx"
-  security_groups:
-    - "sg-web-001"
-  ssl_policy: "tls-1-2"
+```yaml
+loadBalancer:
+  name: "multi-domain-alb"
+  type: "application"
+  region: "cn-east-2"
+  vpcId: "vpc-multi"
   
-# Tags
-tags:
-  - key: "Environment"
-    value: "Production"
-  - key: "Application"
-    value: "WebFrontend"
-  - key: "Team"
-    value: "Platform"
+listeners:
+  - name: "https-443"
+    protocol: "https"
+    port: 443
+    certificateId: "cert-default"
+    sniCertificates:
+      - certificateId: "cert-api-example-com"
+        domains: ["api.example.com"]
+      - certificateId: "cert-www-example-com"
+        domains: ["www.example.com", "example.com"]
+```
+
+## Network Load Balancer (NLB) Configuration
+
+### TCP Service Setup
+
+```yaml
+loadBalancer:
+  name: "game-nlb"
+  type: "network"  # NLB
+  region: "cn-south-1"
+  vpcId: "vpc-game"
+  chargeMode: "postpaid_by_usage"
+  
+  availabilityZones:
+    - azId: "cn-south-1a"
+      subnetId: "subnet-game-a"
+      vipSpec: "auto"  # Auto-assigned VIP
+    - azId: "cn-south-1b"
+      subnetId: "subnet-game-b"
+      vipSpec: "auto"
+
+listeners:
+  - name: "tcp-9000"
+    protocol: "tcp"
+    port: 9000
+    backendServiceId: "backend-game"
+
+backendServices:
+  - name: "backend-game"
+    targetGroupId: "tg-game-servers"
+    healthCheck:
+      protocol: "tcp"
+      port: 9000
+      intervalSeconds: 5
+      healthyThreshold: 2
+      unhealthyThreshold: 2
+    sessionPersistence:
+      type: "sourceIp"
+      persistenceTimeout: 300
+
+targetGroups:
+  - name: "tg-game-servers"
+    targetType: "vm"
+    targets:
+      - targetId: "i-game-001"
+        port: 9000
+        weight: 100
+      - targetId: "i-game-002"
+        port: 9000
+        weight: 100
+```
+
+### UDP Service Setup
+
+```yaml
+loadBalancer:
+  name: "dns-nlb"
+  type: "network"
+  region: "cn-north-1"
+  vpcId: "vpc-dns"
+
+listeners:
+  - name: "udp-53"
+    protocol: "udp"
+    port: 53
+    backendServiceId: "backend-dns"
+
+backendServices:
+  - name: "backend-dns"
+    targetGroupId: "tg-dns-servers"
+    healthCheck:
+      protocol: "udp"
+      port: 53
+      intervalSeconds: 30
+      healthyThreshold: 3
+      unhealthyThreshold: 3
+
+targetGroups:
+  - name: "tg-dns-servers"
+    targetType: "ip"
+    targets:
+      - targetId: "10.0.1.10"
+        port: 53
+        weight: 50
+      - targetId: "10.0.1.11"
+        port: 53
+        weight: 50
+```
+
+## High Availability Group Integration
+
+### Auto-Scaling Backend
+
+```yaml
+targetGroups:
+  - name: "tg-web-asg"
+    targetType: "highAvailabilityGroup"
+    highAvailabilityGroupId: "hag-web-servers"
+    port: 8080
+    weight: 100
+    
+    # Targets auto-managed by HA Group
+    # No manual target registration needed
+```
+
+## Container Backend Integration
+
+### Native Container Backend
+
+```yaml
+targetGroups:
+  - name: "tg-container-web"
+    targetType: "container"
+    targets:
+      - targetId: "c-web-001"  # Container ID
+        port: 80
+        weight: 50
+      - targetId: "c-web-002"
+        port: 80
+        weight: 50
+```
+
+## TLS Security Policy Configuration
+
+### Custom TLS Policy
+
+```yaml
+tlsSecurityPolicies:
+  - name: "tls-custom-secure"
+    description: "TLS 1.2+ with strong ciphers"
+    minTlsVersion: "TLS_1_2"
+    ciphers:
+      - "ECDHE-RSA-AES256-GCM-SHA384"
+      - "ECDHE-RSA-AES128-GCM-SHA256"
+      - "AES256-GCM-SHA384"
+      - "AES128-GCM-SHA256"
+```
+
+### Using Predefined TLS Policy
+
+```yaml
+listeners:
+  - name: "https-secure"
+    protocol: "https"
+    port: 443
+    certificateId: "cert-web"
+    tlsSecurityPolicyId: "tls-2022-policy"  # Predefined JD Cloud policy
+```
+
+## Health Check Configuration Options
+
+### HTTP Health Check
+
+```yaml
+healthCheck:
+  protocol: "http"
+  port: 8080
+  path: "/health"
+  method: "GET"
+  expectedCodes: [200, 201]
+  timeoutSeconds: 5
+  intervalSeconds: 10
+  healthyThreshold: 3
+  unhealthyThreshold: 3
+```
+
+### TCP Health Check
+
+```yaml
+healthCheck:
+  protocol: "tcp"
+  port: 3306
+  timeoutSeconds: 3
+  intervalSeconds: 5
+  healthyThreshold: 2
+  unhealthyThreshold: 2
+```
+
+## Session Persistence Options
+
+### Cookie-Based (HTTP)
+
+```yaml
+sessionPersistence:
+  type: "cookie"
+  cookieName: "LBSESSION"
+  cookieTimeout: 86400  # 24 hours
+  persistenceTimeout: 86400
+```
+
+### Source IP-Based (TCP)
+
+```yaml
+sessionPersistence:
+  type: "sourceIp"
+  persistenceTimeout: 300  # 5 minutes
+```
+
+## Monitoring Configuration
+
+### Recommended Alerts
+
+```yaml
+alerts:
+  - name: "high-error-rate"
+    metric: "http5xxRate"
+    namespace: "alb"
+    threshold: 5.0  # 5%
+    period: 300  # 5 minutes
+    comparisonOperator: "greaterThan"
+    evaluationCount: 3
+    notificationChannels:
+      - type: "email"
+        recipients: ["ops@example.com"]
+      - type: "sms"
+        recipients: ["+86-xxx-xxxx"]
+
+  - name: "backend-unhealthy"
+    metric: "unhealthyTargetCount"
+    namespace: "alb"
+    threshold: 1
+    period: 60  # 1 minute
+    comparisonOperator: "greaterThan"
+    evaluationCount: 2
+```
+
+## Full Production Example
+
+```yaml
+# Production Web Application ALB Configuration
+project: "prod-web-alb"
+region: "cn-north-1"
+vpcId: "vpc-prod-web"
+
+loadBalancers:
+  - name: "prod-web-alb"
+    type: "application"
+    chargeMode: "postpaid_by_usage"
+    availabilityZones:
+      - azId: "cn-north-1a"
+        subnetId: "subnet-prod-web-a"
+      - azId: "cn-north-1b"
+        subnetId: "subnet-prod-web-b"
+    deletionProtection: true
+
+listeners:
+  # HTTPS primary listener
+  - name: "prod-https"
+    protocol: "https"
+    port: 443
+    certificateId: "cert-prod-web"
+    tlsSecurityPolicyId: "tls-2022-policy"
+    connectionIdleTimeout: 60
+    defaultBackendServiceId: "backend-web-prod"
+    
+  # HTTP redirect to HTTPS
+  - name: "prod-http-redirect"
+    protocol: "http"
+    port: 80
+    redirectConfig:
+      protocol: "https"
+      port: 443
+      statusCode: 301
+
+backendServices:
+  - name: "backend-web-prod"
+    targetGroupId: "tg-prod-web"
+    healthCheck:
+      protocol: "http"
+      port: 8080
+      path: "/health"
+      intervalSeconds: 10
+      healthyThreshold: 3
+      unhealthyThreshold: 3
+    sessionPersistence:
+      type: "cookie"
+      cookieName: "PRODSESSION"
+      persistenceTimeout: 3600
+
+targetGroups:
+  - name: "tg-prod-web"
+    targetType: "highAvailabilityGroup"
+    highAvailabilityGroupId: "hag-prod-web"
+    port: 8080
+
+forwardingRules:
+  - listenerId: "prod-https"
+    rules:
+      - name: "api-forward"
+        priority: 10
+        conditions:
+          - type: "path"
+            values: ["/api/v1/*", "/api/v2/*"]
+        actions:
+          - type: "forward"
+            targetGroupId: "tg-prod-api"
+            
+      - name: "admin-forward"
+        priority: 20
+        conditions:
+          - type: "path"
+            values: ["/admin/*"]
+        actions:
+          - type: "forward"
+            targetGroupId: "tg-prod-admin"
+
+tlsSecurityPolicies:
+  - name: "tls-prod-secure"
+    minTlsVersion: "TLS_1_2"
+    ciphers:
+      - "ECDHE-RSA-AES256-GCM-SHA384"
+      - "ECDHE-RSA-CHACHA20-POLY1305"
+      - "ECDHE-RSA-AES128-GCM-SHA256"
+
+alerts:
+  - name: "prod-high-5xx"
+    metric: "http5xxRate"
+    threshold: 2.0
+    period: 300
+    notificationChannels:
+      - type: "email"
+        recipients: ["prod-ops@example.com"]
+```

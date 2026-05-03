@@ -1,669 +1,466 @@
-# JD Cloud Redis CLI Usage
+# CLI Usage - JD Cloud Redis (`jdc`)
 
-## CLI Command Structure
+## Installation and Configuration
 
-All Redis CLI commands follow this pattern:
+### Install JD Cloud CLI
+
 ```bash
-jdc redis <action>-<resource> [parameters] --output json --no-interactive
+pip install jdcloud_cli
 ```
 
-## Instance Management
+### Configure CLI
 
-### List All Instances
-
-List all Redis instances in a region:
+Initialize configuration with credentials:
 
 ```bash
-jdc redis describe-cache-instances \
-  --region-id cn-north-1 \
+jdc configure add \
+  --access-key YOUR_ACCESS_KEY \
+  --secret-key YOUR_SECRET_KEY \
+  --region-id cn-north-1
+```
+
+Or set environment variables:
+
+```bash
+export JDC_ACCESS_KEY="YOUR_ACCESS_KEY"
+export JDC_SECRET_KEY="YOUR_SECRET_KEY"
+export JDC_REGION="cn-north-1"
+```
+
+### Verify Installation
+
+```bash
+jdc --version
+# Expected output: version number, e.g., 0.7.2
+
+jdc redis help
+# Expected output: list of redis subcommands
+```
+
+**CLI Support Evidence**: The `jdc` CLI includes `redis` in its product list, confirmed via `jdc` help output showing: `{mps,cps,rds,jke,vpc,xdata,mongodb,configure,streambus,ipanti,baseanti,datastar,redis,nc,monitor,iam,disk,cr,streamcomputer,sop,clouddnsservice,vm,oss}`. Official CLI documentation: https://docs.jdcloud.com/cn/cli/introduction
+
+## CLI Conventions for Agent Execution
+
+### Output Format
+
+- **ALWAYS** append `--output json` for machine-parseable output
+- JSON output is required for automated workflows and response parsing
+- Example: `jdc redis describe-cache-instance --output json`
+
+### Non-Interactive Mode
+
+- Append `--no-interactive` when supported to avoid prompts
+- Required for automation and agent workflows
+- Example: `jdc redis create-cache-instance ... --no-interactive`
+
+### JSON Path Verification
+
+- CLI JSON output may differ slightly from raw API response
+- Verify exact JSON paths with real CLI invocations before documenting
+- Use `jq` for JSON parsing in shell scripts
+- Example: `jdc redis describe-cache-instance --output json | jq -r '.result.cacheInstance.status'`
+
+## CLI vs API Coverage
+
+| Operation | Available via `jdc` | CLI Subcommand | Notes |
+|-----------|-------------------|----------------|-------|
+| Create instance | ✅ | `create-cache-instance` | Full coverage |
+| Describe instance | ✅ | `describe-cache-instance` | Full coverage |
+| List instances | ✅ | `describe-cache-instances` | Full coverage |
+| Modify instance attribute | ✅ | `modify-cache-instance-attribute` | Full coverage |
+| Modify instance class | ✅ | `modify-cache-instance-class` | Full coverage |
+| Delete instance | ✅ | `delete-cache-instance` | Full coverage |
+| Create backup | ✅ | `create-backup` | Full coverage |
+| Describe backups | ✅ | `describe-backups` | Full coverage |
+| Restore instance | ✅ | `restore-instance` | Full coverage |
+| Describe backup policy | ✅ | `describe-backup-policy` | Full coverage |
+| Modify backup policy | ✅ | `modify-backup-policy` | Full coverage |
+| Describe slow log | ✅ | `describe-slow-log` | Full coverage |
+| Describe instance config | ✅ | `describe-instance-config` | Full coverage |
+| Modify instance config | ✅ | `modify-instance-config` | Full coverage |
+| Describe IP whitelist | ✅ | `describe-ip-white-list` | Full coverage |
+| Modify IP whitelist | ✅ | `modify-ip-white-list` | Full coverage |
+| Reset password | ✅ | `reset-cache-instance-password` | Full coverage |
+| Describe cluster info | ✅ | `describe-cluster-info` | Full coverage |
+| Describe client list | ✅ | `describe-client-list` | Full coverage |
+| Create account | ✅ | `create-account` | Full coverage |
+| Describe accounts | ✅ | `describe-accounts` | Full coverage |
+| Delete account | ✅ | `delete-account` | Full coverage |
+| Describe instance class | ✅ | `describe-instance-class` | Full coverage |
+| Describe spec config | ✅ | `describe-spec-config` | Full coverage |
+| Describe user quota | ✅ | `describe-user-quota` | Full coverage |
+
+**Coverage Gap**: None - CLI covers all commonly used Redis operations. Some advanced analysis APIs may have limited CLI coverage; use SDK for those.
+
+## CLI Command Reference
+
+### Instance Management
+
+#### Create Redis Instance
+
+```bash
+jdc redis create-cache-instance \
+  --region-id "cn-north-1" \
+  --cache-instance-name "my-redis-cluster" \
+  --cache-instance-class "redis.cluster.g.small" \
+  --vpc-id "vpc-abc123" \
+  --subnet-id "subnet-def456" \
+  --az-id-spec '{"azSpecifyType":"SpecifyByReplicaGroup","master":"cn-north-1a","slave":"cn-north-1b"}' \
+  --cache-instance-type "cluster" \
+  --redis-version "5.0" \
+  --db-num 32 \
+  --replica-number 2 \
+  --charge '{"chargeMode":"postpaid_by_duration"}' \
+  --output json \
+  --no-interactive
+```
+
+**JSON Path for Instance ID**: `$.result.cacheInstanceId`
+
+#### Describe Single Instance
+
+```bash
+jdc redis describe-cache-instance \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
   --output json
 ```
 
-**Filter by status:**
-```bash
-jdc redis describe-cache-instances \
-  --region-id cn-north-1 \
-  --status "running" \
-  --output json
-```
+**Key JSON Paths**:
+- Instance ID: `$.result.cacheInstance.cacheInstanceId`
+- Name: `$.result.cacheInstance.cacheInstanceName`
+- Status: `$.result.cacheInstance.status`
+- Connection: `$.result.cacheInstance.connectionDomain`
+- Port: `$.result.cacheInstance.port`
 
-**Pagination:**
+#### List Instances
+
 ```bash
 jdc redis describe-cache-instances \
-  --region-id cn-north-1 \
+  --region-id "cn-north-1" \
   --page-number 1 \
   --page-size 20 \
   --output json
 ```
 
-### Describe Single Instance
+**JSON Paths**:
+- Instance list: `$.result.cacheInstances[*]`
+- Total count: `$.result.totalCount`
 
-Get detailed information about a specific instance:
-
-```bash
-jdc redis describe-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-```
-
-**Key fields in response:**
-- `instanceId`: Instance ID
-- `cacheInstanceName`: Instance name
-- `status`: Current status (creating, running, changing, deleted)
-- `instanceClass`: Instance specification
-- `redisVersion`: Redis version (4.0, 5.0, 6.2)
-- `capacityMB`: Memory size in MB
-- `connectionDomain`: Connection domain name
-- `connectionPort`: Connection port (default: 6379)
-- `vpcId`: VPC ID
-- `subnetId`: Subnet ID
-
-### Create Instance
-
-Create a new Redis instance:
-
-```bash
-jdc redis create-cache-instance \
-  --region-id cn-north-1 \
-  --az-id "cn-north-1a" \
-  --cache-instance-name "my-redis-prod" \
-  --instance-class "redis.sw.4g" \
-  --vpc-id "vpc-abc123" \
-  --subnet-id "subnet-def456" \
-  --password "MyStr0ng!Pass#2026" \
-  --redis-version "6.2" \
-  --charge-mode "postpaid_by_duration" \
-  --output json \
-  --no-interactive
-```
-
-**Required parameters:**
-- `--region-id`: Region ID
-- `--az-id`: Availability zone ID
-- `--cache-instance-name`: Instance name
-- `--instance-class`: Instance specification
-- `--vpc-id`: VPC ID
-- `--subnet-id`: Subnet ID
-- `--password`: Password (8-32 chars, letters + numbers + special chars)
-
-**Optional parameters:**
-- `--redis-version`: Redis version (default: latest)
-- `--charge-mode`: Billing mode (postpaid_by_duration, prepaid)
-- `--node-count`: Number of nodes (for cluster architecture)
-
-### Delete Instance
-
-Delete a Redis instance (IRREVERSIBLE):
-
-```bash
-jdc redis delete-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json \
-  --no-interactive
-```
-
-> ⚠️ **WARNING**: This operation cannot be undone. All data will be lost. Create a backup first if needed.
-
-### Resize Instance (Change Specification)
-
-Change instance specification (scale up/down):
-
-```bash
-jdc redis modify-cache-instance-class \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --instance-class "redis.sw.8g" \
-  --output json \
-  --no-interactive
-```
-
-**Notes:**
-- Instance must be in `running` status
-- May cause brief connection interruption (usually < 30 seconds)
-- Use connection retry logic in applications
-- Can only scale to compatible specifications
-
-### Modify Instance Attributes
-
-Update instance name or other attributes:
+#### Modify Instance Attribute
 
 ```bash
 jdc redis modify-cache-instance-attribute \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --cache-instance-name "my-redis-prod-updated" \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --cache-instance-name "new-redis-name" \
   --output json \
   --no-interactive
 ```
 
-### Reset Password
-
-Reset instance password:
+#### Modify Instance Class (Scale Up/Down)
 
 ```bash
-jdc redis reset-cache-instance-password \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --new-password "NewStr0ng!Pass#2026" \
+jdc redis modify-cache-instance-class \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --cache-instance-class "redis.cluster.g.medium" \
   --output json \
   --no-interactive
 ```
 
-> ⚠️ **WARNING**: All existing connections will be disconnected. Update application configuration with new password.
+#### Delete Instance
 
-## Backup & Recovery
+```bash
+# Safety gate: Must obtain explicit user confirmation first
+jdc redis delete-cache-instance \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --output json \
+  --no-interactive
+```
 
-### Create Backup
+### Backup and Recovery
 
-Create a manual backup:
+#### Create Manual Backup
 
 ```bash
 jdc redis create-backup \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --backup-name "manual-backup-2026-04-30" \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
   --output json \
   --no-interactive
 ```
 
-### Describe Backups
+**JSON Path**: `$.result.backupId`
 
-List all backups for an instance:
+#### List Backups
 
 ```bash
 jdc redis describe-backups \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --page-number 1 \
+  --page-size 20 \
   --output json
 ```
 
-**Response fields:**
-- `backupId`: Backup ID
-- `backupName`: Backup name
-- `status`: Backup status (success, failed, running)
-- `backupSizeMB`: Backup file size
-- `createTime`: Backup creation time
-
-### Restore Instance from Backup
-
-Restore instance from a backup:
+#### Restore from Backup
 
 ```bash
 jdc redis restore-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --backup-id backup-xyz789 \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --backup-id "backup-def456" \
   --output json \
   --no-interactive
 ```
 
-> ⚠️ **WARNING**: This will overwrite current instance data. Create a backup first if needed.
-
-### Describe Backup Policy
-
-View backup policy configuration:
+#### Query Backup Policy
 
 ```bash
 jdc redis describe-backup-policy \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
   --output json
 ```
 
-### Modify Backup Policy
-
-Update backup policy:
+#### Modify Backup Policy
 
 ```bash
 jdc redis modify-backup-policy \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --backup-period "1,3,5" \
-  --backup-time "02:00-03:00" \
-  --backup-retention 30 \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --backup-period '["Monday","Wednesday","Friday"]' \
+  --backup-time "02:00-Z+8" \
   --output json \
   --no-interactive
 ```
 
-**Parameters:**
-- `--backup-period`: Days of week (1=Monday, 7=Sunday), comma-separated
-- `--backup-time`: Backup time window (HH:MM-HH:MM)
-- `--backup-retention`: Retention period in days (7-732)
+### Configuration and Parameters
 
-## Network & Security
-
-### Describe IP Whitelist
-
-View current IP whitelist:
-
-```bash
-jdc redis describe-ip-white-list \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-```
-
-### Modify IP Whitelist
-
-Update IP whitelist:
-
-```bash
-jdc redis modify-ip-white-list \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --ip-white-list '["192.168.1.0/24", "10.0.0.100", "172.16.0.0/16"]' \
-  --output json \
-  --no-interactive
-```
-
-**Notes:**
-- Supports single IPs and CIDR notation
-- Maximum 500 entries
-- Empty list means deny all access
-
-### Describe Client List
-
-View connected clients:
-
-```bash
-jdc redis describe-client-list \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-```
-
-### Describe Client IP Details
-
-View detailed client IP statistics:
-
-```bash
-jdc redis describe-client-ip-detail \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-```
-
-## Configuration Management
-
-### Describe Instance Config
-
-View current configuration parameters:
+#### Describe Instance Config
 
 ```bash
 jdc redis describe-instance-config \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
   --output json
 ```
 
-**Common parameters:**
-- `maxmemory-policy`: Eviction policy (noeviction, allkeys-lru, volatile-lru, etc.)
-- `timeout`: Connection timeout (seconds)
-- `tcp-keepalive`: TCP keepalive interval
-- `appendonly`: AOF persistence enabled (yes/no)
-- `appendfsync`: AOF sync policy (always, everysec, no)
-
-### Modify Instance Config
-
-Update configuration parameters:
+#### Modify Instance Config
 
 ```bash
 jdc redis modify-instance-config \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --instance-config '[{"parameterName":"maxmemory-policy","parameterValue":"allkeys-lru"}]' \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --config-parameter '[{"name":"maxmemory-policy","value":"volatile-lru"}]' \
   --output json \
   --no-interactive
 ```
 
-> Note: Some parameters require instance restart to take effect.
+### Network and Security
 
-### Describe Config History
-
-View configuration change history:
+#### Describe IP Whitelist
 
 ```bash
-jdc redis describe-instance-config \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
+jdc redis describe-ip-white-list \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
   --output json
 ```
 
-## Performance Analysis
+#### Modify IP Whitelist
 
-### Describe Slow Log
+```bash
+jdc redis modify-ip-white-list \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --ip-white-list '["192.168.1.0/24","10.0.0.100"]' \
+  --output json \
+  --no-interactive
+```
 
-View slow query logs:
+#### Reset Password
+
+```bash
+jdc redis reset-cache-instance-password \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --password "NewSecurePassword123!" \
+  --output json \
+  --no-interactive
+```
+
+#### Describe Connected Clients
+
+```bash
+jdc redis describe-client-list \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --output json
+```
+
+### Performance Analysis
+
+#### Query Slow Log
 
 ```bash
 jdc redis describe-slow-log \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --start-time "2026-04-30T00:00:00+08:00" \
-  --end-time "2026-04-30T23:59:59+08:00" \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --start-time "2026-05-01T00:00:00Z" \
+  --end-time "2026-05-03T00:00:00Z" \
+  --page-number 1 \
+  --page-size 100 \
   --output json
 ```
 
-### Create Cache Analysis
+### Resource Queries
 
-Start cache analysis (big keys, hot keys):
-
-```bash
-jdc redis create-cache-analysis \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json \
-  --no-interactive
-```
-
-### Describe Cache Analysis List
-
-View analysis task list:
+#### Describe Available Specs
 
 ```bash
-jdc redis describe-cache-analysis-list \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
+jdc redis describe-instance-class \
+  --region-id "cn-north-1" \
   --output json
 ```
 
-### Describe Cache Analysis Result
-
-Get analysis results:
-
-```bash
-jdc redis describe-cache-analysis-result \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --analysis-id analysis-abc123 \
-  --output json
-```
-
-### Big Key Analysis
-
-#### Create Big Key Analysis
-```bash
-jdc redis create-big-key-analysis \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json \
-  --no-interactive
-```
-
-#### Describe Big Key List
-```bash
-jdc redis describe-big-key-list \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-```
-
-#### Describe Big Key Detail
-```bash
-jdc redis describe-big-key-detail \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --key-name "my:big:key" \
-  --output json
-```
-
-## Account Management
-
-### Describe Accounts
-
-List all accounts:
-
-```bash
-jdc redis describe-accounts \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-```
-
-### Create Account
-
-Create a new account:
-
-```bash
-jdc redis create-account \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --account-name "app-user" \
-  --account-password "AppStr0ng!Pass#2026" \
-  --account-privilege "read" \
-  --output json \
-  --no-interactive
-```
-
-**Privilege levels:**
-- `read`: Read-only access
-- `write`: Read-write access
-- `role`: Custom role-based access
-
-### Modify Account
-
-Update account password or privileges:
-
-```bash
-jdc redis modify-account \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --account-name "app-user" \
-  --account-password "NewStr0ng!Pass#2026" \
-  --output json \
-  --no-interactive
-```
-
-### Delete Account
-
-Delete an account:
-
-```bash
-jdc redis delete-account \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --account-name "app-user" \
-  --output json \
-  --no-interactive
-```
-
-## Command Management
-
-### Get Disabled Commands
-
-View currently disabled commands:
-
-```bash
-jdc redis get-disable-commands \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-```
-
-### Set Disabled Commands
-
-Disable dangerous commands:
-
-```bash
-jdc redis set-disable-commands \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --disabled-commands '["FLUSHALL", "FLUSHDB", "KEYS", "CONFIG"]' \
-  --output json \
-  --no-interactive
-```
-
-**Recommended disabled commands for production:**
-- `FLUSHALL`: Flush all databases
-- `FLUSHDB`: Flush current database
-- `KEYS`: Pattern matching (use SCAN instead)
-- `CONFIG`: Runtime configuration
-- `SHUTDOWN`: Shutdown server
-- `DEBUG`: Debug commands
-
-## Quota & Specifications
-
-### Describe User Quota
-
-Check instance quota:
-
-```bash
-jdc redis describe-user-quota \
-  --region-id cn-north-1 \
-  --output json
-```
-
-### Describe Spec Config
-
-View available instance specifications:
+#### Describe Spec Config (Recommended)
 
 ```bash
 jdc redis describe-spec-config \
-  --region-id cn-north-1 \
+  --region-id "cn-north-1" \
   --output json
 ```
 
-### Describe Available Region
-
-List available regions:
+#### Query User Quota
 
 ```bash
-jdc redis describe-available-region \
+jdc redis describe-user-quota \
+  --region-id "cn-north-1" \
   --output json
 ```
 
-### Describe Available Resource
+## Shell Script Examples
 
-Check resource availability in AZ:
+### Poll for Instance Creation Completion
 
 ```bash
-jdc redis describe-available-resource \
-  --region-id cn-north-1 \
-  --az-id "cn-north-1a" \
-  --instance-class "redis.sw.4g" \
-  --output json
+#!/bin/bash
+REGION="cn-north-1"
+INSTANCE_ID="redis-abc123"
+MAX_WAIT=600  # seconds
+POLL_INTERVAL=10
+
+for i in $(seq 1 $((MAX_WAIT / POLL_INTERVAL))); do
+  STATUS=$(jdc redis describe-cache-instance \
+    --region-id "$REGION" \
+    --cache-instance-id "$INSTANCE_ID" \
+    --output json | jq -r '.result.cacheInstance.status')
+  
+  echo "[$i] Instance status: $STATUS"
+  
+  if [ "$STATUS" = "running" ]; then
+    echo "✓ Instance is running"
+    exit 0
+  fi
+  
+  if [ "$STATUS" = "error" ] || [ "$STATUS" = "deleted" ]; then
+    echo "✗ Instance creation failed: $STATUS"
+    exit 1
+  fi
+  
+  sleep $POLL_INTERVAL
+done
+
+echo "✗ Timeout waiting for instance to become running"
+exit 1
 ```
 
-## Common Operations Examples
-
-### Example 1: Create Production Redis Instance
+### Batch List All Instances
 
 ```bash
-# Step 1: Check available specs
-jdc redis describe-spec-config --region-id cn-north-1 --output json
+#!/bin/bash
+REGION="cn-north-1"
+PAGE_SIZE=100
 
-# Step 2: Create instance
-jdc redis create-cache-instance \
-  --region-id cn-north-1 \
-  --az-id "cn-north-1a" \
-  --cache-instance-name "prod-cache-01" \
-  --instance-class "redis.sw.8g" \
-  --vpc-id "vpc-abc123" \
-  --subnet-id "subnet-def456" \
-  --password "Pr0d!R3dis#2026" \
-  --redis-version "6.2" \
-  --charge-mode "postpaid_by_duration" \
-  --output json
-
-# Step 3: Wait for instance to be ready (poll every 10s)
-# Step 4: Configure whitelist
-jdc redis modify-ip-white-list \
-  --region-id cn-north-1 \
-  --cache-instance-id <instance-id-from-step-2> \
-  --ip-white-list '["10.0.1.0/24", "10.0.2.0/24"]' \
-  --output json
-
-# Step 5: Disable dangerous commands
-jdc redis set-disable-commands \
-  --region-id cn-north-1 \
-  --cache-instance-id <instance-id> \
-  --disabled-commands '["FLUSHALL", "FLUSHDB", "KEYS", "CONFIG"]' \
-  --output json
-```
-
-### Example 2: Daily Backup and Monitoring
-
-```bash
-# Create manual backup
-jdc redis create-backup \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --backup-name "daily-backup-$(date +%Y-%m-%d)" \
-  --output json
-
-# Check backup status
-jdc redis describe-backups \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-
-# View slow logs
-jdc redis describe-slow-log \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --start-time "$(date -d '1 hour ago' -Iseconds)" \
-  --end-time "$(date -Iseconds)" \
-  --output json
-```
-
-### Example 3: Resize Instance (Scale Up)
-
-```bash
-# Step 1: Check current status
-jdc redis describe-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json
-
-# Step 2: Verify target spec is available
-jdc redis describe-available-resource \
-  --region-id cn-north-1 \
-  --az-id "cn-north-1a" \
-  --instance-class "redis.sw.16g" \
-  --output json
-
-# Step 3: Resize instance
-jdc redis modify-cache-instance-class \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --instance-class "redis.sw.16g" \
-  --output json
-
-# Step 4: Poll until status returns to "running"
-# Step 5: Verify new spec applied
-jdc redis describe-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json | jq '.result.cacheInstance.instanceClass'
-```
-
-## Troubleshooting Commands
-
-### Check Instance Status
-```bash
-jdc redis describe-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json | jq '.result.cacheInstance.status'
-```
-
-### Check Connection Info
-```bash
-jdc redis describe-cache-instance \
-  --region-id cn-north-1 \
-  --cache-instance-id jcs-redis-abc123 \
-  --output json | jq '{
-    domain: .result.cacheInstance.connectionDomain,
-    port: .result.cacheInstance.connectionPort
-  }'
-```
-
-### List All Running Instances
-```bash
 jdc redis describe-cache-instances \
-  --region-id cn-north-1 \
-  --status "running" \
-  --output json | jq '.result.cacheInstances[] | {id: .instanceId, name: .cacheInstanceName}'
+  --region-id "$REGION" \
+  --page-number 1 \
+  --page-size $PAGE_SIZE \
+  --output json | jq -r '.result.cacheInstances[] | [.cacheInstanceId, .cacheInstanceName, .status] | @tsv'
+```
+
+### Create and Verify Instance
+
+```bash
+#!/bin/bash
+REGION="cn-north-1"
+NAME="test-redis-cluster"
+SPEC="redis.cluster.g.micro"
+
+# Create instance
+INSTANCE_ID=$(jdc redis create-cache-instance \
+  --region-id "$REGION" \
+  --cache-instance-name "$NAME" \
+  --cache-instance-class "$SPEC" \
+  --vpc-id "vpc-xxx" \
+  --subnet-id "subnet-yyy" \
+  --az-id-spec '{"azSpecifyType":"SpecifyByReplicaGroup","master":"cn-north-1a","slave":"cn-north-1b"}' \
+  --cache-instance-type "cluster" \
+  --redis-version "5.0" \
+  --output json \
+  --no-interactive | jq -r '.result.cacheInstanceId')
+
+echo "Created instance: $INSTANCE_ID"
+
+# Poll for completion
+# ... (use polling script above)
+```
+
+## CLI Path Preference
+
+When to use CLI vs SDK:
+
+- **Prefer CLI** when:
+  - Quick ad-hoc operations from terminal
+  - No Python runtime available
+  - Shell script automation
+  - Simple single-operation tasks
+
+- **Prefer SDK** when:
+  - Complex multi-step workflows
+  - Integration into Python applications
+  - Need for programmatic error handling
+  - Advanced analysis and data processing
+  - CI/CD pipelines with Python tooling
+
+## Troubleshooting CLI Issues
+
+### Common CLI Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `configure not found` | CLI not configured | Run `jdc configure add` |
+| `InvalidParameter` | Parameter format error | Check parameter syntax, use JSON for complex objects |
+| `RegionId not found` | Invalid region | Use valid region: cn-north-1, cn-south-1, cn-east-2 |
+| `Rate limit exceeded` | Too many requests | Slow down; CLI does not auto-retry rate limits |
+
+### JSON Parameter Syntax
+
+- Complex parameters (arrays, objects) must be JSON strings
+- Use single quotes for shell, escape internal quotes
+- Example: `--az-id-spec '{"master":"cn-north-1a","slave":"cn-north-1b"}'`
+- Arrays: `--backup-period '["Monday","Wednesday"]'`
+
+### Debugging CLI Output
+
+```bash
+# Enable debug mode
+jdc redis describe-cache-instance \
+  --region-id "cn-north-1" \
+  --cache-instance-id "redis-abc123" \
+  --output json \
+  --debug
 ```

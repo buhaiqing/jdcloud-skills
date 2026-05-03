@@ -1,21 +1,49 @@
 ---
 name: jdcloud-cloudmonitor-ops
 description: >-
-  管理京东云云监控(CloudMonitor)资源。用于查询监控指标数据、创建和管理告警规则、
-  查看告警历史、配置自定义监控等运维操作。支持40+云产品的监控数据查询和告警管理。
+  Use when you need to query monitoring metrics, create or manage alarm rules,
+  view alarm history, or configure custom monitoring on JD Cloud resources.
+  User mentions CloudMonitor, 云监控, monitoring, 告警, or metric-related tasks.
+license: MIT
+compatibility: >-
+  Official JD Cloud SDK (Python 3.10+), valid API credentials, network access
+  to JD Cloud endpoints, and official JD Cloud CLI (jdc) for this product.
+metadata:
+  author: jdcloud
+  version: "1.1.0"
+  last_updated: "2026-05-03"
+  runtime: Harness AI Agent
+  api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
+  cli_applicability: dual-path
+  cli_support_evidence: >-
+    Official jdc supports monitor product. Verified via `jdc monitor --help`
+    and official CLI documentation at https://github.com/jdcloud-api/jdcloud-cli
+  environment:
+    - JDC_ACCESS_KEY
+    - JDC_SECRET_KEY
+    - JDC_REGION
 ---
+
+> This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
 
 # 京东云云监控(CloudMonitor)运维 Skill
 
-## 变更历史
+## Overview
+
+京东云云监控(CloudMonitor)是对用户名下云资源进行监控和报警的服务，支持40余种云产品的监控。本 Skill 是 **运维 Runbook**：明确的触发范围、凭证规则、前置检查、**双路径执行**（官方 SDK/API 和官方 `jdc` CLI）、响应验证和失败恢复。
+
+### CLI applicability (repository policy)
+
+- **`cli_applicability: dual-path`:** 官方 `jdc` 支持云监控产品。本 Skill **必须** 提供 `references/cli-usage.md` 和 `references/api-sdk-usage.md`，并在 **每个** 执行流程中记录 SDK/API 和 `jdc` 两种路径。
+
+**路径偏好提示**: 无 Python 运行时 → 使用 `jdc` CLI；批量操作/集成测试 → 使用 SDK。
+
+## Changelog
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| 1.1.0 | 2026-05-03 | 添加 SDK/API 双路径执行流程、完善 frontmatter、新增 api-sdk-usage.md |
 | 1.0.0 | 2026-04-28 | 初始版本，包含云监控核心功能、告警配置和运维最佳实践 |
-
-## 概述
-
-京东云云监控(CloudMonitor)是对用户名下云资源进行监控和报警的服务，支持40余种云产品的监控，包括计算、网络、存储、数据库、中间件及大数据服务等。本 Skill 提供监控数据查询、告警规则管理、自定义监控等运维能力。
 
 ## 触发范围（Agent 可读）
 
@@ -59,10 +87,15 @@ description: >-
 - 时间戳采用 ISO 8601 格式带时区：`2026-04-28T10:00:00+08:00`
 - 布尔值：`true` / `false`（小写）
 
+### SDK 响应约定
+- SDK 返回对象属性遵循 OpenAPI 定义
+- 错误通过 `ClientException` / `ServerException` 抛出
+- 时间戳格式同 CLI
+
 ### 关键 JSON 路径
 | 操作 | JSON 路径 | 类型 | 说明 |
 |------|-----------|------|------|
-| 创建告警 | `$.result.alarmId` | string | 告警规则 ID |
+| 创建告警 | `$.result.alarmId` / `response.result.alarmId` | string | 告警规则 ID |
 | 查询告警列表 | `$.result.alarms[*].alarmId` | array | 所有告警 ID |
 | 查询告警详情 | `$.result.alarm.status` | string | ALARM / OK / INSUFFICIENT_DATA |
 | 查询监控数据 | `$.result.metricDatas[*].value` | array | 监控数值 |
@@ -85,18 +118,49 @@ description: >-
 
 ## 执行流程（Agent 可读）
 
-每个操作遵循：前置检查 → 执行 → 后置验证 → 失败恢复。Agent 不得跳过任何阶段。
+每个操作遵循：前置检查 → 执行（SDK/API 和 CLI 双路径） → 后置验证 → 失败恢复。Agent 不得跳过任何阶段。
 
 ### 操作：创建告警规则
 
 #### 前置检查
-| 检查项 | 命令 | 期望 | 失败处理 |
+| 检查项 | 方法 | 期望 | 失败处理 |
 |--------|------|------|---------|
-| CLI 已安装 | `jdc --version` | exit code 0 | 引导用户安装 jdcloud-cli |
-| 凭证有效 | `jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1 --output json` | `$.error == null` | 提示用户执行 `jdc config init` |
-| 区域可用 | `jdc monitor describe-services --region-id {{user.region}} --output json` | 返回服务列表非空 | 建议最近可用区域 |
+| SDK/CLI 已安装 | SDK: `import jdcloud_sdk`; CLI: `jdc --version` | 无错误 / exit code 0 | 引导用户安装 jdcloud-sdk 或 jdcloud-cli |
+| 凭证有效 | SDK: 构造 Credential; CLI: `jdc monitor describe-services --region-id cn-north-1 --output json` | 非空凭证 / `$.error == null` | 提示配置环境变量或 `jdc config init` |
+| 区域可用 | SDK/CLI 调用 describeServices | 返回服务列表非空 | 建议最近可用区域 |
 
-#### 执行
+#### 执行 — SDK (Python)
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.monitor.client import MonitorClient
+from jdcloud_sdk.services.monitor.apis.CreateAlarmRequest import CreateAlarmRequest
+
+credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
+client = MonitorClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
+
+request = CreateAlarmRequest({
+    "regionId": "{{user.region}}",
+    "alarmName": "{{user.alarm_name}}",
+    "serviceCode": "{{user.service_code}}",
+    "resourceId": "{{user.resource_id}}",
+    "metricName": "{{user.metric_name}}",
+    "comparisonOperator": "{{user.comparison}}",
+    "threshold": {{user.threshold}},
+    "period": {{user.period}},
+    "evaluationPeriods": {{user.eval_periods}},
+    "contactGroupId": {{user.contact_group_id}},
+    "noticeType": "{{user.notice_type}}"
+})
+
+response = client.createAlarm(request)
+# JSON 路径: $.result.alarmId
+alarm_id = response.result.alarmId
+```
+
+#### 执行 — CLI (`jdc`)
+
 ```bash
 jdc monitor create-alarm \
   --region-id {{user.region}} \
@@ -115,16 +179,24 @@ jdc monitor create-alarm \
 ```
 
 #### 后置验证
-1. 从 `$.result.alarmId` 捕获 `{{output.alarm_id}}`
-2. 验证告警已创建：
+1. 从 SDK `response.result.alarmId` 或 CLI JSON `$.result.alarmId` 捕获 `{{output.alarm_id}}`
+2. 验证告警已创建（SDK 和 CLI 双路径）：
+   ```python
+   # SDK 验证
+   from jdcloud_sdk.services.monitor.apis.DescribeAlarmRequest import DescribeAlarmRequest
+   req = DescribeAlarmRequest({"regionId": "{{user.region}}", "alarmId": "{{output.alarm_id}}"})
+   resp = client.describeAlarm(req)
+   status = resp.result.alarm.status  # ALARM/OK/INSUFFICIENT_DATA
+   ```
    ```bash
+   # CLI 验证
    jdc monitor describe-alarm \
      --region-id {{user.region}} \
      --alarm-id {{output.alarm_id}} \
      --output json | jq -r '.result.alarm.status'
    ```
 3. 若返回有效状态 → 操作成功，向用户报告 `{{output.alarm_id}}`
-4. 若返回错误 → 捕获 `$.error.message`，进入失败恢复
+4. 若返回错误 → 捕获错误信息，进入失败恢复
 
 #### 失败恢复
 | 错误模式 (regex) | 最大重试 | 退避策略 | Agent 动作 |
@@ -132,11 +204,40 @@ jdc monitor create-alarm \
 | `InvalidParameter` | 1 | - | 检查参数格式，修正后重试 |
 | `QuotaExceeded` | 0 | - | 停止。告知用户告警规则配额已满（每区域最多 500 条） |
 | `MetricNotFound` | 1 | - | 确认监控项名称，用 `describe-metrics` 查询可用项后重试 |
+| `ResourceAlreadyExists` | 0 | - | 告警名称已存在，询问用户是否复用或换名 |
 | `InternalError` | 3 | 2s, 4s, 8s | 指数退避重试。第 3 次失败后报告用户 |
 
 ### 操作：查询监控数据
 
-#### 执行
+#### 执行 — SDK (Python)
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.monitor.client import MonitorClient
+from jdcloud_sdk.services.monitor.apis.DescribeMetricDataRequest import DescribeMetricDataRequest
+
+credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
+client = MonitorClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
+
+request = DescribeMetricDataRequest({
+    "regionId": "{{user.region}}",
+    "metric": "{{user.metric}}",
+    "serviceCode": "{{user.service_code}}",
+    "resourceId": "{{user.resource_id}}",
+    "startTime": "{{user.start_time}}",
+    "endTime": "{{user.end_time}}",
+    "aggrType": "avg"
+})
+
+response = client.describeMetricData(request)
+# JSON 路径: $.result.metricDatas[*].value
+for data in response.result.metricDatas:
+    print(f"Time: {data.timestamp}, Value: {data.value}, Unit: {data.unit}")
+```
+
+#### 执行 — CLI (`jdc`)
+
 ```bash
 jdc monitor describe-metric-data \
   --region-id {{user.region}} \
@@ -150,7 +251,7 @@ jdc monitor describe-metric-data \
 ```
 
 #### 后置验证
-1. 检查 `$.result.metricDatas` 是否非空
+1. 检查 SDK `response.result.metricDatas` 或 CLI JSON `$.result.metricDatas` 是否非空
 2. 若为空 → 可能原因：资源刚创建无数据、时间范围错误、监控项名错误
 3. 以表格形式展示：时间戳 | 数值 | 单位
 
@@ -165,9 +266,31 @@ jdc monitor describe-metric-data \
 
 #### 前置检查（安全门）
 - **必须**询问用户："确认删除告警规则 `{{user.alarm_name}}` ({{user.alarm_id}})？此操作不可撤销。"
-- **必须**等待用户明确回复"确认"或"yes"后才继续
+- **必须**等待用户明确回复"确认"或"yes"后才继续（SDK 和 CLI 路径均需此安全门）
 
-#### 执行
+#### 执行 — SDK (Python)
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.monitor.client import MonitorClient
+from jdcloud_sdk.services.monitor.apis.DeleteAlarmsRequest import DeleteAlarmsRequest
+
+credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
+client = MonitorClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
+
+request = DeleteAlarmsRequest({
+    "regionId": "{{env.JDC_REGION}}",
+    "alarmIds": ["{{user.alarm_id}}"]
+})
+
+response = client.deleteAlarms(request)
+# 返回 requestId 表示成功
+print(f"Delete request accepted: {response.requestId}")
+```
+
+#### 执行 — CLI (`jdc`)
+
 ```bash
 jdc monitor delete-alarms \
   --region-id {{env.JDC_REGION}} \
@@ -177,8 +300,19 @@ jdc monitor delete-alarms \
 ```
 
 #### 后置验证
-1. 再次查询确认不存在：
+1. 再次查询确认不存在（SDK 和 CLI 双路径）：
+   ```python
+   # SDK 验证
+   from jdcloud_sdk.services.monitor.apis.DescribeAlarmRequest import DescribeAlarmRequest
+   req = DescribeAlarmRequest({"regionId": "{{env.JDC_REGION}}", "alarmId": "{{user.alarm_id}}"})
+   try:
+       client.describeAlarm(req)
+   except Exception as e:
+       if "AlarmNotFound" in str(e) or "ResourceNotFound" in str(e):
+           print("Alarm deleted successfully")
+   ```
    ```bash
+   # CLI 验证
    jdc monitor describe-alarm \
      --region-id {{env.JDC_REGION}} \
      --alarm-id {{user.alarm_id}} \
@@ -188,11 +322,19 @@ jdc monitor delete-alarms \
 
 ## 前提条件
 
-### 1. 安装京东云 CLI
+### 1. 安装京东云 CLI 和 SDK
 
-京东云 CLI 支持多种安装方式：
+**方式一：通过 pip 安装 SDK**
 
-**方式一：通过 pip 安装**
+```bash
+# 安装京东云 SDK
+pip install jdcloud_sdk
+
+# 验证安装
+python -c "import jdcloud_sdk; print('SDK installed')"
+```
+
+**方式二：安装 CLI**
 
 ```bash
 # 安装京东云 CLI
@@ -200,18 +342,6 @@ pip install jdcloud_cli
 
 # 验证安装
 jdc --version
-```
-
-**方式二：下载二进制文件**
-
-```bash
-# Linux/macOS
-curl -fsSL https://github.com/jdcloud-api/jdcloud-cli/releases/latest/download/jdc-linux-amd64.tar.gz | tar -xz
-sudo mv jdc /usr/local/bin/
-
-# Windows
-# 下载 https://github.com/jdcloud-api/jdcloud-cli/releases/latest/download/jdc-windows-amd64.zip
-# 解压并添加到 PATH
 ```
 
 ### 2. 配置凭证
@@ -241,7 +371,7 @@ export JDC_REGION="cn-north-1"
 
 ### 查询监控服务列表
 ```bash
-jdc monitor describe-services --region-id cn-north-1
+jdc monitor describe-services --region-id cn-north-1 --output json
 ```
 
 ### 查询指定产品的监控项
@@ -249,7 +379,8 @@ jdc monitor describe-services --region-id cn-north-1
 jdc monitor describe-metrics \
   --region-id cn-north-1 \
   --service-code vm \
-  --resource-id i-xxx
+  --resource-id i-xxx \
+  --output json
 ```
 
 ### 查询监控数据
@@ -260,7 +391,8 @@ jdc monitor describe-metric-data \
   --service-code vm \
   --resource-id i-xxx \
   --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-01T23:59:59Z"
+  --end-time "2024-01-01T23:59:59Z" \
+  --output json
 ```
 
 ### 查询最新监控数据（降采样）
@@ -269,7 +401,8 @@ jdc monitor last-downsample \
   --region-id cn-north-1 \
   --service-code vm \
   --resource-id i-xxx \
-  --metrics '["vm.cpu.util","vm.memory.util"]'
+  --metrics '["vm.cpu.util","vm.memory.util"]' \
+  --output json
 ```
 
 ### 创建告警规则
@@ -285,7 +418,9 @@ jdc monitor create-alarm \
   --period 300 \
   --evaluation-periods 2 \
   --contact-group-id 1 \
-  --notice-type "sms,email"
+  --notice-type "sms,email" \
+  --output json \
+  --no-interactive
 ```
 
 ### 查询告警规则列表
@@ -293,7 +428,8 @@ jdc monitor create-alarm \
 jdc monitor describe-alarms \
   --region-id cn-north-1 \
   --page-number 1 \
-  --page-size 20
+  --page-size 20 \
+  --output json
 ```
 
 ### 启用/禁用告警规则
@@ -302,13 +438,15 @@ jdc monitor describe-alarms \
 jdc monitor enable-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
-  --enabled true
+  --enabled true \
+  --output json
 
 # 禁用告警
 jdc monitor enable-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
-  --enabled false
+  --enabled false \
+  --output json
 ```
 
 ### 查询告警历史
@@ -317,7 +455,8 @@ jdc monitor describe-alarm-history \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
   --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-31T23:59:59Z"
+  --end-time "2024-01-31T23:59:59Z" \
+  --output json
 ```
 
 ### 上报自定义监控数据
@@ -327,7 +466,8 @@ jdc monitor put-metric-data \
   --namespace custom-namespace \
   --metric-name custom-metric \
   --value 100 \
-  --dimensions '{"instance":"app-server-01"}'
+  --dimensions '{"instance":"app-server-01"}' \
+  --output json
 ```
 
 ### 查询自定义监控数据
@@ -337,13 +477,15 @@ jdc monitor describe-custom-metric-data \
   --namespace custom-namespace \
   --metric-name custom-metric \
   --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-01T23:59:59Z"
+  --end-time "2024-01-01T23:59:59Z" \
+  --output json
 ```
 
 ## Reference 目录
 
 - [核心概念](references/core-concepts.md) - 云监控核心概念和术语
-- [CLI 使用指南](references/cli-usage.md) - 详细的 CLI 命令说明
+- [API & SDK 使用](references/api-sdk-usage.md) - SDK 操作映射、请求/响应字段、错误处理
+- [CLI 使用指南](references/cli-usage.md) - 详细的 CLI 命令说明、CLI vs API 覆盖对比
 - [故障排查指南](references/troubleshooting.md) - 常见问题及解决方案
 - [监控与告警](references/monitoring.md) - 监控指标和告警配置
 - [集成指南](references/integration.md) - SDK 和 MCP 集成
@@ -412,5 +554,4 @@ jdc monitor describe-custom-metric-data \
 - [京东云云监控产品页](https://www.jdcloud.com/cn/products/monitoring)
 - [云监控文档中心](https://docs.jdcloud.com/cn/monitoring/learning)
 - [云监控 API 文档](https://docs.jdcloud.com/cn/monitoring/api/overview)
-
-
+- [京东云 CLI](https://github.com/jdcloud-api/jdcloud-cli)

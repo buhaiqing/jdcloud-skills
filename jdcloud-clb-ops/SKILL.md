@@ -1,345 +1,331 @@
 ---
 name: jdcloud-clb-ops
 description: >-
-  Manages JD Cloud CLB (Cloud Load Balancer) resources. Use when you need to deploy, 
-  configure, troubleshoot, or monitor CLB instances on JD Cloud.
-  Includes CLI usage, SDK integration, and operational best practices.
+  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
+  Load Balancer (ALB/NLB/DNLB) via official API/SDK; user mentions
+  Load Balancer, 负载均衡, ALB, NLB, DNLB, or tasks target load balancer
+  instances, listeners, backend services, or target groups.
+license: MIT
+compatibility: >-
+  Official JD Cloud SDK (Python 3.10+), valid API credentials, network
+  access to JD Cloud endpoints. Note: Official JD Cloud CLI (jdc) does NOT
+  support Load Balancer products at this time — SDK/API-only.
+metadata:
+  author: jdcloud
+  version: "1.0.1"
+  last_updated: "2026-05-03"
+  runtime: Harness AI Agent
+  api_profile: "Application Load Balancer API v1 / Network Load Balancer API v1"
+  cli_applicability: sdk-only
+  cli_support_evidence: >-
+    Official JD Cloud CLI product list from `jdc --help` shows: mps, cps, rds,
+    jke, vpc, xdata, mongodb, redis, nc, monitor, iam, disk, cr, vm, oss, etc.
+    No alb, nlb, lb, or loadbalancer commands are present. Verified against
+    official CLI documentation at https://docs.jdcloud.com/cn/cli/introduction
+    and GitHub repository https://github.com/jdcloud-api/jdcloud-cli.
+  environment:
+    - JDC_ACCESS_KEY
+    - JDC_SECRET_KEY
+    - JDC_REGION
 ---
 
-# JD Cloud CLB (Cloud Load Balancer) Operations Skill
+> This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
+
+# JD Cloud Load Balancer (CLB) Operations Skill
 
 ## Overview
-CLB (Cloud Load Balancer) is a core service on JD Cloud that provides distributed traffic distribution capabilities to improve application availability and performance. This skill enables efficient operations, including automated deployment, real-time monitoring, and rapid troubleshooting of CLB instances.
+
+JD Cloud Load Balancer provides traffic distribution services across multiple backend servers, ensuring high availability and scalability for cloud applications. This skill covers three load balancer types:
+
+- **Application Load Balancer (ALB)**: Seven-layer (L7) load balancing for HTTP/HTTPS traffic, supporting domain/URL-based routing, SSL certificates, and redirect features.
+- **Network Load Balancer (NLB)**: Four-layer (L4) load balancing for TCP/UDP traffic, supporting source IP transparency and session persistence.
+- **Distributed Network Load Balancer (DNLB)**: Four-layer stateless load balancing (free tier), designed for ultra-high concurrency scenarios.
+
+This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, SDK/API execution paths, response validation, and failure recovery.
+
+### CLI Applicability (Repository Policy)
+
+- **`cli_applicability: sdk-only`:** Official JD Cloud CLI (`jdc`) does **not** expose Load Balancer products (ALB/NLB/DNLB). This skill operates **exclusively** via official JD Cloud SDK/API. The `references/cli-usage.md` file is omitted per governance policy.
+- **Evidence:** `jdc --help` output lists supported products: `{mps,cps,rds,jke,vpc,xdata,mongodb,redis,nc,monitor,iam,disk,cr,vm,oss,...}` with no LB-related commands. Official CLI docs confirm this at https://docs.jdcloud.com/cn/cli/introduction.
 
 ## Trigger & Scope (Agent-Readable)
 
 ### SHOULD Use This Skill When
-- User mentions "JD Cloud CLB" OR "负载均衡" OR "Cloud Load Balancer"
-- Task involves CRUD operations on CLB resources: create, describe, modify, delete, list
-- Task keywords: load balancer, listener, backend server, health check, SSL certificate
-- User asks to deploy, configure, troubleshoot, or monitor CLB resources
+
+- User mentions "JD Cloud Load Balancer" OR "负载均衡" OR "ALB" OR "NLB" OR "DNLB"
+- Task involves CRUD or lifecycle operations on **load balancer instances** (create, describe, modify, delete, list)
+- Task involves **listeners** (create, configure, delete, manage SSL certificates)
+- Task involves **backend services** and **target groups** (register/deregister servers, health checks)
+- Task keywords: createLoadBalancer, describeLoadBalancers, createListener, registerTargets, ssl证书, 监听器, 后端服务
+- User asks to deploy, configure, troubleshoot, or monitor Load Balancer **via API, SDK, or automation**
 
 ### SHOULD NOT Use This Skill When
-- Task is purely about billing / account management → delegate to: `jdcloud-billing-ops`
-- Task is about IAM / user permission management → delegate to: `jdcloud-iam-ops`
-- Task is about VPC network configuration → delegate to: `jdcloud-vpc-ops`
+
+- Task is purely billing / account management → delegate to: `jdcloud-billing-ops` (when present)
+- Task is IAM / permission model only → delegate to: `jdcloud-iam-ops` (when present)
+- Task is about **VPC / subnet** creation → delegate to: `jdcloud-vpc-ops`
+- Task is about **VM instance** creation → delegate to: `jdcloud-vm-ops`
+- Task is about **SSL certificate** issuance/purchase (not LB binding) → delegate to: `ssl-certificate` skill
+- User insists on **console-only** flows with no API → state limitation; do not invent undocumented HTTP steps
 
 ### Delegation Rules
-- If the user asks about resource B that depends on CLB created/managed here, create CLB first then suggest chaining to the B-specific Skill
-- If the request spans multiple unrelated products, process each with its corresponding Skill independently
+
+- If load balancer depends on VPC/subnet, verify VPC existence via `jdcloud-vpc-ops` before creating LB.
+- If backend servers are VMs, verify VM status via `jdcloud-vm-ops` before registering targets.
+- Multi-product requests: handle each product with its skill; do not merge unrelated APIs into one ambiguous flow.
 
 ## Variable Convention (Agent-Readable)
-This Skill uses structured placeholders to avoid prompt injection and parsing ambiguity:
+
+Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Placeholder | Meaning | Agent Action |
 |-------------|---------|--------------|
-| `{{env.JDC_ACCESS_KEY}}` | Resolved from Agent runtime environment | NEVER prompt user for this; fail if not set |
-| `{{env.JDC_SECRET_KEY}}` | Resolved from Agent runtime environment | NEVER prompt user for this; fail if not set |
-| `{{env.JDC_REGION}}` | Resolved from Agent runtime environment | Use `cn-north-1` as default if unset |
-| `{{user.region}}` | Must be collected from user | Ask user once and reuse |
-| `{{user.clb_name}}` | Must be collected from user | Ask user once and reuse |
-| `{{user.clb_id}}` | Must be collected from user | Ask user once and reuse |
-| `{{user.listener_id}}` | Must be collected from user | Ask user once and reuse |
-| `{{user.cert_name}}` | Must be collected from user | Ask user once and reuse |
-| `{{user.cert_file}}` | Must be collected from user | Ask user for certificate file path |
-| `{{user.key_file}}` | Must be collected from user | Ask user for private key file path |
-| `{{user.cert_id}}` | Must be collected from user | Ask user once and reuse |
-| `{{user.new_cert_id}}` | Must be collected from user | Ask user for new certificate ID |
-| `{{user.old_cert_id}}` | Captured from CLI output | Parse from listener describe for rollback |
-| `{{user.domain}}` | Must be collected from user | Ask user for domain name |
-| `{{user.clb_ip}}` | Captured from CLI output | Parse from `$.data.ipAddress` |
-| `{{output.clb_id}}` | Captured from CLI JSON output | Parse from `$.data.clbId` |
-| `{{output.cert_id}}` | Captured from CLI JSON output | Parse from `$.data.certificateId` |
+| `{{env.JDC_ACCESS_KEY}}` | From runtime environment | NEVER ask the user; fail if unset |
+| `{{env.JDC_SECRET_KEY}}` | From runtime environment | NEVER ask the user; fail if unset |
+| `{{env.JDC_REGION}}` | From runtime environment | Use documented default only if skill explicitly allows |
+| `{{user.region}}` | User-supplied region | Ask once; reuse |
+| `{{user.loadbalancer_name}}` | User-supplied LB name | Ask once; reuse |
+| `{{user.loadbalancer_id}}` | User-supplied LB ID | Ask once; reuse |
+| `{{output.loadbalancer_id}}` | From last API JSON response | Parse per OpenAPI response schema for this operation |
 
-> Rule: Placeholders wrapped in `{{env.*}}` MUST NOT be exposed to or requested from the user. Placeholders wrapped in `{{user.*}}` MUST be collected interactively.
+> **`{{env.*}}` MUST NOT** be collected from the user. **`{{user.*}}`** MUST be collected interactively when missing.
 
-## Output Parsing Rules (Agent-Readable)
+## API and Response Conventions (Agent-Readable)
 
-### Mandatory CLI Conventions
-- All CLI commands MUST append `--output json` for machine-parseable output
-- All CLI commands SHOULD append `--no-interactive` (or equivalent) to prevent blocking on user prompts
-- Timestamps are in ISO 8601 format with timezone: `2026-04-28T10:00:00+08:00`
-- Resource IDs follow pattern: `clb-[hash]` (e.g., `clb-abc123def`)
-- Boolean values: `true` / `false` (lowercase)
+- **OpenAPI is canonical** for path, query, body fields, enums, and response shapes.
+- **Errors:** Map SDK/HTTP errors to `code` / `status` / message fields per spec.
+- **Timestamps:** ISO 8601 with timezone when the API returns strings (e.g. `2026-05-03T10:00:00+08:00`).
+- **Idempotency:** Document duplicate name behavior per API — ALB/NLB names must be unique within region.
 
-### Key JSON Paths for Common Operations
+### Response Field Table (OpenAPI-Accurate Paths)
+
 | Operation | JSON Path | Type | Description |
 |-----------|-----------|------|-------------|
-| Create | `$.data.clbId` | string | CLB instance ID to track |
-| Describe | `$.data.status` | string | Current state (e.g. `running`, `stopped`) |
-| List | `$.data[*].clbId` | array | All CLB instance IDs |
-| Modify | `$.data.success` | boolean | Whether modification succeeded |
-| Delete | `$.data.success` | boolean | Whether deletion succeeded |
+| Create LB | `$.result.loadBalancerId` | string | New load balancer ID |
+| Describe LB | `$.result.loadBalancer.status` | string | Lifecycle state (active, creating, deleting) |
+| List LBs | `$.result.loadBalancers[*].loadBalancerId` | array | IDs |
+| Create Listener | `$.result.listenerId` | string | New listener ID |
+| Register Targets | `$.requestId` | string | Non-empty means accepted |
 
 ### Expected State Transitions
+
 | Operation | Initial State | Target State | Poll Interval | Max Wait |
 |-----------|---------------|--------------|---------------|----------|
-| Create | - | `running` | 5s | 300s |
-| Start | `stopped` | `running` | 5s | 120s |
-| Stop | `running` | `stopped` | 5s | 120s |
-| Delete | `running`/`stopped` | (404 on describe) | 5s | 300s |
+| Create LB | — | `active` | 5s | 300s |
+| Create Listener | — | `active` | 5s | 120s |
+| Delete LB | any stable | absent (404 on describe) | 5s | 300s |
+| Delete Listener | `active` | absent | 5s | 60s |
 
 ## Changelog
 
 | Version | Date | Changes |
-|------|------|---------|
-| 1.1.0 | 2026-04-28 | Added SSL certificate management: upload, update, list, delete operations with full validation and rollback support |
-| 1.0.0 | 2026-04-28 | Initial version with basic CLB operations guide and reference templates |
+|---------|------|---------|
+| 1.0.0 | 2026-05-03 | Initial SDK-only skill for ALB/NLB/DNLB; CLI omitted per governance (CLI does not support LB products) |
+| 1.0.1 | 2026-05-03 | Added idempotency-checklist.md; expanded governance Scenario H for production LB rule mutation |
 
 ## Execution Flows (Agent-Readable)
-Every operation follows the pattern: Pre-flight → Execute → Validate → Recover. The Agent MUST NOT skip any phase.
 
-### Operation: Create CLB Instance
+Every operation: **Pre-flight → Execute (SDK/API) → Validate → Recover**. Do not skip phases.
+
+### Operation: Create Load Balancer (ALB/NLB)
 
 #### Pre-flight Checks
-| Check | Command | Expected | On Failure |
-|-------|---------|----------|------------|
-| CLI installed | `jdc --version` | exit code 0 | Guide user to install jdcloud-cli |
-| Credentials valid | `jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1 --output json` | `$.error == null` | Prompt user to run `jdc config init` |
-| Region available | `jdc clb describe-regions --output json` | `{{user.region}}` in list | Suggest nearest available region |
-| Quota available | `jdc clb describe-quota --region {{user.region}} --output json` | `$.available > 0` | Inform user of quota limit, suggest increase |
 
-#### Execution
-```bash
-jdc clb create-clb \
-  --region {{user.region}} \
-  --clb-name "{{user.clb_name}}" \
-  --output json \
-  --no-interactive
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| SDK / deps | Import `jdcloud_sdk.services.alb.client` | No import error | Document install pin in integration.md |
+| Credentials | Construct credential from env | Non-empty keys | HALT; user configures env |
+| Region | Call describeRegions if available | `{{user.region}}` supported | Suggest valid region |
+| VPC exists | `describeVpc` via jdcloud-vpc-ops | VPC found | HALT; user creates VPC first |
+| Quota | Check LB count via describeLoadBalancers | Within limit | HALT; user raises quota |
+
+#### Execution (Python SDK — ALB Example)
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.alb.client import AlbClient
+from jdcloud_sdk.services.alb.apis.CreateLoadBalancerRequest import CreateLoadBalancerRequest, CreateLoadBalancerSpec
+
+credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
+client = AlbClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))
+
+spec = CreateLoadBalancerSpec(
+    name="{{user.loadbalancer_name}}",
+    vpcId="{{user.vpc_id}}",
+    type="application",  # or "network" for NLB
+    chargeMode="postpaid_by_usage",
+    # additional fields per OpenAPI: azs, subnetMappings, etc.
+)
+req = CreateLoadBalancerRequest(regionId="{{user.region}}", spec=spec)
+resp = client.createLoadBalancer(req)
 ```
 
 #### Post-execution Validation
-1. Capture `{{output.clb_id}}` from `$.data.clbId`
-2. Poll until ready:
-   ```bash
-   for i in $(seq 1 60); do
-     STATUS=$(jdc clb describe-clb \
-       --clb-id {{output.clb_id}} \
-       --region {{user.region}} \
-       --output json | jq -r '.data.status')
-     [ "$STATUS" = "running" ] && break
-     sleep 5
-   done
-   ```
-3. If status is `running` → operation succeeded, report `{{output.clb_id}}` to user
-4. If status is `error` → capture error from `$.data.errorMessage`, go to Failure Recovery
+
+1. Read `{{output.loadbalancer_id}}` from `$.result.loadBalancerId`.
+2. Poll **describeLoadBalancer** until terminal success state (`active`) or timeout.
+
+```python
+# Pseudocode: use real describe request
+for _ in range(max_attempts):
+    dresp = client.describeLoadBalancer(describe_request)
+    status = dresp.result.loadBalancer.status
+    if status == "active":
+        break
+    if status in ("error", "failed"):
+        raise RuntimeError(dresp.result.loadBalancer.errorMsg)
+    sleep(poll_interval_seconds)
+```
+
+3. On success, report `{{output.loadbalancer_id}}` and VIP/EIP to user.
+4. On terminal failure, go to **Failure Recovery**.
 
 #### Failure Recovery
-| Exit Code | Error Pattern (regex) | Max Retries | Backoff | Agent Action |
-|-----------|-----------------------|-------------|---------|--------------|
-| 1 | `InvalidParameter` | 1 | - | Re-check parameter format against API spec, retry with corrected params |
-| 1 | `QuotaExceeded` | 0 | - | HALT. Inform user quota is full, suggest requesting increase |
-| 1 | `InsufficientBalance` | 0 | - | HALT. Inform user to top up account |
-| 2 | `ResourceAlreadyExists` | 0 | - | Ask user if they want to reuse existing resource or use a different name |
-| 3 | `InternalError` | 3 | 2s, 4s, 8s | Retry with exponential backoff. After 3rd failure, report to user |
-| Other | `.*` | 3 | 5s, 10s, 15s | Retry. On final failure, extract full error message and present to user |
 
-### Operation: Describe CLB Instance
+| Error pattern | Max retries | Backoff | Agent Action |
+|---------------|-------------|---------|--------------|
+| `InvalidParameter` / 400 | 0–1 | — | Fix args from OpenAPI; retry once if safe |
+| `QuotaExceeded` | 0 | — | HALT |
+| `InsufficientBalance` | 0 | — | HALT |
+| `NameAlreadyExists` | 0 | — | Ask new name |
+| Throttling / 429 | 3 | exponential | Back off; respect Retry-After |
+| `InternalError` / 5xx | 3 | 2s, 4s, 8s | Retry; then HALT with requestId |
 
-#### Execution
-```bash
-jdc clb describe-clb \
-  --clb-id {{user.clb_id}} \
-  --region {{env.JDC_REGION}} \
-  --output json
-```
-
-#### Output to Present to User
-| Field | JSON Path | Display Format |
-|-------|-----------|----------------|
-| ID | `$.data.clbId` | Plain text |
-| Name | `$.data.clbName` | Plain text |
-| Status | `$.data.status` | Badge: 🟢 running / 🟡 pending / 🔴 error |
-| Created At | `$.data.createTime` | ISO 8601 → human-readable |
-| IP Address | `$.data.ipAddress` | `-` if null |
-
-### Operation: Delete CLB Instance
-
-#### Pre-flight (Safety Gate)
-- **MUST** ask user: "Are you sure you want to delete `{{user.clb_name}}` ({{user.clb_id}})? This is irreversible."
-- **MUST** wait for explicit "yes" / "confirm" before proceeding
+### Operation: Describe Load Balancer
 
 #### Execution
-```bash
-jdc clb delete-clb \
-  --clb-id {{user.clb_id}} \
-  --region {{env.JDC_REGION}} \
-  --output json \
-  --no-interactive
+
+Use SDK **describeLoadBalancer** or **describeLoadBalancers** matching OpenAPI.
+
+```python
+req = DescribeLoadBalancerRequest(regionId="{{user.region}}", loadBalancerId="{{user.loadbalancer_id}}")
+resp = client.describeLoadBalancer(req)
 ```
 
-#### Post-execution Validation
-1. Poll `describe` until it returns HTTP 404 or `status: "deleted"` (max 300s)
+#### Present to User
 
-### Operation: Upload SSL Certificate
+| Field | Path | Notes |
+|-------|------|-------|
+| ID | `$.result.loadBalancer.loadBalancerId` | Plain text |
+| Name | `$.result.loadBalancer.name` | Plain text |
+| Status | `$.result.loadBalancer.status` | Human-readable |
+| VIP | `$.result.loadBalancer.vip` | IP address |
+| EIP | `$.result.loadBalancer.eip` | Elastic IP if bound |
+
+### Operation: Create Listener
 
 #### Pre-flight Checks
-| Check | Command | Expected | On Failure |
-|-------|---------|----------|------------|
-| Certificate file exists | `test -f {{user.cert_file}}` | exit code 0 | Guide user to provide correct certificate path |
-| Private key file exists | `test -f {{user.key_file}}` | exit code 0 | Guide user to provide correct private key path |
-| Certificate format valid | `openssl x509 -in {{user.cert_file}} -noout` | exit code 0 | Validate certificate format (PEM) |
-| Key matches certificate | `openssl x509 -noout -modulus -in {{user.cert_file}} \| openssl md5` vs `openssl rsa -noout -modulus -in {{user.key_file}} \| openssl md5` | MD5 hashes match | Verify certificate and key pair match |
 
-#### Execution
-```bash
-jdc clb upload-certificate \
-  --region {{env.JDC_REGION}} \
-  --certificate-name "{{user.cert_name}}" \
-  --certificate-content "$(cat {{user.cert_file}})" \
-  --private-key "$(cat {{user.key_file}})" \
-  --output json \
-  --no-interactive
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| LB exists | describeLoadBalancer | `active` status | HALT; create/wait for LB first |
+| Protocol valid | Per LB type (ALB: HTTP/HTTPS; NLB: TCP/UDP) | Supported protocol | Suggest valid protocol |
+| Port available | Check existing listeners | Port not in use | Suggest alternative port |
+
+#### Execution (Python SDK — HTTPS Listener)
+
+```python
+from jdcloud_sdk.services.alb.apis.CreateListenerRequest import CreateListenerRequest, CreateListenerSpec
+
+spec = CreateListenerSpec(
+    protocol="https",
+    port=443,
+    loadBalancerId="{{output.loadbalancer_id}}",
+    certificateSpec={"certificateId": "{{user.certificate_id}}"},
+    # additional fields: tlsPolicy, connectionIdleTimeout, etc.
+)
+req = CreateListenerRequest(regionId="{{user.region}}", spec=spec)
+resp = client.createListener(req)
 ```
 
 #### Post-execution Validation
-1. Capture `{{output.cert_id}}` from `$.data.certificateId`
-2. Verify certificate uploaded:
-   ```bash
-   jdc clb describe-certificate \
-     --certificate-id {{output.cert_id}} \
-     --region {{env.JDC_REGION}} \
-     --output json
-   ```
-3. Check certificate details:
-   - Common Name (CN) matches expected domain
-   - Validity period (not expired)
-   - Issuer information
 
-#### Failure Recovery
-| Exit Code | Error Pattern (regex) | Max Retries | Backoff | Agent Action |
-|-----------|-----------------------|-------------|---------|--------------|
-| 1 | `InvalidCertificate` | 0 | - | HALT. Certificate format invalid, guide user to check PEM format |
-| 1 | `CertificateExpired` | 0 | - | HALT. Certificate already expired, request new certificate |
-| 1 | `KeyMismatch` | 0 | - | HALT. Private key doesn't match certificate, verify key pair |
-| 1 | `DuplicateCertificate` | 0 | - | Ask user if they want to update existing certificate or use different name |
-| 3 | `InternalError` | 3 | 2s, 4s, 8s | Retry with exponential backoff |
+1. Capture `{{output.listener_id}}` from `$.result.listenerId`.
+2. Poll describeListener until `active` status.
+3. Report listener ID and bound certificate to user.
 
-### Operation: Update SSL Certificate on Listener
+### Operation: Register Targets (Backend Servers)
 
 #### Pre-flight Checks
-| Check | Command | Expected | On Failure |
-|-------|---------|----------|------------|
-| Listener exists | `jdc clb describe-listener --clb-id {{user.clb_id}} --listener-id {{user.listener_id}} --region {{env.JDC_REGION}} --output json` | `$.data.protocol == "HTTPS"` | Verify listener uses HTTPS protocol |
-| New certificate available | `jdc clb describe-certificate --certificate-id {{user.new_cert_id}} --region {{env.JDC_REGION}} --output json` | `$.data.status == "active"` | Ensure certificate is active and valid |
-| Current certificate info | Parse from listener describe output | Extract `$.data.certificateId` | Document current certificate for rollback |
 
-#### Execution
-```bash
-jdc clb modify-listener \
-  --clb-id {{user.clb_id}} \
-  --listener-id {{user.listener_id}} \
-  --region {{env.JDC_REGION}} \
-  --certificate-id {{user.new_cert_id}} \
-  --output json \
-  --no-interactive
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| Target group exists | describeTargetGroup | Found | Create target group first |
+| Backend VM/IP reachable | Ping/describe VM | VM running | HALT; fix backend server |
+| Port valid | 1-65535 | Valid range | Fix port |
+
+#### Execution (Python SDK)
+
+```python
+from jdcloud_sdk.services.alb.apis.RegisterTargetsRequest import RegisterTargetsRequest, TargetSpec
+
+targets = [
+    TargetSpec(targetId="{{user.vm_id_1}}", port=80, weight=10),
+    TargetSpec(targetId="{{user.vm_id_2}}", port=80, weight=10),
+]
+req = RegisterTargetsRequest(
+    regionId="{{user.region}}",
+    targetGroupId="{{user.target_group_id}}",
+    targets=targets
+)
+resp = client.registerTargets(req)
 ```
 
 #### Post-execution Validation
-1. Wait 30 seconds for changes to propagate
-2. Verify listener updated:
-   ```bash
-   jdc clb describe-listener \
-     --clb-id {{user.clb_id}} \
-     --listener-id {{user.listener_id}} \
-     --region {{env.JDC_REGION}} \
-     --output json
-   ```
-3. Confirm `$.data.certificateId == {{user.new_cert_id}}`
-4. Test HTTPS connectivity:
-   ```bash
-   curl -I https://{{user.domain}} --resolve {{user.domain}}:443:{{user.clb_ip}}
-   ```
-5. Verify SSL certificate served:
-   ```bash
-   echo | openssl s_client -connect {{user.clb_ip}}:443 -servername {{user.domain}} 2>/dev/null | openssl x509 -noout -dates
-   ```
 
-#### Rollback Plan
-If validation fails:
-1. Immediately revert to previous certificate:
-   ```bash
-   jdc clb modify-listener \
-     --clb-id {{user.clb_id}} \
-     --listener-id {{user.listener_id}} \
-     --region {{env.JDC_REGION}} \
-     --certificate-id {{user.old_cert_id}} \
-     --output json \
-     --no-interactive
-   ```
-2. Notify user of failure and provide error details
+1. Call describeTargetHealth to verify backend health status.
+2. Report registered targets and health check results.
 
-### Operation: List SSL Certificates
-
-#### Execution
-```bash
-jdc clb describe-certificates \
-  --region {{env.JDC_REGION}} \
-  --output json
-```
-
-#### Output to Present to User
-| Field | JSON Path | Display Format |
-|-------|-----------|----------------|
-| Certificate ID | `$.data[*].certificateId` | Plain text |
-| Certificate Name | `$.data[*].certificateName` | Plain text |
-| Common Name | `$.data[*].commonName` | Plain text |
-| Expiration Date | `$.data[*].expireTime` | ISO 8601 → human-readable + days remaining |
-| Status | `$.data[*].status` | Badge: 🟢 active / 🔴 expired |
-| Created At | `$.data[*].createTime` | ISO 8601 → human-readable |
-
-### Operation: Delete SSL Certificate
+### Operation: Delete Load Balancer
 
 #### Pre-flight (Safety Gate)
-- **MUST** check if certificate is attached to any listeners
-- **MUST** ask user: "Certificate `{{user.cert_name}}` ({{user.cert_id}}) will be deleted. If attached to listeners, this may cause service disruption. Continue?"
-- **MUST** wait for explicit "yes" / "confirm" before proceeding
+
+- **MUST** obtain explicit confirmation: irreversible delete of `{{user.loadbalancer_name}}` (`{{user.loadbalancer_id}}`).
+- **MUST NOT** proceed without clear user assent.
 
 #### Execution
-```bash
-jdc clb delete-certificate \
-  --certificate-id {{user.cert_id}} \
-  --region {{env.JDC_REGION}} \
-  --output json \
-  --no-interactive
+
+```python
+req = DeleteLoadBalancerRequest(regionId="{{user.region}}", loadBalancerId="{{user.loadbalancer_id}}")
+resp = client.deleteLoadBalancer(req)
 ```
 
 #### Post-execution Validation
-1. Verify deletion:
-   ```bash
-   jdc clb describe-certificate \
-     --certificate-id {{user.cert_id}} \
-     --region {{env.JDC_REGION}} \
-     --output json
-   ```
-2. Should return HTTP 404 or error indicating certificate not found
+
+Poll describeLoadBalancer until **404**, **NotFound**, or status indicates deleted — within max wait (300s).
 
 ## Prerequisites
-1. **Install JD Cloud CLI**:
+
+1. **Install** the JD Cloud SDK package(s):
    ```bash
-   pip install jdcloud_cli
-   jdc config init
+   pip install jdcloud-sdk
    ```
-2. **Configure Credentials**:
-   The Agent runtime MUST have the following environment variables set. These map to `{{env.*}}` placeholders used throughout this Skill:
+
+2. **Environment variables** (fail if missing for secrets):
+
    ```bash
    export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
    export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
    export JDC_REGION="cn-north-1"
    ```
-   > The Agent MUST verify these are set before any operation. If missing, instruct user to configure via `jdc config init`.
 
 ## Reference Directory
+
 - [Core Concepts](references/core-concepts.md)
-- [CLI Usage](references/cli-usage.md)
+- [API & SDK Usage](references/api-sdk-usage.md)
+- [Idempotency Checklist](references/idempotency-checklist.md)
 - [Troubleshooting Guide](references/troubleshooting.md)
 - [Monitoring & Alerts](references/monitoring.md)
-- [Integration (MCP/SDK)](references/integration.md)
-- [SSL Certificate Management Best Practices](references/ssl-certificate-management.md)
+- [Integration](references/integration.md)
+- [SSL Certificate Management](references/ssl-certificate-management.md)
+
+> Note: `references/cli-usage.md` is omitted because JD Cloud CLI does not support Load Balancer products.
 
 ## Operational Best Practices
-- **High Availability**: Always deploy across multiple availability zones.
-- **Security**: Apply least-privilege IAM policies.
-- **Cost Optimization**: Utilize auto-scaling and reserved instances where applicable.
-- **Health Monitoring**: Configure health checks for backend servers to ensure traffic is only routed to healthy instances.
-- **SSL Termination**: Use CLB for SSL termination to reduce backend server load.
+
+- **High Availability:** Deploy load balancers across multiple availability zones.
+- **Security:** Bind appropriate SSL certificates for HTTPS listeners; enable TLS 1.2+ policies.
+- **Health Checks:** Configure appropriate health check intervals and thresholds for backend services.
+- **Cost Optimization:** Use DNLB (free tier) for appropriate high-concurrency stateless scenarios.
+- **Resource Tagging:** Tag load balancer resources for better organization and cost tracking.

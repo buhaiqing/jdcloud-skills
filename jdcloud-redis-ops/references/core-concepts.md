@@ -1,279 +1,314 @@
 # JD Cloud Redis Core Concepts
 
-## What is JCS for Redis
+## What is JD Cloud Redis (分布式缓存)
 
-JD Cloud Cache Redis (JCS for Redis) is a high-performance online caching service based on the Redis protocol. It provides:
+JD Cloud Redis (分布式缓存/云缓存 Redis) is a high-performance, distributed cache service fully compatible with open-source Redis protocol. It provides elastic, scalable, and reliable caching with automatic failover, data backup, and online scaling capabilities. Built on JD Cloud's infrastructure, it delivers high throughput, low latency, and enterprise-grade reliability tested through JD's major promotional events.
 
-- **Automatic Disaster Recovery**: Master-slave architecture with automatic failover
-- **Data Backup**: Automated backup and point-in-time recovery
-- **Online Scaling**: Seamless configuration changes without downtime
-- **Instance Monitoring**: Real-time metrics and alerting
-- **High Performance**: In-memory data store supporting millions of QPS
+## Instance Architecture Types
 
-Redis is widely used for caching, session management, leaderboards, message queues, and real-time analytics.
+JD Cloud Redis supports three architecture types to meet different business requirements:
+
+### 1. Standard Version (master-slave)
+
+- **Architecture**: Single-shard master-slave replication
+- **Use Cases**: Small-scale applications, development/testing, personal learning, small websites
+- **Features**:
+  - Memory capacity: 1GB - 32GB
+  - High availability with master-slave hot standby
+  - Automatic failover when master fails
+  - Suitable for scenarios with moderate QPS requirements
+- **Instance Type Code**: `master-slave`
+
+### 2. Proxy Cluster Version (cluster)
+
+- **Architecture**: Proxy-based distributed cluster with multiple shards behind proxy layer
+- **Use Cases**: Mid-to-large scale internet applications, high-concurrency scenarios
+- **Features**:
+  - Memory capacity: 4GB - 4TB (up to 128 shards)
+  - Proxy layer handles request routing and load balancing
+  - Smooth scaling without service interruption
+  - Supports 16-256 DBs
+  - Suitable for scenarios requiring large capacity and high throughput
+- **Instance Type Code**: `cluster`
+
+### 3. Native Cluster Version (native-cluster)
+
+- **Architecture**: Redis Cluster (open-source native cluster architecture)
+- **Use Cases**: Large-scale applications requiring direct connection, ultra-low latency
+- **Features**:
+  - Memory capacity: 3GB - 2TB (up to 128 shards)
+  - Direct client connection to Redis nodes (bypass proxy)
+  - Lower latency, higher performance
+  - Full Redis Cluster protocol compatibility
+  - Optional SmartProxy for compatibility with non-cluster-aware clients
+- **Instance Type Code**: `native-cluster`
+
+## Redis Versions
+
+JD Cloud Redis supports multiple versions:
+
+| Version | Status | Features |
+|---------|--------|----------|
+| Redis 2.8 | Deprecated | No longer sold, existing instances maintained |
+| Redis 4.0 | Available | Stable, widely used, supports Stream data type |
+| Redis 5.0 | Available | Enhanced Stream, new data structures |
+| Redis 6.2 | Available | Latest features, improved performance, ACL enhancements |
+
+**Note**: Version cannot be changed after instance creation. To upgrade, create a new instance and migrate data.
 
 ## Core Components
 
-### 1. Instance Architecture
+### 1. Shards (分片)
 
-#### Standalone (单节点)
-- Single node deployment
-- Suitable for development and testing
-- No high availability guarantee
-- Lower cost
+- Basic unit of data storage in cluster architectures
+- Each shard contains master and replica nodes
+- Data is distributed across shards via hash slots
+- More shards = higher total QPS capacity and bandwidth
 
-#### Master-Slave (主从)
-- Master node + one or more replica nodes
-- Automatic failover if master fails
-- Read/write splitting support
-- Recommended for production workloads
+### 2. Replicas (副本)
 
-#### Cluster (集群)
-- Multiple shards with data partitioning
-- Horizontal scaling support
-- Higher throughput and capacity
-- Suitable for large-scale production systems
+- Master node: handles read/write operations
+- Slave/Replica node: replicates master data, provides read scaling and failover
+- Default: 2 replicas (1 master + 1 slave) for high availability
+- Single replica (1 master only) available for small instances (<1GB), but no HA guarantee
 
-### 2. Instance Specifications
+### 3. VPC and Subnet
 
-JD Cloud Redis provides various instance classes:
+- Redis instances must be created within a VPC
+- Subnet must have sufficient IP addresses for instance nodes
+- Internal network access for security and performance
+- Optional public network access via specific configuration
 
-| Spec Code | Memory | Max Connections | Bandwidth | Use Case |
-|-----------|--------|-----------------|-----------|----------|
-| redis.sw.1g | 1 GB | 10,000 | 96 Mbps | Small applications |
-| redis.sw.2g | 2 GB | 10,000 | 96 Mbps | Medium applications |
-| redis.sw.4g | 4 GB | 20,000 | 192 Mbps | Large applications |
-| redis.sw.8g | 8 GB | 20,000 | 192 Mbps | High-traffic services |
-| redis.sw.16g | 16 GB | 40,000 | 384 Mbps | Enterprise applications |
-| redis.sw.32g | 32 GB | 40,000 | 384 Mbps | Large-scale caching |
+### 4. Availability Zones
 
-> Note: Specifications may vary by region. Use `jdc redis describe-spec-config` to query available specs.
+- Master and slave can be placed in different AZs for cross-AZ HA
+- AzIdSpec defines AZ placement strategy:
+  - `SpecifyByReplicaGroup`: Specify AZ for each replica group
+  - `SpecifyByCluster`: Specify AZ range for entire cluster
 
-### 3. Redis Versions
+## Instance Specifications
 
-| Version | Features | Status |
-|---------|----------|--------|
-| 4.0 | Basic Redis features, cluster support | Stable |
-| 5.0 | Streams, enhanced modules | Stable, Recommended |
-| 6.2 | ACL, client caching, string commands | Latest, Recommended |
+### Memory and Performance
 
-### 4. Networking
+Specifications are determined by:
+- **Memory capacity**: Per-shard memory size
+- **CPU cores**: Processing power per shard
+- **Bandwidth**: Network throughput limit
+- **Connection limit**: Maximum concurrent connections
+- **QPS**: Queries per second capacity
 
-#### VPC (Virtual Private Cloud)
-- Redis instances are deployed in VPC
-- Logically isolated network environment
-- Customizable IP address range and subnets
-- Low-latency internal network access
+### Common Spec Codes
 
-#### Connection Methods
-- **Internal Endpoint**: Access from JD Cloud VMs in the same VPC (recommended)
-- **Public Endpoint**: Access from internet (requires enabling, not recommended for production)
-- **Domain Name**: Stable connection domain that remains unchanged during failover
+Standard version examples:
+- `redis.micro`: 1GB memory
+- `redis.small`: 2GB memory
+- `redis.medium`: 4GB memory
+- `redis.large`: 8GB memory
 
-### 5. Security
+Cluster version examples:
+- `redis.cluster.g.micro`: Cluster, 1GB per shard
+- `redis.cluster.g.small`: Cluster, 2GB per shard
 
-#### Whitelist (IP White List)
-- Controls which IPs can access the Redis instance
-- Supports CIDR notation (e.g., 192.168.1.0/24)
-- Default: no whitelist (deny all)
-- Best practice: only allow specific application server IPs
-
-#### Password Authentication
-- Required by default for all instances
-- Supports complex passwords (letters + numbers + special characters)
-- Can be reset without recreating instance
-- Password changes disconnect existing clients
-
-#### IAM Access Control
-- Fine-grained permissions for Redis operations
-- Supports RAM roles and policies
-- Implement least-privilege principle
-
-### 6. Data Persistence
-
-#### RDB (Redis Database)
-- Snapshot-based persistence
-- Configurable save intervals
-- Point-in-time recovery
-- Used for backup and restore
-
-#### AOF (Append Only File)
-- Command log-based persistence
-- Higher data durability
-- Can be enabled/disabled online
-- Larger file size than RDB
-
-#### Backup Policy
-- Automated daily backups
-- Retention period: 7-732 days
-- Manual backup on-demand
-- Download backup files for offline analysis
+Use `describeInstanceClass` or `describeSpecConfig` API to query available specs.
 
 ## Instance Lifecycle
+
+### Instance States
+
+| State | Description | Operable Actions |
+|-------|-------------|------------------|
+| Creating | Instance being provisioned | None (wait) |
+| Running | Instance operational | Modify, backup, restart, delete |
+| Modifying | Configuration change in progress | None (wait) |
+| Error | Instance creation or operation failed | Delete, retry |
+| Deleted | Instance terminated | None |
 
 ### State Transitions
 
 ```
-Creating → Running ↔ Restarting
-               ↓
-           Changing (resizing)
-               ↓
-           Deleting → Deleted
+Creating → Running ↔ Modifying
+              ↓
+           Error
+              ↓
+           Deleted
 ```
-
-### Main States
-
-| State | Description | Operable Actions |
-|-------|-------------|------------------|
-| creating | Instance being provisioned | None |
-| running | Instance running normally | Resize, backup, restart, delete, modify config |
-| changing | Configuration change in progress | None |
-| restarting | Instance restarting | None |
-| deleted | Instance deleted | None |
-| error | Instance in error state | Contact support |
 
 ## Billing Models
 
-### By Payment Method
+### 1. Pay-As-You-Go (postpaid_by_duration)
 
-1. **Pay-As-You-Go (按配置计费)**
-   - Billed hourly based on instance specifications
-   - Suitable for short-term or variable workloads
-   - Can be released at any time
-   - Higher unit price
+- Billed by hour based on instance configuration
+- Suitable for short-term testing, fluctuating workloads
+- Can be released at any time
+- Higher unit price compared to subscription
 
-2. **Subscription (包年包月)**
-   - Monthly or yearly billing
-   - Suitable for long-term stable workloads
-   - More cost-effective (up to 30% discount)
-   - Cannot be canceled mid-term
+### 2. Subscription (prepaid_by_duration)
+
+- Monthly or yearly subscription
+- Suitable for long-term stable workloads
+- More cost-effective (discounts for longer terms)
+- Can purchase up to 3 years
+- Cannot cancel at any time (committed period)
 
 ### Billing Items
 
-- Instance specifications (memory size)
-- Architecture type (standalone, master-slave, cluster)
-- Backup storage (if exceeds free quota)
-- Public network bandwidth (if enabled)
+- Instance specifications (memory, CPU, shard count)
+- Storage (if applicable)
+- Network bandwidth
+- Backup storage (optional)
 
-## High Availability Architecture
+## High Availability and Disaster Recovery
 
-### Master-Slave Replication
-- Synchronous replication from master to slave
-- Automatic failover within seconds
-- No data loss during failover (with AOF enabled)
-- Transparent to applications (stable domain name)
+### Automatic Failover
 
-### Cluster Sharding
-- Data distributed across multiple shards using hash slots
-- Each shard has master-slave replication
-- Horizontal scaling by adding shards
-- Clients support cluster mode (JedisCluster, RedisCluster)
+- Master-slave architecture ensures HA
+- Automatic detection of master failure
+- Slave promotes to master within seconds
+- Service interruption minimized (<30s typically)
 
-### Multi-AZ Deployment
-- Deploy master and slave in different availability zones
-- Protection against AZ-level failures
-- Slightly higher latency due to cross-AZ replication
-- Recommended for critical production workloads
+### Cross-AZ Deployment
+
+- Deploy master and slave in different AZs
+- Protect against AZ-level failures
+- Same-region cross-AZ network is low-latency
+- Recommended for production environments
+
+### Data Persistence
+
+- AOF (Append-Only File) persistence available
+- RDB snapshots via backup feature
+- Persistence can be enabled on slave nodes
+- Backup retention configurable
+
+## Security Features
+
+### 1. VPC Isolation
+
+- Instances run in user's VPC
+- Network isolation from other tenants
+- Access controlled by subnet and security groups
+
+### 2. IP Whitelist
+
+- Control which IPs can connect to Redis
+- Modify via `modifyIpWhiteList` API
+- Supports both VPC and public IPs
+
+### 3. Password Authentication
+
+- Redis password for client authentication
+- Reset via `resetCacheInstancePassword` API
+- IAM accounts with granular permissions (Redis 6.2+)
+
+### 4. Command Restriction
+
+- Disable dangerous commands (FLUSHALL, KEYS, etc.)
+- Configure via `setDisableCommands` API
+- Protect against accidental data loss
 
 ## Performance Optimization
 
-### 1. Avoid Big Keys
-- Keys with large values (>10KB) or many elements (>10,000)
-- Causes blocking operations and memory fragmentation
-- Use `SCAN` instead of `KEYS *`
-- Monitor with big key analysis feature
+### Hot Key and Big Key Analysis
 
-### 2. Avoid Hot Keys
-- Keys accessed very frequently (>10,000 QPS)
-- Causes single-node bottleneck
-- Use local caching for hot keys
-- Monitor with hot key analysis feature
+- Identify frequently accessed keys (hot keys)
+- Find oversized keys (big keys) affecting performance
+- Use `createCacheAnalysis` and `createBigKeyAnalysis` APIs
+- Regular analysis helps optimize data structure
 
-### 3. Connection Pooling
-- Use connection pools (JedisPool, Lettuce pool)
-- Avoid creating new connections per request
-- Configure pool size based on concurrency
-- Typical pool size: 2-4x concurrent threads
+### Slow Log Analysis
 
-### 4. Pipeline & Transactions
-- Use pipeline for batch operations
-- Reduce network round-trips
-- MULTI/EXEC for atomic operations
-- Avoid long transactions (blocking)
+- Query slow operations via `describeSlowLog` API
+- Identify performance bottlenecks
+- Optimize slow commands or data structures
 
-### 5. Memory Management
-- Configure `maxmemory` appropriately
-- Set eviction policy: `allkeys-lru` (recommended)
-- Monitor memory usage regularly
-- Avoid memory fragmentation
+### Connection Pool Optimization
 
-## Security Best Practices
+- Use connection pooling for high-concurrency clients
+- Properly configure pool size based on instance connection limit
+- Refer to best practices for JedisPool, Lettuce, etc.
 
-1. **Enable Whitelist**: Only allow application server IPs
-2. **Strong Password**: Use complex passwords, rotate regularly
-3. **Disable Dangerous Commands**: FLUSHALL, FLUSHDB, KEYS, CONFIG
-4. **Private Network Only**: Avoid public endpoints for production
-5. **IAM Policies**: Implement least-privilege access control
-6. **Encryption in Transit**: Use TLS for sensitive data (if supported)
-7. **Audit Logs**: Monitor access patterns and anomalies
+## Data Migration
+
+### Migration Tools
+
+- **RDTS**: JD Cloud's dedicated migration tool for Redis
+- **redis-cli**: For offline data import
+- **Third-party tools**: Support for open-source migration tools
+
+### Migration Strategies
+
+- Online migration: Minimal downtime
+- Offline migration: Full data export/import
+- Verify data consistency after migration
+
+## Monitoring and Alerts
+
+### Key Metrics
+
+- CPU utilization
+- Memory usage
+- Connection count
+- QPS (queries per second)
+- Network bandwidth
+- Slow log count
+
+### Alert Configuration
+
+- Set thresholds via Cloud Monitor
+- Multiple notification channels
+- Proactive alerting for anomalies
 
 ## Common Use Cases
 
 ### 1. Session Cache
-- Store user session data
-- Fast read/write with TTL
-- Horizontal scaling support
-- Example: web application sessions
 
-### 2. Leaderboard / Ranking
-- Sorted Sets for real-time rankings
-- ZADD, ZRANGE, ZINCRBY commands
-- Low latency updates
-- Example: gaming leaderboards, content ranking
+- Store user session data
+- Fast retrieval for web applications
+- Reduce database load
+
+### 2. Data Cache
+
+- Cache frequently queried data
+- Reduce database query pressure
+- Improve response time
 
 ### 3. Message Queue
-- List data structure (LPUSH, RPOP)
-- Pub/Sub for event-driven architecture
-- Streams for reliable messaging (Redis 5.0+)
-- Example: notification system, task queue
 
-### 4. Distributed Lock
-- SET with NX and EX options
-- Redlock algorithm for multi-node
-- Prevent concurrent access
-- Example: inventory management, order processing
+- Lightweight message queue via Redis List
+- Pub/Sub for event notification
+- Not suitable for heavy messaging (use dedicated MQ)
 
-### 5. Real-time Analytics
-- Counters (INCR, INCRBY)
-- HyperLogLog for unique visitors
-- Bitmap for user behavior tracking
-- Example: page views, active users
+### 4. Real-time Leaderboard
 
-## Monitoring & Alerting
+- Use Redis Sorted Set for rankings
+- Real-time updates and queries
+- Gaming, e-commerce scenarios
 
-### Key Metrics
-- **Memory Usage**: Current memory / max memory (%)
-- **CPU Utilization**: Instance CPU usage (%)
-- **Connections**: Current connected clients
-- **QPS**: Queries per second
-- **Hit Rate**: Cache hit ratio (%)
-- **Replication Lag**: Master-slave replication delay (seconds)
+### 5. Inventory Management
 
-### Recommended Alerts
-| Metric | Threshold | Severity |
-|--------|-----------|----------|
-| Memory Usage | > 85% | Warning |
-| Memory Usage | > 95% | Critical |
-| CPU Utilization | > 80% | Warning |
-| Connections | > 80% of max | Warning |
-| Replication Lag | > 10s | Warning |
-| Replication Lag | > 60s | Critical |
+- High-concurrency inventory updates
+- Atomic operations prevent overselling
+- E-commerce flash sales scenarios
 
 ## Related Services
 
-- **Cloud Monitor**: Monitor Redis metrics and set alerts
-- **DTS (Data Transmission Service)**: Migrate data to/from Redis
-- **VM (Cloud Host)**: Application servers accessing Redis
-- **VPC**: Network isolation and security
-- **CLB (Load Balancer)**: Distribute traffic across application servers
-- **JCS for Memcached**: Alternative caching service for simple use cases
+- **VPC**: Network isolation and subnet management
+- **Cloud Monitor**: Instance monitoring and alerts
+- **Object Storage**: Backup data storage
+- **Cloud Host**: Application servers connecting to Redis
+- **DTS**: Data migration service
+
+## Limits and Quotas
+
+### Resource Limits
+
+- Maximum shards: 128 (cluster versions)
+- Maximum memory: 4TB (Proxy cluster), 2TB (Native cluster)
+- Maximum DBs: 256 (depends on architecture)
+- Maximum connection: depends on spec (up to 60,000)
+
+### Quota Checks
+
+- Use `describeUserQuota` API to check resource quotas
+- Request quota increase if needed
+- Regional quotas may vary
