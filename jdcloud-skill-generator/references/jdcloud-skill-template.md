@@ -1,261 +1,359 @@
 ---
 name: jdcloud-[product-name]-ops
 description: >-
-  Manages JD Cloud [Product Name] resources. Use when you need to deploy, 
-  configure, troubleshoot, or monitor [Product Name] instances on JD Cloud.
-  Includes CLI usage, SDK integration, and operational best practices.
+  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
+  [Product Name] via official API/SDK or official `jdc` CLI; user mentions
+  [Product Name], [Product Chinese Name], or [Product Alias], or tasks target
+  [Resource Type].
 license: MIT
-compatibility: Requires jdcloud-cli, Python 3.10+, and JD Cloud account credentials
+compatibility: >-
+  Official JD Cloud SDK (e.g. Python 3.10+), valid API credentials, network
+  access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`) when this
+  product is supported by the CLI (dual-path skills).
 metadata:
   author: jdcloud
   version: "1.0.0"
-  last_updated: "2026-04-30"
+  last_updated: "2026-05-03"
   runtime: Harness AI Agent
+  api_profile: "[Paste OpenAPI title/version or doc link]"
+  cli_applicability: dual-path
+  cli_support_evidence: >-
+    [If dual-path: cite how you confirmed CLI coverage, e.g. official CLI doc
+    URL or `jdc <product> --help`. If sdk-only: cite proof that `jdc` does NOT
+    expose this product; omit references/cli-usage.md only in that case.]
   environment:
     - JDC_ACCESS_KEY
     - JDC_SECRET_KEY
     - JDC_REGION
 ---
 
-> This template follows the [Agent Skill OpenSpec](https://agentskills.io/specification) specification.
+> This template follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
 
 # JD Cloud [Product Name] Operations Skill
 
 ## Overview
-[Product Name] is a core service on JD Cloud that provides [brief description of functionality]. This skill enables efficient operations, including automated deployment, real-time monitoring, and rapid troubleshooting.
+
+[Product Name] on JD Cloud provides [brief description]. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **dual-path execution** (official **SDK/API** and, when the product is supported by official **`jdc`**, the matching **CLI** flows), response validation, and failure recovery. **Do not use the web console as the primary agent execution path** in `SKILL.md`.
+
+### CLI applicability (repository policy)
+
+- **`cli_applicability: dual-path`:** Official `jdc` supports this product. You **MUST** ship **`references/cli-usage.md`** and, in **each** execution flow below, document **both** the SDK step **and** the `jdc` step for every operation the CLI exposes. If the CLI covers **only part** of the API, add a **coverage gap** table (SDK-only operations) in `references/cli-usage.md`.
+- **`cli_applicability: sdk-only`:** Official `jdc` does **not** expose this product. **Omit** `references/cli-usage.md`. Keep **`cli_support_evidence`** pointing at official proof (e.g. CLI product list, `jdc help`, or documentation). SDK/API remains mandatory for all operations.
 
 ## Trigger & Scope (Agent-Readable)
 
 ### SHOULD Use This Skill When
+
 - User mentions "JD Cloud [Product Name]" OR "[Product Chinese Name]" OR "[Product Alias]"
-- Task involves CRUD operations on [Resource Type]: create, describe, modify, delete, list
-- Task keywords: [keyword1], [keyword2], [keyword3], ...
-- User asks to deploy, configure, troubleshoot, or monitor [Product Name] resources
+- Task involves CRUD or lifecycle operations on **[Resource Type]** (create, describe, modify, delete, list, and product-specific actions)
+- Task keywords: [keyword1], [keyword2], [keyword3], …
+- User asks to deploy, configure, troubleshoot, or monitor [Product Name] **via API, SDK, CLI, or automation**
 
 ### SHOULD NOT Use This Skill When
-- Task is purely about billing / account management → delegate to: `jdcloud-billing-ops`
-- Task is about IAM / user permission management → delegate to: `jdcloud-iam-ops`
-- Task is about [related but different product] → delegate to: `jdcloud-[other]-ops`
+
+- Task is purely billing / account management → delegate to: `jdcloud-billing-ops` (when present)
+- Task is IAM / permission model only → delegate to: `jdcloud-iam-ops` (when present)
+- Task is about **[related product]** → delegate to: `jdcloud-[other]-ops`
+- User insists on **console-only** flows with no API → state limitation; do not invent undocumented HTTP steps
 
 ### Delegation Rules
-- If the user asks about resource B that depends on resource A created/managed here, create A first then suggest chaining to the B-specific Skill
-- If the request spans multiple unrelated products, process each with its corresponding Skill independently
+
+- If resource B depends on resource A, complete or verify A (via the A skill) before B’s SDK or CLI steps.
+- Multi-product requests: handle each product with its skill; do not merge unrelated APIs into one ambiguous flow.
 
 ## Variable Convention (Agent-Readable)
-This Skill uses structured placeholders to avoid prompt injection and parsing ambiguity:
+
+Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Placeholder | Meaning | Agent Action |
 |-------------|---------|--------------|
-| `{{env.JDC_ACCESS_KEY}}` | Resolved from Agent runtime environment | NEVER prompt user for this; fail if not set |
-| `{{env.JDC_SECRET_KEY}}` | Resolved from Agent runtime environment | NEVER prompt user for this; fail if not set |
-| `{{env.JDC_REGION}}` | Resolved from Agent runtime environment | Use `cn-north-1` as default if unset |
-| `{{user.region}}` | Must be collected from user | Ask user once and reuse |
-| `{{user.resource_name}}` | Must be collected from user | Ask user once and reuse |
-| `{{output.resource_id}}` | Captured from CLI JSON output | Parse from `$.data.[resource]Id` |
+| `{{env.JDC_ACCESS_KEY}}` | From runtime environment | NEVER ask the user; fail if unset |
+| `{{env.JDC_SECRET_KEY}}` | From runtime environment | NEVER ask the user; fail if unset |
+| `{{env.JDC_REGION}}` | From runtime environment | Use documented default only if skill explicitly allows |
+| `{{user.region}}` | User-supplied region | Ask once; reuse |
+| `{{user.resource_name}}` | User-supplied name | Ask once; reuse |
+| `{{output.resource_id}}` | From last API or CLI JSON response | Parse per **OpenAPI** (SDK) or **verified `jdc --output json`** path for this operation |
 
-> Rule: Placeholders wrapped in `{{env.*}}` MUST NOT be exposed to or requested from the user. Placeholders wrapped in `{{user.*}}` MUST be collected interactively.
+> **`{{env.*}}` MUST NOT** be collected from the user. **`{{user.*}}`** MUST be collected interactively when missing.
 
-## Output Parsing Rules (Agent-Readable)
+## API and Response Conventions (Agent-Readable)
 
-### Mandatory CLI Conventions
-- All CLI commands MUST append `--output json` for machine-parseable output
-- All CLI commands SHOULD append `--no-interactive` (or equivalent) to prevent blocking on user prompts
-- Timestamps are in ISO 8601 format with timezone: `2026-04-28T10:00:00+08:00`
-- Resource IDs follow pattern: `[prefix]-[hash]` (e.g., `vm-abc123def`)
-- Boolean values: `true` / `false` (lowercase)
+- **OpenAPI is canonical** for path, query, body fields, enums, and response shapes. Replace generic JSON paths below with **real** schema field names.
+- **Errors:** Map SDK/HTTP errors to `code` / `status` / message fields per spec. Do not assume a single global shape across products.
+- **Timestamps:** ISO 8601 with timezone when the API returns strings (e.g. `2026-04-28T10:00:00+08:00`).
+- **Idempotency:** Document client request tokens, duplicate names, and `ResourceAlreadyExists` behavior per API.
 
-### Key JSON Paths for Common Operations
-| Operation | JSON Path | Type | Description |
-|-----------|-----------|------|-------------|
-| Create | `$.data.[resource]Id` | string | Resource ID to track |
-| Describe | `$.data.status` | string | Current state (e.g. `running`, `stopped`) |
-| List | `$.data[*].[resource]Id` | array | All resource IDs |
-| Modify | `$.data.success` | boolean | Whether modification succeeded |
-| Delete | `$.data.success` | boolean | Whether deletion succeeded |
+### Example Response Field Table (Replace with OpenAPI-Accurate Paths)
 
-### Expected State Transitions
+| Operation | JSON Path (example) | Type | Description |
+|-----------|---------------------|------|-------------|
+| Create | `$.result.resourceId` | string | New resource ID (verify name in spec) |
+| Describe | `$.result.status` | string | Lifecycle state |
+| List | `$.result.resources[*].resourceId` | array | IDs (verify array structure) |
+| Modify / Delete | `$.requestId` or `$.error` | string / object | Per spec |
+
+### Expected State Transitions (Adjust to Product)
+
 | Operation | Initial State | Target State | Poll Interval | Max Wait |
 |-----------|---------------|--------------|---------------|----------|
-| Create | - | `running` | 5s | 300s |
+| Create | — | `running` or product equivalent | 5s | 300s |
 | Start | `stopped` | `running` | 5s | 120s |
 | Stop | `running` | `stopped` | 5s | 120s |
-| Delete | `running`/`stopped` | (404 on describe) | 5s | 300s |
+| Delete | any stable state | absent or `deleted` per describe | 5s | 300s |
 
 ## Changelog
 
-| 版本 | 日期 | 变更内容 |
-|------|------|---------|
-| 1.0.0 | 2026-04-28 | 初始版本，包含基础运维指南和参考模板 |
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | 2026-05-03 | Initial API/SDK-oriented template |
+| 1.0.1 | 2026-05-03 | Document optional official `jdc` CLI alongside SDK/API |
+| 1.0.2 | 2026-05-03 | Require dual-path (SDK + `jdc`) when CLI supports product; sdk-only exception documented |
 
 ## Execution Flows (Agent-Readable)
-Every operation follows the pattern: Pre-flight → Execute → Validate → Recover. The Agent MUST NOT skip any phase.
+
+Every operation: **Pre-flight → Execute (SDK/API and, when applicable, `jdc`) → Validate → Recover**. Do not skip phases.
+
+**Preference hint:** When both paths exist, state when to prefer SDK vs `jdc` (e.g. no Python runtime → `jdc`; integration tests → SDK).
 
 ### Operation: Create [Resource]
 
 #### Pre-flight Checks
-| Check | Command | Expected | On Failure |
-|-------|---------|----------|------------|
-| CLI installed | `jdc --version` | exit code 0 | Guide user to install jdcloud-cli |
-| Credentials valid | `jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1 --output json` | `$.error == null` | Prompt user to run `jdc config init` |
-| Region available | `jdc [product] describe-regions --output json` | `{{user.region}}` in list | Suggest nearest available region |
-| Quota available | `jdc [product] describe-quota --region {{user.region}} --output json` | `$.available > 0` | Inform user of quota limit, suggest increase |
 
-#### Execution
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| SDK / deps | Import client; version matches `metadata.api_profile` | No import error | Document install pin |
+| CLI / deps | `jdc --version` (**required** when `cli_applicability: dual-path`) | Exit code 0 | Document CLI install / `jdc config init` |
+| Credentials | Construct credential from env (SDK) or CLI config/env per official CLI docs | Non-empty keys / valid config | HALT; user configures env |
+| Region | Call **DescribeRegions** (or equivalent) if applicable | `{{user.region}}` supported | Suggest valid region |
+| Quota | Call quota/describe API per OpenAPI | Sufficient quota | HALT; user raises quota |
+
+#### Execution (Python SDK — illustrative)
+
+Replace service/client/method names with **generated SDK symbols** for this product:
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.[product].client import [Product]Client
+from jdcloud_sdk.services.[product].apis.[module] import CreateRequest
+
+credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
+client = [Product]Client(credential, os.environ.get("JDC_REGION", "cn-north-1"))
+
+req = CreateRequest(
+    regionId="<region-from-user>",
+    # add remaining fields per OpenAPI request schema
+)
+resp = client.create_method(req)  # replace with real SDK method name
+```
+
+#### Execution — CLI (`jdc`) (**required** when `cli_applicability: dual-path`)
+
+**Omit this subsection only** when `cli_applicability: sdk-only` (and `references/cli-usage.md` is omitted). Otherwise use the [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli). Every command MUST use **`--output json`** (or documented equivalent) and **`--no-interactive`** (or equivalent) when supported. **Verify** JSON paths against a real run; CLI wrappers may not match raw API field names.
+
 ```bash
 jdc [product] create-[resource] \
-  --region {{user.region}} \
-  --[resource]-name "{{user.resource_name}}" \
+  --region-id "<region-from-user>" \
   --output json \
   --no-interactive
+  # add flags per official `jdc [product] create-[resource] --help`
 ```
 
 #### Post-execution Validation
-1. Capture `{{output.resource_id}}` from `$.data.[resource]Id`
-2. Poll until ready:
-   ```bash
-   for i in $(seq 1 60); do
-     STATUS=$(jdc [product] describe-[resource] \
-       --[resource]-id {{output.resource_id}} \
-       --region {{user.region}} \
-       --output json | jq -r '.data.status')
-     [ "$STATUS" = "running" ] && break
-     sleep 5
-   done
-   ```
-3. If status is `running` → operation succeeded, report `{{output.resource_id}}` to user
-4. If status is `error` → capture error from `$.data.errorMessage`, go to Failure Recovery
+
+1. Read `{{output.resource_id}}` from the **documented** response path (SDK JSON path and, when dual-path, **CLI JSON path** if they differ).
+2. Poll **Describe** until terminal success state or timeout—**implement for both paths** when `cli_applicability: dual-path` (SDK loop below; CLI loop e.g. `jdc … describe-… --output json` with `jq` until terminal state or max wait).
+
+```python
+# Pseudocode: use real describe request/response types from the SDK
+for _ in range(max_attempts):
+    dresp = client.describe_[resource](describe_request)
+    status = parse_status(dresp)  # per OpenAPI
+    if status in success_states:
+        break
+    if status in failure_states:
+        raise RuntimeError(parse_error(dresp))
+    sleep(poll_interval_seconds)
+```
+
+```bash
+# Dual-path example: poll with jdc (adjust jq paths after verification)
+# for i in $(seq 1 60); do
+#   STATUS=$(jdc [product] describe-[resource] ... --output json | jq -r '.path.to.status')
+#   [ "$STATUS" = "running" ] && break
+#   sleep 5
+# done
+```
+
+3. On success, report `{{output.resource_id}}` and key fields to the user.
+4. On terminal failure, go to **Failure Recovery**.
 
 #### Failure Recovery
-| Exit Code | Error Pattern (regex) | Max Retries | Backoff | Agent Action |
-|-----------|-----------------------|-------------|---------|--------------|
-| 1 | `InvalidParameter` | 1 | - | Re-check parameter format against API spec, retry with corrected params |
-| 1 | `QuotaExceeded` | 0 | - | HALT. Inform user quota is full, suggest requesting increase |
-| 1 | `InsufficientBalance` | 0 | - | HALT. Inform user to top up account |
-| 2 | `ResourceAlreadyExists` | 0 | - | Ask user if they want to reuse existing resource or use a different name |
-| 3 | `InternalError` | 3 | 2s, 4s, 8s | Retry with exponential backoff. After 3rd failure, report to user |
-| Other | `.*` | 3 | 5s, 10s, 15s | Retry. On final failure, extract full error message and present to user |
+
+| Error pattern (from API/SDK or parsed CLI JSON) | Max retries | Backoff | Agent Action |
+|------------------------------|-------------|---------|--------------|
+| `InvalidParameter` / 400 invalid input | 0–1 | — | Fix args from OpenAPI; retry once if safe |
+| `QuotaExceeded` | 0 | — | HALT |
+| `InsufficientBalance` | 0 | — | HALT |
+| `ResourceAlreadyExists` | 0 | — | Ask reuse vs new name |
+| Throttling / 429 | 3 | exponential | Back off; respect `Retry-After` if present |
+| `InternalError` / 5xx | 3 | 2s, 4s, 8s | Retry; then HALT with correlation id if any |
 
 ### Operation: Describe [Resource]
 
 #### Execution
-```bash
-jdc [product] describe-[resource] \
-  --[resource]-id {{user.resource_id}} \
-  --region {{env.JDC_REGION}} \
-  --output json
-```
 
-#### Output to Present to User
-| Field | JSON Path | Display Format |
-|-------|-----------|----------------|
-| ID | `$.data.[resource]Id` | Plain text |
-| Name | `$.data.[resource]Name` | Plain text |
-| Status | `$.data.status` | Badge: 🟢 running / 🟡 pending / 🔴 error |
-| Created At | `$.data.createTime` | ISO 8601 → human-readable |
-| Public IP | `$.data.publicIp` | `-` if null |
+Use the SDK **describe** or **get** API matching OpenAPI. When **`cli_applicability: dual-path`**, also document the equivalent `jdc [product] describe-[resource] ... --output json`, passing `{{user.resource_id}}` and region.
+
+#### Present to User
+
+| Field | Path (example) | Notes |
+|-------|----------------|-------|
+| ID | from describe | Plain text |
+| Name | from describe | Plain text |
+| Status | from describe | Human-readable state |
+| Created time | from describe | Format ISO per API |
 
 ### Operation: Delete [Resource]
 
 #### Pre-flight (Safety Gate)
-- **MUST** ask user: "Are you sure you want to delete `{{user.resource_name}}` ({{user.resource_id}})? This is irreversible."
-- **MUST** wait for explicit "yes" / "confirm" before proceeding
+
+- **MUST** obtain explicit confirmation: irreversible delete of `{{user.resource_name}}` (`{{user.resource_id}}`).
+- **MUST NOT** proceed without clear user assent.
 
 #### Execution
-```bash
-jdc [product] delete-[resource] \
-  --[resource]-id {{user.resource_id}} \
-  --region {{env.JDC_REGION}} \
-  --output json \
-  --no-interactive
-```
+
+Call delete API per OpenAPI. When **`cli_applicability: dual-path`**, also document the `jdc` delete subcommand with `--output json`; capture `requestId`, success flag, or error per **verified** output shape for **each** path.
 
 #### Post-execution Validation
-1. Poll `describe` until it returns HTTP 404 or `status: "deleted"` (max 300s)
+
+Poll describe (or head/get) until **404**, **NotFound**, or status indicates deleted—per API semantics—within **max wait**.
 
 ## Prerequisites
-1. **Install JD Cloud CLI**:
-   ```bash
-   pip install jdcloud_cli
-   jdc config init
-   ```
-2. **Configure Credentials**:
-   The Agent runtime MUST have the following environment variables set. These map to `{{env.*}}` placeholders used throughout this Skill:
-   ```bash
-   export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-   export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-   export JDC_REGION="cn-north-1"
-   ```
-   > The Agent MUST verify these are set before any operation. If missing, instruct user to configure via `jdc config init`.
+
+1. **Install** the JD Cloud SDK package(s) and, when **`cli_applicability: dual-path`**, the **CLI** (pin versions in `references/integration.md`; `jdc` install is **required** for dual-path).
+2. **Environment variables** (fail if missing for secrets); for CLI, document `jdc config` / env per official CLI docs:
+
+```bash
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
+export JDC_REGION="cn-north-1"
+```
 
 ## Reference Directory
+
 - [Core Concepts](references/core-concepts.md)
-- [CLI Usage](references/cli-usage.md)
+- [API & SDK Usage](references/api-sdk-usage.md)
+- [CLI Usage](references/cli-usage.md) (**required** when `cli_applicability: dual-path`; omit only for `sdk-only` with evidence in frontmatter)
 - [Troubleshooting Guide](references/troubleshooting.md)
 - [Monitoring & Alerts](references/monitoring.md)
-- [Integration (MCP/SDK)](references/integration.md)
+- [Integration](references/integration.md)
 
 ## Operational Best Practices
-- **High Availability**: Always deploy across multiple availability zones.
-- **Security**: Apply least-privilege IAM policies.
-- **Cost Optimization**: Utilize auto-scaling and reserved instances where applicable.
 
+- **Least privilege:** IAM policies scoped to required APIs only.
+- **Availability:** Multi-AZ or product-specific HA patterns per docs.
+- **Cost:** Right-size resources; use product cost controls where applicable.
 
 ---
 
 # Appendix: Reference File Templates
 
-## references/troubleshooting.md Template
+## references/troubleshooting.md
+
 ```markdown
 # Troubleshooting [Product Name]
 
-## Common Error Codes
-| Error Code | Description | Solution |
-|------------|-------------|----------|
-| `InvalidParameter` | A required parameter is missing. | Check the CLI command syntax. |
-| `InsufficientBalance` | Account balance is insufficient. | Top up your JD Cloud account. |
+## Common API Error Codes
+| Code / HTTP | Meaning | Agent Action |
+|-------------|---------|--------------|
+| InvalidParameter | Request failed validation | Align body with OpenAPI |
+| InsufficientBalance | Account balance | HALT; user tops up |
 
-## Diagnostic Steps
-1. **Check Resource Status**: `jdc [product] describe-[resource]s --[resource]-ids [ID]`
-2. **View System Logs**: Access via JD Cloud Console -> VNC (for VM) or product-specific log service.
-3. **Network Connectivity**: Use `ping` and `telnet` from a bastion host to verify network access.
+## Diagnostic Order
+1. Describe resource by ID.
+2. List related resources if API supports filters.
+3. Check regional endpoint and `regionId` consistency.
 ```
 
-## references/monitoring.md Template
+## references/api-sdk-usage.md
+
+```markdown
+# API & SDK — [Product Name]
+
+## OpenAPI
+- Spec: [link or path]
+- Base path and version: …
+
+## SDK Operations Map
+| Goal | API operationId | SDK method (if known) |
+|------|-----------------|------------------------|
+| Create | … | … |
+| Describe | … | … |
+
+## Request / Response Notes
+- Required fields: …
+- Pagination: …
+```
+
+## references/cli-usage.md
+
+```markdown
+# CLI — [Product Name] (`jdc`)
+
+## Install and config
+- Install: see [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)
+- `jdc config init` / env vars per official docs
+
+## Conventions (agent execution)
+- Append `--output json` (or documented equivalent) for every command used in automation.
+- Append `--no-interactive` (or equivalent) when supported.
+- Document **exact** JSON paths after verifying with a real invocation (CLI output may differ from raw API).
+
+## CLI vs API coverage gap
+| Operation (API / SDK) | Available via `jdc`? | Notes |
+|------------------------|---------------------|-------|
+| Create | yes / no | … |
+| Describe | yes / no | … |
+
+## Command map
+| Goal | Example `jdc` invocation | Notes |
+|------|--------------------------|-------|
+| Create | `jdc [product] create-…` | … |
+| Describe | `jdc [product] describe-…` | … |
+```
+
+## references/monitoring.md
+
 ```markdown
 # Monitoring [Product Name]
 
-## Key Metrics
-- **CPU Utilization**: `namespace/jcs.vm/cpu_usage`
-- **Memory Usage**: `namespace/jcs.vm/memory_usage`
-- **Disk I/O**: `namespace/jcs.vm/disk_read_bytes`
+## Key Metrics (examples — replace with product namespaces)
+- Metric A: `namespace/service/metric_a`
+- Metric B: `namespace/service/metric_b`
 
-## Alert Configuration Example
-```json
-{
-  "metricName": "cpu_usage",
-  "threshold": 80,
-  "comparisonOperator": ">",
-  "period": 300
-}
-```
+## Alert Example (structure only)
+{ "metric": "metric_a", "threshold": 80, "period": 300 }
 ```
 
-## references/integration.md Template
-```markdown
-# Integration & Tooling
+## references/integration.md
 
+````markdown
+# Integration
 
-## SDK Initialization (Python)
+## Python SDK bootstrap
+
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
 from jdcloud_sdk.services.[product].client import [Product]Client
 
 credential = Credential(
-    os.environ['JDC_ACCESS_KEY'],
-    os.environ['JDC_SECRET_KEY']
+    os.environ["JDC_ACCESS_KEY"],
+    os.environ["JDC_SECRET_KEY"],
 )
-client = [Product]Client(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
+client = [Product]Client(credential, os.environ.get("JDC_REGION", "cn-north-1"))
 ```
-> Rule: Use `os.environ['KEY']` (not `.get()`) for credentials to fail-fast if missing. Use `os.environ.get('KEY', default)` for optional config like region.
-```
+
+> Use `os.environ['KEY']` for secrets (fail-fast). Use `.get` only for optional non-secret config.
+````
