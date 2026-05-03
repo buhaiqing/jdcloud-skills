@@ -1,36 +1,58 @@
+---
+name: jdcloud-vm-ops
+version: 1.0.1
+description: Manage JD Cloud Virtual Machine resources, including instance management, monitoring, troubleshooting, and automation integration.
+---
+
 # JD Cloud VM Operations Skill
 
 ## Overview
 
-This is an operational Skill for managing JD Cloud Virtual Machine (VM) resources, providing comprehensive capabilities including instance management, monitoring & alerting, troubleshooting, and automation integration.
+Operational Skill for managing JD Cloud VM resources, providing instance management, monitoring & alerting, troubleshooting, and automation integration.
 
-## Features
+## Core Features
 
-- ✅ **Instance Management**: Create, start, stop, delete VM instances
-- ✅ **Storage Management**: Cloud disk attachment, snapshot backup, disk expansion
-- ✅ **Network Configuration**: Security group rules, Elastic IP, VPC configuration
-- ✅ **Monitoring & Alerting**: Comprehensive monitoring for CPU, memory, disk, network
-- ✅ **Troubleshooting**: Common issue diagnosis and solutions
-- ✅ **Automation Integration**: SDK, MCP Server, Terraform, Ansible support
+- ✅ Instance Management: Create, start, stop, delete
+- ✅ Storage Management: Cloud disk, snapshots, disk expansion
+- ✅ Network Configuration: Security groups, EIP, VPC
+- ✅ Monitoring & Alerting: CPU, memory, disk, network
+- ✅ Troubleshooting: Common issue diagnosis
+- ✅ Automation: SDK, MCP Server, Terraform, Ansible
 
 ## Directory Structure
 
 ```
 jdcloud-vm-ops/
-├── SKILL.md                    # Skill main file
+├── SKILL.md
 ├── references/
-│   ├── core-concepts.md        # Core concepts
-│   ├── cli-usage.md            # CLI usage guide
-│   ├── troubleshooting.md      # Troubleshooting guide
-│   ├── monitoring.md           # Monitoring & alerts
-│   └── integration.md          # Integration guide
-└── assets/
-    └── example-config.yaml     # Example configuration
+│   ├── core-concepts.md
+│   ├── cli-usage.md
+│   ├── troubleshooting.md
+│   ├── monitoring.md
+│   └── integration.md
+└── assets/example-config.yaml
 ```
+
+## Trigger & Scope
+
+### SHOULD Use
+
+- Create, start, stop, reboot, delete VM instances
+- Manage cloud disks and snapshots (create, attach, expand, delete)
+- Configure security group rules and EIP
+- Query instance status and monitoring metrics
+- Troubleshoot: connectivity, performance, disk issues
+
+### SHOULD NOT Use
+
+- Cross-product operations (delegate to jdcloud-vpc-ops + jdcloud-vm-ops + jdcloud-cloudmonitor-ops)
+- Batch automation (use Terraform/Ansible)
+- Advanced network config (use jdcloud-vpc-ops)
+- Alert rule management (use jdcloud-cloudmonitor-ops)
 
 ## Quick Start
 
-### 1. Install JD Cloud CLI
+### 1. Install CLI
 
 ```bash
 pip install jdcloud_cli
@@ -39,78 +61,53 @@ jdc config init
 
 ### 2. Configure Credentials
 
-The Agent runtime MUST have the following environment variables configured:
-
 ```bash
 export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
 export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
 export JDC_REGION="cn-north-1"
 ```
 
-> The Agent MUST NOT ask the user for credential values. If not set, guide the user to configure via `jdc config init`. Never hardcode credentials in code or configuration files.
+> Agent MUST NOT ask user for credentials. If not set, guide user to configure via `jdc config init`. Never hardcode credentials.
 
-### 3. Query Instance List
+### 3. Query Instances
 
 ```bash
-jdc vm describe-instances \
-  --region-id cn-north-1 \
-  --page-number 1 \
-  --page-size 20
+jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 20
 ```
 
 ## Main Documents
 
-### 📚 [Core Concepts](references/core-concepts.md)
-Understand the core components, instance types, lifecycle, billing models, and more.
-
-### 💻 [CLI Usage Guide](references/cli-usage.md)
-Detailed command-line operations manual, including instance management, storage management, network configuration, etc.
-
-### 🔧 [Troubleshooting](references/troubleshooting.md)
-Diagnosis processes and solutions for common issues, including connectivity, performance, disk problems, etc.
-
-### 📊 [Monitoring & Alerts](references/monitoring.md)
-Monitoring metrics description, alert rule configuration, Dashboard setup, etc.
-
-### 🔌 [Integration](references/integration.md)
-SDK usage, MCP Server configuration, Terraform, Ansible, and other automation tool integration.
+- [Core Concepts](references/core-concepts.md) - Instance types, lifecycle, billing
+- [CLI Usage](references/cli-usage.md) - Instance, storage, network management
+- [Troubleshooting](references/troubleshooting.md) - Connectivity, performance, disk issues
+- [Monitoring](references/monitoring.md) - Metrics, alerts, dashboards
+- [Integration](references/integration.md) - SDK, MCP Server, Terraform
 
 ## Common Scenarios
 
-### Scenario 1: Create a Web Server
+### Scenario 1: Create Web Server
 
 ```bash
-# Create an instance
 jdc vm create-instances \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
   --instance-type "g.n2.medium" \
   --image-id "img-xxxxx" \
   --name "web-server" \
-  --primary-network-interface '{
-    "subnetId": "subnet-xxxxx",
-    "securityGroupIds": ["sg-xxxxx"]
-  }' \
+  --primary-network-interface '{"subnetId": "subnet-xxxxx", "securityGroupIds": ["sg-xxxxx"]}' \
   --system-disk '{"diskCategory": "local", "diskSizeGB": 40}' \
   --charge-mode "postpaid_by_duration"
 
-# Configure security group to allow HTTP/HTTPS
+# Configure security group
 jdc vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
-  --rules '[{
-    "direction": "ingress",
-    "protocol": "tcp",
-    "fromPort": 80,
-    "toPort": 80,
-    "addressPrefix": "0.0.0.0/0"
-  }]'
+  --rules '[{"direction": "ingress", "protocol": "tcp", "fromPort": 80, "toPort": 80, "addressPrefix": "0.0.0.0/0"}]'
 ```
 
-### Scenario 2: Configure Monitoring Alerts
+### Scenario 2: Configure Monitoring Alert
 
 ```bash
-# CPU usage alert
 jdc monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "VM-CPU-Critical" \
@@ -125,10 +122,9 @@ jdc monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-### Scenario 3: Create Backup Snapshots
+### Scenario 3: Create Snapshot Backup
 
 ```bash
-# Create a snapshot for the system disk
 jdc disk create-snapshot \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
@@ -136,80 +132,61 @@ jdc disk create-snapshot \
   --description "Daily backup"
 ```
 
-### Scenario 4: Troubleshoot Connectivity Issues
+### Scenario 4: Troubleshoot Connectivity
 
 ```bash
 # Check instance status
-jdc vm describe-instances \
-  --region-id cn-north-1 \
-  --instance-ids '["i-xxxxx"]'
+jdc vm describe-instances --region-id cn-north-1 --instance-ids '["i-xxxxx"]'
 
-# Check security group rules
-jdc vpc describe-security-group \
-  --region-id cn-north-1 \
-  --security-group-id sg-xxxxx
+# Check security group
+jdc vpc describe-security-group --region-id cn-north-1 --security-group-id sg-xxxxx
 
 # Check EIP binding
-jdc vpc describe-elastic-ips \
-  --region-id cn-north-1 \
-  | jq '.result.elasticIps[] | select(.instanceId == "i-xxxxx")'
+jdc vpc describe-elastic-ips --region-id cn-north-1 | jq '.result.elasticIps[] | select(.instanceId == "i-xxxxx")'
 ```
 
 ## Best Practices
 
-### 1. High Availability Deployment
-- Distribute instances across multiple availability zones
-- Use load balancer for traffic distribution
-- Configure auto-scaling to handle traffic fluctuations
+### 1. High Availability
+- Distribute across AZs
+- Use load balancer
+- Configure auto-scaling
 
-### 2. Security Hardening
-- Use key pairs instead of passwords for login
-- Follow the principle of least privilege when configuring security groups
-- Regularly update system and application patches
-- Enable cloud monitoring and security auditing
+### 2. Security
+- Use key pairs, not passwords
+- Least privilege for security groups
+- Regular patch updates
+- Enable monitoring & auditing
 
 ### 3. Cost Optimization
-- Use subscription billing for long-running instances
-- Use pay-as-you-go or spot instances for temporary tasks
-- Regularly clean up unused resources (EIPs, disks, snapshots)
+- Subscription for long-running
+- Pay-as-you-go for temporary
+- Clean up unused resources
 - Use tags for cost analysis
 
 ### 4. Backup Strategy
-- Regularly create snapshots for critical data
-- Replicate critical snapshots across regions
-- Test snapshot recovery processes
-- Retain an appropriate number of historical snapshots
+- Regular snapshots for critical data
+- Cross-region replication
+- Test recovery process
+- Retain appropriate history
 
-### 5. Monitoring & Alerts
-- Configure CPU, memory, disk, and network alerts
-- Set reasonable thresholds to avoid alert fatigue
-- Use different notification methods for different alert levels (warning/critical)
-- Regularly verify that alerts are working correctly
+### 5. Monitoring
+- Configure CPU/memory/disk/network alerts
+- Reasonable thresholds
+- Different notification for levels
+- Regular verification
 
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0.0 | 2026-04-28 | Initial version, includes basic operational guide |
-| 1.0.1 | 2026-04-28 | Added complete CLI commands and troubleshooting guide |
+| 1.0.0 | 2026-04-28 | Initial version |
+| 1.0.1 | 2026-04-28 | Added CLI commands and troubleshooting |
 
 ## Related Resources
 
-- [JD Cloud Official Documentation](https://docs.jdcloud.com)
-- [VM Product Documentation](https://docs.jdcloud.com/cn/virtual-machines/)
-- [API Documentation](https://docs.jdcloud.com/cn/api/vm/)
-- [CLI Documentation](https://docs.jdcloud.com/cn/cli/)
-- [SDK Downloads](https://github.com/jdcloud-api)
-
-## Technical Support
-
-If you encounter issues, you can get help through the following channels:
-
-1. **Online Documentation**: https://docs.jdcloud.com
-2. **Console Tickets**: Log in to JD Cloud Console to submit a ticket
-3. **Customer Service Hotline**: 400-606-5500
-4. **Online Chat**: Click the online chat button at the bottom right of the JD Cloud official website
-
-## License
-
-This project is licensed under the MIT License.
+- [Official Docs](https://docs.jdcloud.com)
+- [VM Product](https://docs.jdcloud.com/cn/virtual-machines/)
+- [API Docs](https://docs.jdcloud.com/cn/api/vm/)
+- [CLI Docs](https://docs.jdcloud.com/cn/cli/)
+- [SDK](https://github.com/jdcloud-api)
