@@ -1,5 +1,36 @@
 # JD Cloud VPC Integration & Tooling
 
+## Environment Variables
+
+| Variable | Required | Description | Default |
+|----------|----------|-------------|--------|
+| `JDC_ACCESS_KEY` | Yes | JD Cloud Access Key | — |
+| `JDC_SECRET_KEY` | Yes | JD Cloud Secret Key | — |
+| `JDC_REGION` | No | Default region | `cn-north-1` |
+
+### Configuration Methods
+
+**Method 1: `.env` File (Local Development)**
+```ini
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+
+**Method 2: Shell Environment Variables (Production)**
+```bash
+export JDC_ACCESS_KEY="your-access-key"
+export JDC_SECRET_KEY="your-secret-key"
+export JDC_REGION="cn-north-1"
+```
+
+**Method 3: CLI Configuration**
+```bash
+jdc config init
+```
+
+> **Priority**: Shell env > `.env` > CLI config > Defaults. Never commit `.env` to version control.
+
 ## Idempotency in Integration
 
 All integration patterns in this document support **idempotent operations** to ensure safe retries and consistent state management.

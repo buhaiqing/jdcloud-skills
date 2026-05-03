@@ -317,9 +317,19 @@ jdc vm delete-instance \
    jdc config init
    ```
 
-2. **Configure Credentials**:
+2. **Configure Credentials** — Three methods:
+
+   **Method 1: `.env` File (Recommended for Local Development)**
+   Create `.env` in working directory (copy from project's `.env.example`):
+   ```ini
+   JDC_ACCESS_KEY=your_access_key_here
+   JDC_SECRET_KEY=your_secret_key_here
+   JDC_REGION=cn-north-1
+   ```
    
-   The Agent runtime MUST have the following environment variables set. These map to `{{env.*}}` placeholders used throughout this Skill:
+   > **Note:** Agent Runtime auto-loads `.env` if present. Shell env vars have **higher priority**.
+
+   **Method 2: Shell Environment Variables (Recommended for Production)**
    
    | Variable | Description | Required | Agent Behavior |
    |----------|-------------|----------|----------------|
@@ -332,9 +342,19 @@ jdc vm delete-instance \
    export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
    export JDC_REGION="cn-north-1"
    ```
-   
-   > The Agent MUST verify these are set before any operation. If missing, instruct user to configure via `jdc config init`.
-   > ⚠️ **Security Note**: Do not hardcode credentials in code or configuration files. Use `{{env.*}}` placeholders injected by the Agent harness.
+
+   **Method 3: CLI Interactive Config**
+   ```bash
+   jdc config init
+   ```
+
+3. **Verify Configuration**:
+   ```bash
+   jdc vm describe-instance-types --region-id cn-north-1 --output json --page-number 1 --page-size 1
+   ```
+
+   > The Agent MUST verify these are set before any operation. If missing, instruct user to configure credentials.
+   > ⚠️ **Security Note**: Never commit `.env` files to version control. Use `{{env.*}}` placeholders for credentials.
 
 ## Reference Directory
 - [Core Concepts](references/core-concepts.md)

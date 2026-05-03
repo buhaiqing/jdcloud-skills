@@ -73,8 +73,16 @@ client = AlbClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))
 | `JDC_SECRET_KEY` | Yes | JD Cloud Secret Key | JD Cloud Console (same as above) |
 | `JDC_REGION` | No | Default region ID | Default: `cn-north-1` |
 
-### Setting Environment Variables
+### Configuration Methods
 
+**Method 1: `.env` File (Recommended for Local Development)**
+```ini
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+
+**Method 2: Shell Environment Variables (Production)**
 ```bash
 # Linux / macOS
 export JDC_ACCESS_KEY="your-access-key"
@@ -86,6 +94,13 @@ $env:JDC_ACCESS_KEY="your-access-key"
 $env:JDC_SECRET_KEY="your-secret-key"
 $env:JDC_REGION="cn-north-1"
 ```
+
+**Method 3: CLI Configuration**
+```bash
+jdc config init
+```
+
+> **Priority**: Shell env vars > `.env` file > CLI config > Defaults. Never commit `.env` to version control.
 
 ### Credential Verification
 

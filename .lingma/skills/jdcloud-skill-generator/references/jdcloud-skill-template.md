@@ -232,13 +232,38 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 ## Prerequisites
 
 1. **Install** the JD Cloud SDK package(s) and, when **`cli_applicability: dual-path`**, the **CLI** (pin versions in `references/integration.md`; `jdc` install is **required** for dual-path).
-2. **Environment variables** (fail if missing for secrets); for CLI, document `jdc config` / env per official CLI docs:
 
-```bash
-export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-export JDC_REGION="cn-north-1"
-```
+2. **Configure Credentials** — Three methods:
+
+   **Method 1: `.env` File (Recommended for Local Development)**
+   Create `.env` in project root (copy from `.env.example`):
+   ```ini
+   JDC_ACCESS_KEY=your_access_key_here
+   JDC_SECRET_KEY=your_secret_key_here
+   JDC_REGION=cn-north-1
+   ```
+   
+   > **Note:** Agent Runtime auto-loads `.env` if present. Shell env vars have **higher priority** (won't be overridden by `.env`).
+
+   **Method 2: Shell Environment Variables (Recommended for Production)**
+   ```bash
+   export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+   export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
+   export JDC_REGION="cn-north-1"
+   ```
+
+   **Method 3: CLI Interactive Config**
+   ```bash
+   jdc config init
+   ```
+
+3. **Verify Configuration**:
+   ```bash
+   # Quick validation
+   jdc [product] describe-... --region-id cn-north-1 --output json
+   ```
+
+> **Security:** Never commit `.env` to version control (already in `.gitignore`). All credentials use `{{env.*}}` placeholders in generated Skills — never real values.
 
 ## Reference Directory
 

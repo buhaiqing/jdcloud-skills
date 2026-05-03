@@ -425,14 +425,37 @@ done
    pip install jdcloud_cli
    jdc config init
    ```
-3. **Configure Credentials**:
-   The Agent runtime MUST have the following environment variables set. These map to `{{env.*}}` placeholders used throughout this Skill:
+3. **Configure Credentials** — Three methods:
+
+   **Method 1: `.env` File (Recommended for Local Development)**
+   Create `.env` in working directory:
+   ```ini
+   JDC_ACCESS_KEY=your_access_key_here
+   JDC_SECRET_KEY=your_secret_key_here
+   JDC_REGION=cn-north-1
+   ```
+   
+   > **Note:** Agent Runtime auto-loads `.env` if present. Shell env vars have **higher priority**.
+
+   **Method 2: Shell Environment Variables (Recommended for Production)**
+   The Agent runtime MUST have the following environment variables set:
    ```bash
    export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
    export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
    export JDC_REGION="cn-north-1"
    ```
-   > The Agent MUST verify these are set before any operation. If missing, instruct user to configure via `jdc config init`.
+
+   **Method 3: CLI Interactive Config**
+   ```bash
+   jdc config init
+   ```
+
+4. **Verify Configuration**:
+   ```bash
+   jdc vpc describe-vpcs --region-id cn-north-1 --output json --page-number 1 --page-size 1
+   ```
+
+   > The Agent MUST verify credentials before any operation. Never commit `.env` files to version control.
 
 ## Reference Directory
 - [Core Concepts](references/core-concepts.md)

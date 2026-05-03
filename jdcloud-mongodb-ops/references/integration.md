@@ -12,6 +12,14 @@ pip install jdcloud-sdk-python
 
 ### Credential Configuration
 
+**Method 1: `.env` File (Recommended for Local Development)**
+```ini
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+
+**Method 2: Shell Environment Variables (Production)**
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
@@ -26,6 +34,13 @@ credential = Credential(
 # Initialize client with region
 client = MongodbClient(credential, region="cn-north-1")
 ```
+
+**Method 3: CLI Configuration**
+```bash
+jdc config init
+```
+
+> **Priority**: Shell env vars > `.env` file > CLI config > Defaults. Never commit `.env` to version control.
 
 ### Basic Usage Pattern
 

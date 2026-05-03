@@ -742,50 +742,65 @@ else:
     print(f"Error: {response.error.message}")
 ```
 
-## Best Practices
+## Environment Variables
 
-### 1. Credential Management
+JD Cloud credentials can be configured via environment variables. Three methods are supported:
 
-- ✅ Store credentials using environment variables
+| Variable | Required | Description | Default |
+|----------|----------|-------------|--------|
+| `JDC_ACCESS_KEY` | Yes | JD Cloud Access Key | — |
+| `JDC_SECRET_KEY` | Yes | JD Cloud Secret Key | — |
+| `JDC_REGION` | No | Default region | `cn-north-1` |
+
+### Method 1: `.env` File (Recommended for Local Development)
+
+Create `.env` file in working directory:
+```ini
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+
+Agent Runtime will auto-load `.env` if present. Shell environment variables have **higher priority**.
+
+### Method 2: Shell Environment Variables (Recommended for Production)
+
+```bash
+# Linux / macOS
+export JDC_ACCESS_KEY="your-access-key"
+export JDC_SECRET_KEY="your-secret-key"
+export JDC_REGION="cn-north-1"
+
+# Windows (PowerShell)
+$env:JDC_ACCESS_KEY="your-access-key"
+$env:JDC_SECRET_KEY="your-secret-key"
+$env:JDC_REGION="cn-north-1"
+```
+
+### Method 3: CLI Configuration
+
+```bash
+jdc config init
+# or
+jdc configure add --access-key YOUR_KEY --secret-key YOUR_SECRET --region-id cn-north-1
+```
+
+### Priority Order
+
+1. Shell environment variables (highest)
+2. `.env` file values
+3. CLI configuration
+4. Default values (lowest)
+
+> **Security**: Never commit `.env` files to version control. Use environment variables or secret management services for production.
+
+## Credential Management Best Practices
+
+- ✅ Store credentials using environment variables or `.env` (local dev only)
 - ✅ Use key management services (e.g., AWS Secrets Manager, HashiCorp Vault)
-- ✅ Rotate Access Keys regularly
+- ✅ Rotate Access Keys regularly (every 90 days recommended)
 - ❌ Do not hardcode credentials in code
 - ❌ Do not commit credentials to version control
+- ❌ Do not share `.env` files via email or chat
 
-### 2. Error Handling
-
-- Implement retry mechanisms to handle transient errors
-- Log detailed error information
-- Provide clear error messages to users
-- Distinguish between client errors and server errors
-
-### 3. Resource Tags
-
-- Add tags to all resources for easier management
-- Use a unified tag naming convention
-- Examples: Environment, Application, Owner, CostCenter
-
-### 4. Idempotency
-
-- Ensure scripts and automation workflows are idempotent
-- Multiple executions should not produce side effects
-- Check if a resource exists before creating it
-
-### 5. Version Control
-
-- Version control Infrastructure as Code files
-- Use semantic versioning
-- Perform code reviews before changes
-
-### 6. Testing
-
-- Validate automation scripts in a test environment
-- Use dry-run mode to preview changes
-- Write unit tests and integration tests
-
-## Related Resources
-
-- [JD Cloud SDK Documentation](https://docs.jdcloud.com/cn/sdk/)
-- [JD Cloud API Documentation](https://docs.jdcloud.com/cn/api/)
-- [Terraform Provider Documentation](https://registry.terraform.io/providers/jdcloud/jdcloud/latest/docs)
-- [Ansible Collection Documentation](https://galaxy.ansible.com/jdcloud/cloud)
+## SDK Integration

@@ -25,11 +25,26 @@ client = RedisClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))
 
 ### Environment Variables
 
+**Method 1: `.env` File (Recommended for Local Development)**
+```ini
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+
+**Method 2: Shell Environment Variables (Production)**
 ```bash
 export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
 export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
 export JDC_REGION="cn-north-1"  # Default region
 ```
+
+**Method 3: CLI Interactive Config**
+```bash
+jdc configure add --access-key YOUR_KEY --secret-key YOUR_SECRET --region-id cn-north-1
+```
+
+> **Priority**: Shell env vars > `.env` file > CLI config > Defaults. Never commit `.env` to version control.
 
 > **Security Note**: Use `os.environ['KEY']` for secrets (fail-fast if missing). Use `.get` only for optional non-secret config.
 

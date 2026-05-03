@@ -66,6 +66,24 @@ curl -fsSL https://github.com/jdcloud-api/jdcloud-cli/releases/latest/download/j
 
 ### 配置凭证
 
+三种方式（按优先级排序）:
+
+**方式 1：`.env` 文件（本地开发推荐）**
+```bash
+# 复制示例文件
+cp .env.example .env
+
+# 编辑 .env，填入真实凭证
+# Agent Runtime 会自动加载
+```
+```ini
+# .env 文件内容示例
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+
+**方式 2：Shell 环境变量（生产环境推荐）**
 ```bash
 # 交互式
 jdc config init
@@ -74,7 +92,13 @@ jdc config init
 jdc configure add --access-key YOUR_KEY --secret-key YOUR_SECRET --region-id cn-north-1
 ```
 
-> **安全**：凭证用环境变量而非硬编码，见下方环境变量配置。
+**方式 3：CLI 交互式配置**
+```bash
+jdc config init
+```
+
+> **优先级**：Shell 环境变量 > `.env` 文件 > 默认值
+> **安全**：`.env` 已在 `.gitignore` 中，不会被提交。生成的 Skill 使用 `{{env.*}}` 占位符，不含真实凭证。
 
 ## 开发新 Skill
 

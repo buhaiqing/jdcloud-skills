@@ -90,6 +90,111 @@ If the user wants **operational execution** (e.g. “create a resource”), load
 
 ## Generation Process
 
+### Step 0: Environment Setup
+
+Before analyzing sources, the Agent MUST ensure environment variables are available for SDK/CLI validation during Skill generation.
+
+#### Environment Variable Sources (Priority Order)
+
+| Priority | Source | Description |
+|----------|--------|-------------|
+| 1 (highest) | Shell environment | Explicitly set `export JDC_ACCESS_KEY=...` |
+| 2 | `.env` file | Project root or custom path via parameter |
+| 3 (lowest) | Default values | `JDC_REGION=cn-north-1` only |
+
+#### `.env` File Support
+
+For local development convenience, the Agent MAY load environment variables from a `.env` file:
+
+**Location options:**
+- **Working directory (cwd)**: Agent Runtime's current working directory (recommended for cross-project mixing)
+- Project root: `/path/to/jdcloud-skills/.env` (when working within this repo)
+- Custom path: User specifies via `--env-file` parameter
+
+> **Cross-project mixing:** When using JD Cloud Skills in other projects (e.g., mixing with Aliyun/AWS Skills), place `.env` in the **working directory** of that project. All Skills share the same environment variables loaded by Agent Runtime.
+
+**Format (INI-style):**
+```ini
+# JD Cloud credentials
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+
+# Optional: CLI configuration
+JDC_CLI_OUTPUT=json
+```
+
+**Multi-cloud mixing (recommended namespace prefixes):**
+```ini
+# JD Cloud - use JDC_* prefix
+JDC_ACCESS_KEY=...
+JDC_SECRET_KEY=...
+JDC_REGION=cn-north-1
+
+# Aliyun - use ALIYUN_* prefix
+ALIYUN_ACCESS_KEY_ID=...
+ALIYUN_ACCESS_KEY_SECRET=...
+ALIYUN_REGION=cn-hangzhou
+
+# AWS - use AWS_* prefix (standard)
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_DEFAULT_REGION=us-east-1
+```
+
+> **Namespace best practice:** Use platform-specific prefixes to avoid credential conflicts when mixing multiple cloud provider Skills.
+
+**Priority rule:**
+- Shell environment variables **MUST** override `.env` values
+- Example: If `export JDC_REGION=cn-east-2` is set, use `cn-east-2` even if `.env` says `cn-north-1`
+
+#### Loading Mechanism
+
+**Python reference implementation (if Agent Runtime supports):**
+```python
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env with priority: shell env > .env
+env_file = Path.cwd() / '.env'
+load_dotenv(env_file, override=False)  # False = shell env has priority
+
+# Verify critical variables
+required_vars = ['JDC_ACCESS_KEY', 'JDC_SECRET_KEY']
+for var in required_vars:
+    if not os.environ.get(var):
+        raise EnvironmentError(f"Missing required environment variable: {var}")
+```
+
+#### Dual-Path Support (CLI and SDK)
+
+The `.env` file supports both execution modes:
+
+- **CLI mode**: Agent Runtime loads `.env` and passes vars to `jdc` commands
+- **SDK mode**: Agent Runtime loads `.env` and injects into `os.environ` for SDK calls
+
+Both modes share the same credential source, ensuring consistency.
+
+#### Safety Rules (Per Governance)
+
+- **NEVER** commit `.env` files to version control (already in `.gitignore`)
+- **NEVER** write `.env` values into generated Skill documents
+- Generated Skills continue using `{{env.*}}` placeholders
+- `.env` is for **local development convenience only**, not production
+
+#### Verification
+
+After loading, the Agent SHOULD verify credentials before proceeding to Step 1:
+```bash
+# Quick CLI validation
+jdc vm describe-instance-types --region-id cn-north-1 --output json --page-number 1 --page-size 1
+```
+
+If validation fails:
+- HALT with clear message: "Credentials invalid or network unreachable"
+- Suggest: Check `.env` file or run `jdc config init`
+
 ### Step 1: Analyze sources
 
 Extract:

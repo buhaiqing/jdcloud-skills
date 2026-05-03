@@ -13,6 +13,22 @@ pip install jdcloud_sdk
 
 #### SDK 初始化
 
+**环境变量配置方式：**
+
+| Variable | Required | Description | Default |
+|----------|----------|-------------|--------|
+| `JDC_ACCESS_KEY` | Yes | JD Cloud Access Key | — |
+| `JDC_SECRET_KEY` | Yes | JD Cloud Secret Key | — |
+| `JDC_REGION` | No | Default region | `cn-north-1` |
+
+**Method 1: `.env` File (Local Development)**
+```ini
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+
+**Method 2: Shell Environment Variables (Production)**
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
@@ -29,6 +45,13 @@ credential = Credential(
 config = Config(timeout=30)
 client = MonitorClient(config, credential, os.environ.get('JDC_REGION', 'cn-north-1'))
 ```
+
+**Method 3: CLI Configuration**
+```bash
+jdc config init
+```
+
+> **Priority**: Shell env > `.env` > CLI config > Defaults. Never commit `.env` to version control.
 
 #### 查询监控服务列表
 

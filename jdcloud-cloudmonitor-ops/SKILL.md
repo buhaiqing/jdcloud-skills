@@ -346,15 +346,30 @@ jdc --version
 
 ### 2. 配置凭证
 
-Agent 运行时必须设置以下环境变量，对应本 Skill 中的 `{{env.*}}` 占位符：
+三种方式（按优先级排序）:
 
+**方式 1：`.env` 文件（本地开发推荐）**
+```ini
+JDC_ACCESS_KEY=your_access_key_here
+JDC_SECRET_KEY=your_secret_key_here
+JDC_REGION=cn-north-1
+```
+> Agent Runtime 自动加载 `.env`，Shell 环境变量优先级更高。
+
+**方式 2：Shell 环境变量（生产环境推荐）**
+Agent 运行时必须设置以下环境变量，对应本 Skill 中的 `{{env.*}}` 占位符：
 ```bash
 export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
 export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
 export JDC_REGION="cn-north-1"
 ```
 
-> Agent 必须在任何操作前验证这些变量已设置。若缺失，引导用户通过 `jdc config init` 配置。
+**方式 3：CLI 交互式配置**
+```bash
+jdc config init
+```
+
+> Agent 必须在任何操作前验证这些变量已设置。`.env` 文件禁止提交到版本控制。
 
 ## 支持的云产品监控
 
