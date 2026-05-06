@@ -30,11 +30,25 @@
 
 ### 1. 安装 JD Cloud CLI
 
+**推荐：使用 uv（幂等且可重现）**
+
 ```bash
-# 使用 pip 安装
-pip install jdcloud_cli
+# 安装 uv（一次性系统设置）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 创建隔离环境并安装（幂等，可重复执行）
+uv venv --python 3.10
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+uv pip install jdcloud_cli
 
 # 验证安装
+jdc --version
+```
+
+**备选：使用 pip**
+
+```bash
+pip install jdcloud_cli
 jdc --version
 ```
 
@@ -100,6 +114,16 @@ jdc monitor describe-services --region-id cn-north-1 --output json
 ```
 
 ### 4. 安装 Python SDK（可选，用于复杂自动化）
+
+**使用 uv（推荐）**
+
+```bash
+# 确保已激活 uv 环境
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+uv pip install jdcloud_sdk
+```
+
+**使用 pip**
 
 ```bash
 pip install jdcloud_sdk

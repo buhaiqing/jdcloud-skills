@@ -231,9 +231,36 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
 ## Prerequisites
 
-1. **Install** the JD Cloud SDK package(s) and, when **`cli_applicability: dual-path`**, the **CLI** (pin versions in `references/integration.md`; `jdc` install is **required** for dual-path).
+1. **Install uv** (system-wide, one-time per machine) — `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
 
-2. **Configure Credentials** — Three methods:
+   ```bash
+   # macOS / Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   # or: brew install uv
+
+   # Windows (PowerShell)
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+   > **Note:** Installing uv itself is a one-time system setup. The commands below are **idempotent** and safe to re-run.
+
+2. **Bootstrap Python environment** (idempotent — safe to re-run):
+
+   ```bash
+   uv venv --python 3.10
+
+   # Activate: macOS/Linux
+   source .venv/bin/activate
+   # Activate: Windows
+   # .venv\Scripts\activate
+
+   uv pip install jdcloud_cli jdcloud_sdk
+   jdc --version
+   ```
+
+   > `uv venv` is idempotent: re-running on an existing `.venv` is a no-op. `uv pip install` skips already-satisfied packages. Pin versions in `references/integration.md`.
+
+3. **Configure Credentials** — Three methods:
 
    **Method 1: `.env` File (Recommended for Local Development)**
    Create `.env` in project root (copy from `.env.example`):
@@ -257,7 +284,7 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
    jdc config init
    ```
 
-3. **Verify Configuration**:
+4. **Verify Configuration**:
    ```bash
    # Quick validation
    jdc [product] describe-... --region-id cn-north-1 --output json
@@ -365,6 +392,65 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
 ````markdown
 # Integration
+
+## Environment Setup (uv)
+
+`jdc` CLI and JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
+
+### Quick Start (Command-based)
+
+**Bootstrap (idempotent — safe to re-run):**
+```bash
+uv venv --python 3.10
+
+# Activate: macOS/Linux
+source .venv/bin/activate
+# Activate: Windows
+# .venv\Scripts\activate
+
+uv pip install jdcloud_cli jdcloud_sdk
+```
+
+**Pin versions for reproducibility (optional):**
+```bash
+uv pip install jdcloud_cli==1.2.30 jdcloud_sdk==1.6.26
+```
+> Replace version numbers with the latest stable releases verified against the product's OpenAPI.
+
+### Advanced: Project-based Setup (Recommended for Teams)
+
+For reproducible, version-locked environments, use `pyproject.toml` with `uv sync`:
+
+**1. Create `pyproject.toml`:**
+```toml
+[project]
+name = "jdcloud-ops"
+version = "1.0.0"
+requires-python = ">=3.10"
+dependencies = [
+    "jdcloud_cli>=1.2.0",
+    "jdcloud_sdk>=1.6.0",
+]
+
+[tool.uv]
+python-version = "3.10"
+```
+
+**2. Sync environment (idempotent):**
+```bash
+# Creates .venv and installs all dependencies in one command
+uv sync
+
+# Activate
+source .venv/bin/activate  # macOS/Linux
+# .venv\Scripts\activate   # Windows
+```
+
+**Benefits:**
+- **Fully idempotent**: `uv sync` always produces the same environment
+- **Lock file**: `uv.lock` pins exact versions for reproducibility
+- **Team consistency**: All developers use identical dependencies
+- **CI/CD ready**: `uv sync` works identically in pipelines
 
 ## Python SDK bootstrap
 

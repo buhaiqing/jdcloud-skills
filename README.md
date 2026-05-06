@@ -56,11 +56,29 @@ jdcloud-skills/
 
 ### 安装
 
-```bash
-# pip（推荐）
-pip install jdcloud_cli
+**方式一：uv（推荐，幂等且可重现）**
 
-# 或二进制
+使用 [uv](https://docs.astral.sh/uv/) 进行 Python 环境管理，支持虚拟环境和依赖锁定：
+
+```bash
+# 安装 uv（一次性）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 创建环境并安装（幂等，可重复执行）
+uv venv --python 3.10
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+uv pip install jdcloud_cli
+```
+
+**方式二：pip**
+
+```bash
+pip install jdcloud_cli
+```
+
+**方式三：二进制**
+
+```bash
 curl -fsSL https://github.com/jdcloud-api/jdcloud-cli/releases/latest/download/jdc-linux-amd64.tar.gz | tar -xz && sudo mv jdc /usr/local/bin/
 ```
 
