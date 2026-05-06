@@ -12,8 +12,10 @@
 |------|------|
 | **占位符机制** | `{{env.*}}`（环境变量）、`{{user.*}}`（用户输入）、`{{output.*}}`（输出捕获），实现人机双通道 |
 | **职责委托** | `SHOULD/SHOULD NOT Use` 定义边界，跨产品操作自动委派 |
-| **生成器** | 输入产品名称和文档 URL，自动生成结构化 Skill |
-| **跨平台** | 不绑定特定 Agent 框架，支持 Harness/Claude Code/自定义 MCP |
+| **生成器** | 基于 OpenAPI 规范自动生成 Skill 框架模板，支持人工审核和完善 |
+| **jdc-first 执行** | 优先使用 `jdc` CLI，失败 3 次后降级到 SDK/API |
+| **安全机制** | 凭证隔离（`{{env.*}}` 不暴露）、操作安全门（删除/恢复需确认） |
+| **跨平台设计** | 基于标准 Markdown + OpenSpec，支持多种 Agent 框架接入 |
 
 ### 什么是 Meta Skill
 
@@ -37,10 +39,20 @@
 ```
 jdcloud-skills/
 ├── README.md                          # 本文件
-├── jdcloud-skill-generator/           # Skill 生成器
+├── QUICK_START.md                     # 快速开始指南
+├── jdcloud-skill-generator/           # Skill 生成器（Meta Skill）
 │   ├── SKILL.md
-│   └── references/jdcloud-skill-template.md
-└── jdcloud-[product]-ops/             # 产品 Skill
+│   └── references/
+├── jdcloud-vm-ops/                    # 云主机运维 Skill
+│   ├── SKILL.md
+│   ├── QUICK_REFERENCE.md
+│   ├── assets/
+│   └── references/
+├── jdcloud-redis-ops/                 # Redis 分布式缓存运维 Skill
+│   ├── SKILL.md
+│   ├── assets/
+│   └── references/
+└── jdcloud-cloudmonitor-ops/          # 云监控运维 Skill
     ├── SKILL.md
     ├── assets/
     └── references/
@@ -49,6 +61,15 @@ jdcloud-skills/
 ## 什么是 Skill
 
 结构化 Markdown 文档，指导 AI Agent 完成特定任务。包含：元数据、核心功能、使用指南、最佳实践、参考文档。
+
+## 已开发的 Skills
+
+| Skill 名称 | 产品 | 功能描述 | 状态 |
+|------------|------|----------|------|
+| [jdcloud-vm-ops](jdcloud-vm-ops/) | 云主机 (VM) | 云主机生命周期管理、监控、故障排查 | ✅ 可用 |
+| [jdcloud-redis-ops](jdcloud-redis-ops/) | 云缓存 Redis | Redis 实例管理、性能分析、备份恢复 | ✅ 可用 |
+| [jdcloud-cloudmonitor-ops](jdcloud-cloudmonitor-ops/) | 云监控 | 告警规则管理、指标查询、监控大盘 | ✅ 可用 |
+| [jdcloud-skill-generator](jdcloud-skill-generator/) | Meta Skill | 自动生成新产品 Skill | ✅ 可用 |
 
 ## JD Cloud CLI
 
@@ -84,9 +105,8 @@ curl -fsSL https://github.com/jdcloud-api/jdcloud-cli/releases/latest/download/j
 
 ### 配置凭证
 
-三种方式（按优先级排序）:
+#### 方式 1：`.env` 文件（本地开发推荐）
 
-**方式 1：`.env` 文件（本地开发推荐）**
 ```bash
 # 复制示例文件
 cp .env.example .env
@@ -94,6 +114,7 @@ cp .env.example .env
 # 编辑 .env，填入真实凭证
 # Agent Runtime 会自动加载
 ```
+
 ```ini
 # .env 文件内容示例
 JDC_ACCESS_KEY=your_access_key_here
@@ -101,22 +122,62 @@ JDC_SECRET_KEY=your_secret_key_here
 JDC_REGION=cn-north-1
 ```
 
-**方式 2：Shell 环境变量（生产环境推荐）**
+#### 方式 2：CLI 配置文件
+
 ```bash
-# 交互式
+# 交互式配置
 jdc config init
 
-# 或手动
+# 或手动添加配置
 jdc configure add --access-key YOUR_KEY --secret-key YOUR_SECRET --region-id cn-north-1
 ```
 
-**方式 3：CLI 交互式配置**
-```bash
-jdc config init
+配置文件位置：`~/.jdc/config`
+
+```ini
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
 ```
 
-> **优先级**：Shell 环境变量 > `.env` 文件 > 默认值
+#### 方式 3：Shell 环境变量
+
+```bash
+export JDC_ACCESS_KEY="your_access_key"
+export JDC_SECRET_KEY="your_secret_key"
+export JDC_REGION="cn-north-1"
+```
+
+> **优先级**：Shell 环境变量 > `.env` 文件 > CLI 配置文件 > 默认值
 > **安全**：`.env` 已在 `.gitignore` 中，不会被提交。生成的 Skill 使用 `{{env.*}}` 占位符，不含真实凭证。
+
+#### ⚠️ 重要提示：jdc CLI 凭证配置
+
+**jdc CLI 不读取环境变量**，它只从 `~/.jdc/config` 文件读取凭证。在沙盒/容器环境中，需要特殊处理：
+
+```bash
+# 设置可写的 HOME 目录
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+
+# 创建配置文件
+cat > /tmp/jdc-home/.jdc/config << 'EOF'
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+EOF
+
+# 设置当前 profile
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+```
 
 ## 开发新 Skill
 
@@ -184,19 +245,34 @@ markdownlint jdcloud-[product]-ops/SKILL.md
 
 更新流程：修改内容 → 更新变更历史 → 更新 version 字段 → 提交。
 
-## 示例：创建云主机 Skill
+## 使用示例
+
+### 示例 1：查询云主机列表
 
 ```bash
-mkdir -p jdcloud-vm-ops/references jdcloud-vm-ops/assets
+# 配置凭证后执行
+jdc --output json vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 10
+```
 
-# 引用生成器并提供提示词："生成京东云 VM 的 Skill"
+### 示例 2：查询 Redis 实例
 
-# 验证
-head -20 jdcloud-vm-ops/SKILL.md
+```bash
+# 使用 jdc CLI 查询 Redis 实例列表
+jdc --output json redis describe-cache-instances --region-id cn-north-1 --page-number 1 --page-size 100
 
-# 测试
-export JDC_ACCESS_KEY="your_key" JDC_SECRET_KEY="your_secret" JDC_REGION="cn-north-1"
-jdc vm describe-instances --region-id cn-north-1
+# 查询特定实例详情
+jdc --output json redis describe-cache-instance --region-id cn-north-1 --cache-instance-id redis-xxxxx
+```
+
+### 示例 3：创建新 Skill
+
+```bash
+mkdir -p jdcloud-[product]-ops/references jdcloud-[product]-ops/assets
+
+# 引用生成器并提供提示词："生成京东云 [产品] 的 Skill"
+
+# 验证生成的 SKILL.md
+head -20 jdcloud-[product]-ops/SKILL.md
 ```
 
 ## Skill 生成器
@@ -216,8 +292,13 @@ Meta Skill，从产品文档自动生成运维 Agent Skill。
 
 **P1 建议**：资源声明、一致命名、输出键声明、版本锁定
 
+## 快速开始
+
+如果你是第一次使用本项目，请参考 [QUICK_START.md](QUICK_START.md) 获取详细的快速入门指南。
+
 ## 参考资源
 
+- [快速开始指南](QUICK_START.md)
 - [Skill 生成器](jdcloud-skill-generator/SKILL.md)
 - [Skill 模板](jdcloud-skill-generator/references/jdcloud-skill-template.md)
 - [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)

@@ -9,14 +9,14 @@ license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`) when this
-  product is supported by the CLI (dual-path skills).
+  product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.1"
-  last_updated: "2026-05-03"
+  version: "1.2.0"
+  last_updated: "2026-05-06"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Redis API v1 - https://redis.jdcloud-api.com/v1"
-  cli_applicability: dual-path
+  cli_applicability: jdc-first-with-fallback
   cli_support_evidence: >-
     Confirmed via `jdc` help output showing 'redis' in product list:
     `{mps,cps,rds,jke,vpc,xdata,mongodb,configure,streambus,ipanti,baseanti,datastar,redis,nc,monitor,iam,disk,cr,streamcomputer,sop,clouddnsservice,vm,oss}`.
@@ -33,29 +33,56 @@ metadata:
 
 ## Overview
 
-JD Cloud Redis (分布式缓存/云缓存 Redis) is a high-performance distributed cache service compatible with open-source Redis protocol. It provides elastic, scalable, and reliable caching capabilities with automatic failover, data backup, and online scaling. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **dual-path execution** (official **SDK/API** and official **`jdc` CLI**), response validation, and failure recovery. **Do not use the web console as the primary agent execution path** in `SKILL.md`.
+JD Cloud Redis (分布式缓存/云缓存 Redis) is a high-performance distributed cache service compatible with open-source Redis protocol. It provides elastic, scalable, and reliable caching capabilities with automatic failover, data backup, and online scaling. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **jdc-first execution with SDK/API fallback**, response validation, and failure recovery. **Do not use the web console as the primary agent execution path** in `SKILL.md`.
 
 ### CLI applicability (repository policy)
 
-- **`cli_applicability: dual-path`:** Official `jdc` supports this product. You **MUST** ship **`references/cli-usage.md`** and, in **each** execution flow below, document **both** the SDK step **and** the `jdc` step for every operation the CLI exposes. The CLI covers most common Redis instance operations (create, describe, modify, delete, backup, restore, etc.).
+- **`cli_applicability: jdc-first-with-fallback`:** Official `jdc` supports this product. The Agent MUST attempt to use `jdc` as the **primary execution path**. If `jdc` installation or command execution fails, the Agent MUST retry up to **3 times** (with exponential backoff). Only after **3 consecutive failures** should the Agent fall back to **SDK/API**. Both paths MUST be documented. You **MUST** ship **`references/cli-usage.md`** and, in **each** execution flow below, document **both** the `jdc` step **and** the SDK fallback step for every operation the CLI exposes.
 
-### Path Preference (SDK vs CLI)
+### Path Preference (jdc-first with SDK Fallback)
 
-When both paths are available:
+The Agent MUST follow this execution priority:
 
-- **Prefer SDK** when:
-  - Complex multi-step workflows with conditional logic
-  - Python application integration or scripts
-  - CI/CD pipelines with Python tooling
-  - Need for advanced error handling and retry logic
-  - Integration tests or automated verification
+1. **`jdc` CLI (primary path)** — Attempt `jdc` first for every operation. Quick ad-hoc operations, shell automation, and single-operation tasks benefit most from CLI.
+2. **Retry up to 3 times** if `jdc` fails (with exponential backoff: 0s → 2s → 4s).
+3. **SDK/API (fallback path, after 3 jdc failures)** — Use only when `jdc` is persistently unavailable. Complex multi-step workflows with conditional logic, CI/CD pipelines with Python tooling, and integration tests may require SDK.
 
-- **Prefer CLI (`jdc`)** when:
-  - Quick ad-hoc operations from terminal
-  - No Python runtime available in environment
-  - Shell script automation or bash pipelines
-  - Simple single-operation tasks
-  - Debugging or troubleshooting from command line
+When both paths succeed, prefer `jdc` output for consistency with the primary path.
+
+### Critical jdc CLI Behavioral Notes (from empirical testing)
+
+**Failure 1: `--output json` must be TOP-LEVEL, not subcommand-level**
+The `--output json` argument is defined in the base controller (`base_controller.py`), not in individual subcommands. Cement's nested argparse structure restricts `--output` to be placed **before** the subcommand.
+
+```
+# CORRECT (works):
+jdc --output json redis describe-cache-instances --region-id cn-north-1 --page-number 1 --page-size 100
+
+# WRONG (fails with "unrecognized arguments: --output json"):
+jdc redis describe-cache-instances --region-id cn-north-1 --page-number 1 --page-size 100 --output json
+```
+
+**Failure 2: jdc CLI does NOT support `--no-interactive`**
+The `--no-interactive` flag does not exist in the jdc CLI argument definition. Using it will cause an `unrecognized arguments` error. Omit this flag entirely.
+
+**Failure 3: jdc CLI does NOT read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` environment variables**
+The CLI's `ProfileManager` class reads credentials exclusively from `~/.jdc/config` (INI format). Setting environment variables alone is insufficient. The config file must be pre-created with the following structure:
+```ini
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+```
+
+Plus a `~/.jdc/current` file containing just `default` (no newline at end).
+
+**Failure 4: `PermissionError` on `~/.jdc/` directory creation**
+The CLI's `ProfileManager.__init__()` calls `__make_config_dir()` which does `os.makedirs(os.path.expanduser("~") + "/.jdc")`. In sandboxed environments (trae-sandbox, containers) where home is not writable, this crashes with `PermissionError`. The fix is:
+1. Set `HOME` to a writable path: `export HOME=/tmp/jdc-home`
+2. Pre-create `~/.jdc/config` and `~/.jdc/current` files before running `jdc`
 
 ## Trigger & Scope (Agent-Readable)
 
@@ -126,12 +153,16 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-05-06 | **Empirical CLI fixes**: Fixed `--output json` placement (must be top-level, before subcommand); removed `--no-interactive` (unsupported); fixed jdc credential config (must use `~/.jdc/config` INI file, env vars unsupported); fixed PermissionError via `HOME=/tmp/jdc-home`; fixed all SDK import paths (PascalCase module names) and API call patterns (Parameters objects + `client.send()`); fixed Backup parameters (requires `fileName`/`backupType`); fixed Restore parameter name (`baseId` not `backupId`) |
+| 1.1.0 | 2026-05-06 | **jdc-first with fallback strategy**: execution flows now prioritize `jdc` CLI (primary) with SDK/API fallback after 3 retries; Prerequisites updated to `uv`-based bootstrap with Phase 1 (jdc) / Phase 2 (SDK fallback); Path Preference flipped to jdc-first; pre-flight checks reordered |
 | 1.0.1 | 2026-05-03 | Added safety gates for Delete/Restore/Modify operations; added Path Preference section |
 | 1.0.0 | 2026-05-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
 
 ## Execution Flows (Agent-Readable)
 
-Every operation: **Pre-flight → Execute (SDK/API and `jdc`) → Validate → Recover**. Do not skip phases.
+Every operation: **Pre-flight → Execute (jdc primary / SDK fallback) → Validate → Recover**. Do not skip phases.
+
+**jdc-first strategy:** The Agent MUST attempt `jdc` CLI first (primary path). If `jdc` fails after **3 retries** with exponential backoff, fall back to SDK/API. Documentation below lists `jdc` before SDK to reflect execution priority.
 
 ### Operation: Create Redis Instance
 
@@ -139,25 +170,61 @@ Every operation: **Pre-flight → Execute (SDK/API and `jdc`) → Validate → R
 
 | Check | Method | Expected | On Failure |
 |-------|--------|----------|------------|
-| SDK / deps | Import `jdcloud_sdk.services.redis.client.RedisClient` | No import error | Document install pin |
-| CLI / deps | `jdc --version` | Exit code 0 | Document CLI install / `jdc config init` |
+| CLI / deps | `jdc --version` | Exit code 0 | Retry up to 3 times; then fall back to SDK |
+| SDK / deps | `import jdcloud_sdk.services.redis.client.RedisClient` | No import error | Document install pin (fallback path) |
 | Credentials | Construct credential from env or CLI config | Non-empty keys | HALT; user configures env |
 | Region | Call `describeAvailableRegion` API | `{{user.region}}` supported | Suggest valid region |
 | VPC/Subnet | Verify subnet via `jdcloud-vpc-ops` | Subnet exists and has IP | HALT; create subnet first |
 | Instance Class | Call `describeInstanceClass` or `describeSpecConfig` | Valid spec code | Suggest available specs |
 
-#### Execution (Python SDK — illustrative)
+#### Execution — CLI (`jdc`) [Primary Path]
+
+**Required** when `cli_applicability: jdc-first-with-fallback`. Use `--output json` at the **top level** (before the subcommand). Do NOT use `--no-interactive` — it is not supported by jdc CLI.
+
+```bash
+jdc --output json redis create-cache-instance \
+  --region-id "{{user.region}}" \
+  --cache-instance-name "{{user.instance_name}}" \
+  --cache-instance-class "{{user.instance_class}}" \
+  --vpc-id "{{user.vpc_id}}" \
+  --subnet-id "{{user.subnet_id}}" \
+  --az-id-spec '{"azSpecifyType":"SpecifyByReplicaGroup","master":"{{user.az_master}}","slave":"{{user.az_slave}}"}' \
+  --cache-instance-type "{{user.cache_instance_type}}" \
+  --redis-version "{{user.redis_version}}"
+```
+
+#### Pre-flight: Configure jdc Config File for Sandbox
+
+Before running any `jdc` command in sandboxed environments, ensure the config file exists:
+
+```bash
+# Setup jdc config in a writable location (sandbox-safe)
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[{{user.profile_name|default:"default"}}]
+access_key = {{env.JDC_ACCESS_KEY}}
+secret_key = {{env.JDC_SECRET_KEY}}
+region_id = {{user.region}}
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
 
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.redis.client import RedisClient
-from jdcloud_sdk.services.redis.apis.create_cache_instance_request import CreateCacheInstanceRequest
+from jdcloud_sdk.services.redis.client.RedisClient import RedisClient
+from jdcloud_sdk.services.redis.apis.CreateCacheInstanceRequest import CreateCacheInstanceRequest, CreateCacheInstanceParameters
 
 credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
-client = RedisClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))
+client = RedisClient(credential)
 
-# Build AzIdSpec and CacheInstanceSpec per API spec
+# Build full cacheInstance spec dict (not individual setters)
 az_spec = {
     "azSpecifyType": "SpecifyByReplicaGroup",
     "master": "{{user.az_master}}",
@@ -166,36 +233,18 @@ az_spec = {
 
 cache_instance_spec = {
     "cacheInstanceName": "{{user.instance_name}}",
-    "cacheInstanceClass": "{{user.instance_class}}",  # e.g., "redis.cluster.g.micro"
+    "cacheInstanceClass": "{{user.instance_class}}",
     "vpcId": "{{user.vpc_id}}",
     "subnetId": "{{user.subnet_id}}",
     "azIdSpec": az_spec,
-    "cacheInstanceType": "{{user.cache_instance_type}}",  # master-slave, cluster, native-cluster
-    "redisVersion": "{{user.redis_version}}",  # 4.0, 5.0, 6.2
-    # optional: dbNum, replicaNumber, password, etc.
+    "cacheInstanceType": "{{user.cache_instance_type}}",
+    "redisVersion": "{{user.redis_version}}"
 }
 
-req = CreateCacheInstanceRequest(regionId="{{user.region}}", cacheInstance=cache_instance_spec)
-resp = client.create_cache_instance(req)
-instance_id = resp.result.cacheInstanceId
-```
-
-#### Execution — CLI (`jdc`)
-
-**Required** when `cli_applicability: dual-path`. Use `--output json` and non-interactive mode.
-
-```bash
-jdc redis create-cache-instance \
-  --region-id "{{user.region}}" \
-  --cache-instance-name "{{user.instance_name}}" \
-  --cache-instance-class "{{user.instance_class}}" \
-  --vpc-id "{{user.vpc_id}}" \
-  --subnet-id "{{user.subnet_id}}" \
-  --az-id-spec '{"azSpecifyType":"SpecifyByReplicaGroup","master":"{{user.az_master}}","slave":"{{user.az_slave}}"}' \
-  --cache-instance-type "{{user.cache_instance_type}}" \
-  --redis-version "{{user.redis_version}}" \
-  --output json \
-  --no-interactive
+params = CreateCacheInstanceParameters(regionId="{{user.region}}", cacheInstance=cache_instance_spec)
+req = CreateCacheInstanceRequest(parameters=params)
+resp = client.send(req)
+instance_id = resp.result["cacheInstanceId"]
 ```
 
 #### Post-execution Validation
@@ -203,28 +252,31 @@ jdc redis create-cache-instance \
 1. Capture `{{output.instance_id}}` from `$.result.cacheInstanceId`.
 2. Poll `describeCacheInstance` until `status` == `running` or timeout.
 
+```bash
+# CLI poll loop (primary path) — --output json at TOP level
+for i in $(seq 1 60); do
+  STATUS=$(jdc --output json redis describe-cache-instance \
+    --region-id "{{user.region}}" \
+    --cache-instance-id "{{output.instance_id}}" | jq -r '.result.cacheInstance.status')
+  [ "$STATUS" = "running" ] && break
+  sleep 10
+done
+```
+
 ```python
-# SDK poll loop
+# SDK poll loop (fallback, after 3 jdc failures)
+from jdcloud_sdk.services.redis.apis.DescribeCacheInstanceRequest import DescribeCacheInstanceRequest, DescribeCacheInstanceParameters
+
 for _ in range(60):
-    dresp = client.describe_cache_instance(regionId="{{user.region}}", cacheInstanceId="{{output.instance_id}}")
-    status = dresp.result.cacheInstance.status
+    dparams = DescribeCacheInstanceParameters(regionId="{{user.region}}", cacheInstanceId="{{output.instance_id}}")
+    dreq = DescribeCacheInstanceRequest(parameters=dparams)
+    dresp = client.send(dreq)
+    status = dresp.result["cacheInstance"]["status"]
     if status == "running":
         break
     if status in ["error", "deleted"]:
         raise RuntimeError(f"Instance creation failed: {status}")
     sleep(10)
-```
-
-```bash
-# CLI poll loop
-for i in $(seq 1 60); do
-  STATUS=$(jdc redis describe-cache-instance \
-    --region-id "{{user.region}}" \
-    --cache-instance-id "{{output.instance_id}}" \
-    --output json | jq -r '.result.cacheInstance.status')
-  [ "$STATUS" = "running" ] && break
-  sleep 10
-done
 ```
 
 3. On success, report instance ID, connection address, and port to user.
@@ -244,23 +296,23 @@ done
 
 ### Operation: Describe Redis Instance
 
-#### Execution (SDK)
-
-```python
-from jdcloud_sdk.services.redis.apis.describe_cache_instance_request import DescribeCacheInstanceRequest
-
-req = DescribeCacheInstanceRequest(regionId="{{user.region}}", cacheInstanceId="{{user.instance_id}}")
-resp = client.describe_cache_instance(req)
-# Access: resp.result.cacheInstance
-```
-
-#### Execution (CLI)
+#### Execution (CLI) [Primary Path]
 
 ```bash
-jdc redis describe-cache-instance \
+jdc --output json redis describe-cache-instance \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.redis.apis.DescribeCacheInstanceRequest import DescribeCacheInstanceRequest, DescribeCacheInstanceParameters
+
+params = DescribeCacheInstanceParameters(regionId="{{user.region}}", cacheInstanceId="{{user.instance_id}}")
+req = DescribeCacheInstanceRequest(parameters=params)
+resp = client.send(req)
+# Access: resp.result["cacheInstance"]
 ```
 
 #### Present to User
@@ -277,24 +329,26 @@ jdc redis describe-cache-instance \
 
 ### Operation: List Redis Instances
 
-#### Execution (SDK)
-
-```python
-from jdcloud_sdk.services.redis.apis.describe_cache_instances_request import DescribeCacheInstancesRequest
-
-req = DescribeCacheInstancesRequest(regionId="{{user.region}}", pageNumber=1, pageSize=100)
-resp = client.describe_cache_instances(req)
-instances = resp.result.cacheInstances
-```
-
-#### Execution (CLI)
+#### Execution (CLI) [Primary Path]
 
 ```bash
-jdc redis describe-cache-instances \
+jdc --output json redis describe-cache-instances \
   --region-id "{{user.region}}" \
   --page-number 1 \
-  --page-size 100 \
-  --output json
+  --page-size 100
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.redis.apis.DescribeCacheInstancesRequest import DescribeCacheInstancesRequest, DescribeCacheInstancesParameters
+
+params = DescribeCacheInstancesParameters(regionId="{{user.region}}")
+params.setPageNumber(1)
+params.setPageSize(100)
+req = DescribeCacheInstancesRequest(parameters=params)
+resp = client.send(req)
+instances = resp.result["cacheInstances"]
 ```
 
 ### Operation: Modify Redis Instance
@@ -308,28 +362,27 @@ jdc redis describe-cache-instances \
 
 **⚠️ For `modifyCacheInstanceClass` (scaling)**: Confirm with user as it may cause brief service interruption.
 
-#### Execution (SDK)
-
-```python
-from jdcloud_sdk.services.redis.apis.modify_cache_instance_attribute_request import ModifyCacheInstanceAttributeRequest
-
-req = ModifyCacheInstanceAttributeRequest(
-    regionId="{{user.region}}",
-    cacheInstanceId="{{user.instance_id}}",
-    cacheInstanceName="{{user.new_name}}"  # optional fields per API
-)
-resp = client.modify_cache_instance_attribute(req)
-```
-
-#### Execution (CLI)
+#### Execution (CLI) [Primary Path]
 
 ```bash
-jdc redis modify-cache-instance-attribute \
+jdc --output json redis modify-cache-instance-attribute \
   --region-id "{{user.region}}" \
   --cache-instance-id "{{user.instance_id}}" \
-  --cache-instance-name "{{user.new_name}}" \
-  --output json \
-  --no-interactive
+  --cache-instance-name "{{user.new_name}}"
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.redis.apis.ModifyCacheInstanceAttributeRequest import ModifyCacheInstanceAttributeRequest, ModifyCacheInstanceAttributeParameters
+
+params = ModifyCacheInstanceAttributeParameters(
+    regionId="{{user.region}}",
+    cacheInstanceId="{{user.instance_id}}"
+)
+params.setCacheInstanceName("{{user.new_name}}")
+req = ModifyCacheInstanceAttributeRequest(parameters=params)
+resp = client.send(req)
 ```
 
 #### Post-execution Validation
@@ -343,31 +396,30 @@ Poll describe until modification reflects (depends on modification type).
 - **MUST** obtain explicit confirmation: irreversible delete of `{{user.instance_name}}` (`{{user.instance_id}}`).
 - **MUST NOT** proceed without clear user assent.
 
-#### Execution (SDK)
-
-**⚠️ Safety Gate**: MUST obtain explicit user confirmation before calling SDK delete method.
-
-```python
-from jdcloud_sdk.services.redis.apis.delete_cache_instance_request import DeleteCacheInstanceRequest
-
-# Confirm deletion with user: "Are you sure you want to delete {{user.instance_name}} ({{user.instance_id}})? This is IRREVERSIBLE."
-# Proceed only after explicit "yes" / "confirm" response
-
-req = DeleteCacheInstanceRequest(regionId="{{user.region}}", cacheInstanceId="{{user.instance_id}}")
-resp = client.delete_cache_instance(req)
-```
-
-#### Execution (CLI)
+#### Execution (CLI) [Primary Path]
 
 **⚠️ Safety Gate**: MUST obtain explicit user confirmation before executing CLI command.
 
 ```bash
 # Confirm deletion with user first
-jdc redis delete-cache-instance \
+jdc --output json redis delete-cache-instance \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json \
-  --no-interactive
+  --cache-instance-id "{{user.instance_id}}"
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+**⚠️ Safety Gate**: MUST obtain explicit user confirmation before calling SDK delete method.
+
+```python
+from jdcloud_sdk.services.redis.apis.DeleteCacheInstanceRequest import DeleteCacheInstanceRequest, DeleteCacheInstanceParameters
+
+# Confirm deletion with user: "Are you sure you want to delete {{user.instance_name}} ({{user.instance_id}})? This is IRREVERSIBLE."
+# Proceed only after explicit "yes" / "confirm" response
+
+params = DeleteCacheInstanceParameters(regionId="{{user.region}}", cacheInstanceId="{{user.instance_id}}")
+req = DeleteCacheInstanceRequest(parameters=params)
+resp = client.send(req)
 ```
 
 #### Post-execution Validation
@@ -376,24 +428,28 @@ Poll `describeCacheInstance` until HTTP 404 / `status` indicates deleted (max 60
 
 ### Operation: Backup Redis Instance
 
-#### Execution (SDK)
-
-```python
-from jdcloud_sdk.services.redis.apis.create_backup_request import CreateBackupRequest
-
-req = CreateBackupRequest(regionId="{{user.region}}", cacheInstanceId="{{user.instance_id}}")
-resp = client.create_backup(req)
-backup_id = resp.result.backupId
-```
-
-#### Execution (CLI)
+#### Execution (CLI) [Primary Path]
 
 ```bash
-jdc redis create-backup \
+jdc --output json redis create-backup \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json \
-  --no-interactive
+  --cache-instance-id "{{user.instance_id}}"
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.redis.apis.CreateBackupRequest import CreateBackupRequest, CreateBackupParameters
+
+params = CreateBackupParameters(
+    regionId="{{user.region}}",
+    cacheInstanceId="{{user.instance_id}}",
+    fileName="manual-backup-{{user.instance_id}}",
+    backupType=1  # 1=manual backup
+)
+req = CreateBackupRequest(parameters=params)
+resp = client.send(req)
+backup_id = resp.result["backupId"]
 ```
 
 ### Operation: Restore Redis Instance
@@ -403,70 +459,144 @@ jdc redis create-backup \
 - **MUST** warn user: Restore will overwrite current data in `{{user.instance_name}}` (`{{user.instance_id}}`) with backup `{{user.backup_id}}`.
 - **MUST** obtain explicit confirmation before proceeding.
 
-#### Execution (SDK)
-
-**⚠️ Safety Gate**: MUST obtain explicit user confirmation before calling SDK restore method.
-
-```python
-from jdcloud_sdk.services.redis.apis.restore_instance_request import RestoreInstanceRequest
-
-# Confirm restore with user: "Restoring backup {{user.backup_id}} will overwrite current data. Are you sure?"
-# Proceed only after explicit "yes" / "confirm" response
-
-req = RestoreInstanceRequest(
-    regionId="{{user.region}}",
-    cacheInstanceId="{{user.instance_id}}",
-    backupId="{{user.backup_id}}"
-)
-resp = client.restore_instance(req)
-```
-
-#### Execution (CLI)
+#### Execution (CLI) [Primary Path]
 
 **⚠️ Safety Gate**: MUST obtain explicit user confirmation before executing CLI command.
 
 ```bash
 # Confirm restore with user first
-jdc redis restore-instance \
+jdc --output json redis restore-instance \
   --region-id "{{user.region}}" \
   --cache-instance-id "{{user.instance_id}}" \
-  --backup-id "{{user.backup_id}}" \
-  --output json \
-  --no-interactive
+  --base-id "{{user.backup_id}}"
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+**⚠️ Safety Gate**: MUST obtain explicit user confirmation before calling SDK restore method.
+
+```python
+from jdcloud_sdk.services.redis.apis.RestoreInstanceRequest import RestoreInstanceRequest, RestoreInstanceParameters
+
+# Confirm restore with user: "Restoring backup {{user.backup_id}} will overwrite current data. Are you sure?"
+# Proceed only after explicit "yes" / "confirm" response
+
+params = RestoreInstanceParameters(
+    regionId="{{user.region}}",
+    cacheInstanceId="{{user.instance_id}}",
+    baseId="{{user.backup_id}}"  # baseId = backup task ID
+)
+req = RestoreInstanceRequest(parameters=params)
+resp = client.send(req)
 ```
 
 ## Prerequisites
 
-1. **Install** JD Cloud SDK and CLI:
-   ```bash
-   pip install jdcloud-sdk
-   pip install jdcloud_cli
-   jdc config init
-   ```
+Environment setup follows a **jdc-first with fallback** strategy:
 
-2. **Configure Credentials** — Three methods:
+1. **Attempt `jdc` CLI setup** via `uv` (primary path)
+2. On failure, **retry up to 3 times** with exponential backoff (0s → 2s → 4s)
+3. After **3 consecutive failures**, fall back to **SDK-only** setup
 
-   **Method 1: `.env` File (Recommended for Local Development)**
-   ```ini
-   JDC_ACCESS_KEY=your_access_key_here
-   JDC_SECRET_KEY=your_secret_key_here
-   JDC_REGION=cn-north-1
-   ```
-   > Agent Runtime auto-loads `.env` if present.
+### Python Runtime (uv)
 
-   **Method 2: Shell Environment Variables**
-   ```bash
-   export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-   export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-   export JDC_REGION="cn-north-1"
-   ```
+Both `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management:
 
-   **Method 3: CLI Interactive Config**
-   ```bash
-   jdc config init
-   ```
+**Install uv (system-wide, one-time per machine):**
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Or via Homebrew: brew install uv
 
-   > Security: Never commit `.env` files to version control.
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### Phase 1: jdc CLI Setup (Primary Path)
+
+```bash
+# Create and activate virtual environment (idempotent)
+uv venv --python 3.10
+source .venv/bin/activate
+
+# Install jdc CLI and SDK
+uv pip install jdcloud_cli jdcloud_sdk
+
+# Verify
+jdc --version
+python -c "import jdcloud_sdk; print('SDK OK')"
+```
+
+#### Retry Logic (Up to 3 Attempts)
+
+If `jdc --version` or any `jdc` command fails:
+
+```bash
+# Retry 1: re-run pip install
+uv pip install jdcloud_cli jdcloud_sdk
+jdc --version && echo "OK" || echo "FAIL"
+
+# Retry 2 (wait 2s)
+sleep 2
+uv pip install --force-reinstall jdcloud_cli
+jdc --version && echo "OK" || echo "FAIL"
+
+# Retry 3 (wait 4s)
+sleep 4
+uv pip install --force-reinstall jdcloud_cli jdcloud_sdk
+jdc --version && echo "OK" || echo "FAIL"
+```
+
+If all **3 retries** fail, proceed to **Phase 2: SDK Fallback**.
+
+### Phase 2: SDK Fallback (After 3 jdc Failures)
+
+```bash
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install jdcloud_sdk
+python -c "import jdcloud_sdk; print('SDK OK')"
+```
+
+### Configure jdc Credentials (Sandbox-Safe)
+
+**CRITICAL**: The `jdc` CLI does NOT read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` environment variables. It reads credentials exclusively from `~/.jdc/config` (INI format). In sandboxed environments where `~` is not writable, follow these steps:
+
+```bash
+# 1. Set HOME to a writable location
+export HOME=/tmp/jdc-home
+
+# 2. Pre-create the config directory and files
+mkdir -p /tmp/jdc-home/.jdc
+
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = {{env.JDC_ACCESS_KEY}}
+secret_key = {{env.JDC_SECRET_KEY}}
+region_id = {{user.region}}
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+
+# 3. Write current profile WITHOUT trailing newline
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+
+# 4. Run jdc with --output json at TOP level
+jdc --output json redis describe-cache-instances --region-id "{{user.region}}" --page-number 1 --page-size 100
+```
+
+### Configure Credentials for SDK (Environment Variables)
+
+SDK reads credentials from environment variables — no config file needed:
+
+```bash
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
+export JDC_REGION="cn-north-1"
+```
+
+> Security: Never commit `.env` files to version control.
 
 ## Reference Directory
 

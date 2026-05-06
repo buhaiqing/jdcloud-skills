@@ -149,13 +149,17 @@ resp = client.create_method(req)  # replace with real SDK method name
 
 #### Execution — CLI (`jdc`) (**required** when `cli_applicability: dual-path`)
 
-**Omit this subsection only** when `cli_applicability: sdk-only` (and `references/cli-usage.md` is omitted). Otherwise use the [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli). Every command MUST use **`--output json`** (or documented equivalent) and **`--no-interactive`** (or equivalent) when supported. **Verify** JSON paths against a real run; CLI wrappers may not match raw API field names.
+**Omit this subsection only** when `cli_applicability: sdk-only` (and `references/cli-usage.md` is omitted). Otherwise use the [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli). 
+
+> **Critical:** The `jdc` CLI has specific behavioral constraints verified through empirical testing:
+> - `--output json` is a **top-level argument** and MUST be placed BEFORE the subcommand: `jdc --output json <product> <command> ...`
+> - `--no-interactive` does NOT exist — all commands are non-interactive by default
+> - Credentials MUST come from `~/.jdc/config` INI file; environment variables are NOT read by CLI
+> - See generator's `Critical jdc CLI Behavioral Notes` for full details and sandbox workaround
 
 ```bash
-jdc [product] create-[resource] \
-  --region-id "<region-from-user>" \
-  --output json \
-  --no-interactive
+jdc --output json [product] create-[resource] \
+  --region-id "<region-from-user>"
   # add flags per official `jdc [product] create-[resource] --help`
 ```
 
@@ -260,34 +264,38 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
    > `uv venv` is idempotent: re-running on an existing `.venv` is a no-op. `uv pip install` skips already-satisfied packages. Pin versions in `references/integration.md`.
 
-3. **Configure Credentials** — Three methods:
+3. **Configure Credentials** — Two methods (CLI vs SDK differ):
 
-   **Method 1: `.env` File (Recommended for Local Development)**
-   Create `.env` in project root (copy from `.env.example`):
-   ```ini
-   JDC_ACCESS_KEY=your_access_key_here
-   JDC_SECRET_KEY=your_secret_key_here
-   JDC_REGION=cn-north-1
-   ```
-   
-   > **Note:** Agent Runtime auto-loads `.env` if present. Shell env vars have **higher priority** (won't be overridden by `.env`).
+   **CRITICAL:** The `jdc` CLI reads credentials **only** from `~/.jdc/config` INI file. Environment variables (`JDC_ACCESS_KEY`, `JDC_SECRET_KEY`) are **ignored** by the CLI. The SDK mode reads from environment variables. Use the appropriate method below.
 
-   **Method 2: Shell Environment Variables (Recommended for Production)**
+   **Method A: Configure Credentials for SDK (env vars)**
    ```bash
    export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
    export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
    export JDC_REGION="cn-north-1"
    ```
 
-   **Method 3: CLI Interactive Config**
+   **Method B: Configure Credentials for CLI (`~/.jdc/config` INI)**
    ```bash
-   jdc config init
+   # For sandbox environments, redirect HOME to a writable location
+   export HOME=/tmp/jdc-home
+   mkdir -p /tmp/jdc-home/.jdc
+   cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+   [default]
+   access_key = {{env.JDC_ACCESS_KEY}}
+   secret_key = {{env.JDC_SECRET_KEY}}
+   region_id = {{env.JDC_REGION}}
+   endpoint = [product].jdcloud-api.com
+   scheme = https
+   timeout = 20
+   CONFIGEOF
+   printf "%s" "default" > /tmp/jdc-home/.jdc/current
    ```
 
 4. **Verify Configuration**:
    ```bash
-   # Quick validation
-   jdc [product] describe-... --region-id cn-north-1 --output json
+   # Quick validation (--output json BEFORE subcommand)
+   jdc --output json [product] describe-... --region-id cn-north-1
    ```
 
 > **Security:** Never commit `.env` to version control (already in `.gitignore`). All credentials use `{{env.*}}` placeholders in generated Skills — never real values.
@@ -355,11 +363,12 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
 ## Install and config
 - Install: see [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)
-- `jdc config init` / env vars per official docs
+- **CRITICAL:** The `jdc` CLI reads credentials exclusively from `~/.jdc/config` INI file, NOT from environment variables.
+- For sandbox environments, redirect `HOME` and pre-create config files (see generator SKILL.md "Critical jdc CLI Behavioral Notes").
 
 ## Conventions (agent execution)
-- Append `--output json` (or documented equivalent) for every command used in automation.
-- Append `--no-interactive` (or equivalent) when supported.
+- `--output json` is a **top-level argument** — MUST be placed BEFORE the subcommand: `jdc --output json <product> <command> ...`
+- `--no-interactive` does NOT exist in `jdc` CLI — all commands are non-interactive by default; omit this flag.
 - Document **exact** JSON paths after verifying with a real invocation (CLI output may differ from raw API).
 
 ## CLI vs API coverage gap
@@ -371,8 +380,8 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 ## Command map
 | Goal | Example `jdc` invocation | Notes |
 |------|--------------------------|-------|
-| Create | `jdc [product] create-…` | … |
-| Describe | `jdc [product] describe-…` | … |
+| Create | `jdc --output json [product] create-…` | `--output json` BEFORE subcommand |
+| Describe | `jdc --output json [product] describe-…` | `--output json` BEFORE subcommand |
 ```
 
 ## references/monitoring.md

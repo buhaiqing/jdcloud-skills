@@ -1,0 +1,322 @@
+# JD Cloud Load Balancer (CLB) Example Configuration
+# This file provides example configurations for common CLB deployment scenarios
+
+# ============================================
+# Scenario 1: Basic HTTP Load Balancer
+# ============================================
+basic_http_lb:
+  loadBalancer:
+    name: web-lb-prod
+    spec: small  # small/medium/large
+    type: external  # external/internal
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    azs:
+      - cn-north-1a
+      - cn-north-1b
+  
+  listeners:
+    - name: http-listener
+      protocol: HTTP
+      port: 80
+      backendPort: 8080
+      
+  targetGroup:
+    name: web-servers
+    targets:
+      - instanceId: vm-web-01
+        port: 8080
+        weight: 100
+      - instanceId: vm-web-02
+        port: 8080
+        weight: 100
+  
+  healthCheck:
+    protocol: HTTP
+    port: 8080
+    path: /health
+    interval: 10
+    timeout: 5
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+
+# ============================================
+# Scenario 2: HTTPS Load Balancer with SSL
+# ============================================
+https_lb:
+  loadBalancer:
+    name: https-lb-prod
+    spec: medium
+    type: external
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    azs:
+      - cn-north-1a
+  
+  listeners:
+    - name: https-listener
+      protocol: HTTPS
+      port: 443
+      backendPort: 8080
+      certificateId: cert-xxx  # SSL certificate ID
+      tlsPolicy: TLSv1.2
+      
+  targetGroup:
+    name: api-servers
+    targets:
+      - instanceId: vm-api-01
+        port: 8080
+        weight: 100
+      - instanceId: vm-api-02
+        port: 8080
+        weight: 100
+      - instanceId: vm-api-03
+        port: 8080
+        weight: 100
+  
+  healthCheck:
+    protocol: HTTPS
+    port: 8080
+    path: /api/health
+    interval: 5
+    timeout: 3
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+
+# ============================================
+# Scenario 3: TCP Load Balancer (Layer 4)
+# ============================================
+tcp_lb:
+  loadBalancer:
+    name: tcp-lb-internal
+    spec: small
+    type: internal
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    azs:
+      - cn-north-1a
+      - cn-north-1b
+  
+  listeners:
+    - name: tcp-listener
+      protocol: TCP
+      port: 3306  # MySQL
+      backendPort: 3306
+      
+  targetGroup:
+    name: db-servers
+    targets:
+      - instanceId: vm-db-01
+        port: 3306
+        weight: 100
+      - instanceId: vm-db-02
+        port: 3306
+        weight: 100
+  
+  healthCheck:
+    protocol: TCP
+    port: 3306
+    interval: 10
+    timeout: 5
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+
+# ============================================
+# Scenario 4: Multi-Protocol Load Balancer
+# ============================================
+multi_protocol_lb:
+  loadBalancer:
+    name: multi-lb-prod
+    spec: large
+    type: external
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    azs:
+      - cn-north-1a
+      - cn-north-1b
+      - cn-north-1c
+  
+  listeners:
+    - name: http-listener
+      protocol: HTTP
+      port: 80
+      backendPort: 8080
+      
+    - name: https-listener
+      protocol: HTTPS
+      port: 443
+      backendPort: 8080
+      certificateId: cert-xxx
+      
+    - name: tcp-listener
+      protocol: TCP
+      port: 8080
+      backendPort: 8080
+  
+  targetGroups:
+    - name: web-servers
+      targets:
+        - instanceId: vm-web-01
+          port: 8080
+          weight: 100
+        - instanceId: vm-web-02
+          port: 8080
+          weight: 100
+          
+    - name: api-servers
+      targets:
+        - instanceId: vm-api-01
+          port: 8080
+          weight: 100
+        - instanceId: vm-api-02
+          port: 8080
+          weight: 100
+  
+  healthChecks:
+    - name: web-health
+      protocol: HTTP
+      port: 8080
+      path: /health
+      interval: 10
+      timeout: 5
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+      
+    - name: api-health
+      protocol: HTTP
+      port: 8080
+      path: /api/health
+      interval: 5
+      timeout: 3
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+
+# ============================================
+# Scenario 5: Load Balancer with Session Persistence
+# ============================================
+sticky_session_lb:
+  loadBalancer:
+    name: sticky-lb-prod
+    spec: medium
+    type: external
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    azs:
+      - cn-north-1a
+      - cn-north-1b
+  
+  listeners:
+    - name: http-sticky-listener
+      protocol: HTTP
+      port: 80
+      backendPort: 8080
+      sessionPersistence:
+        type: cookie  # cookie/source_ip
+        cookieName: JSESSIONID
+        cookieTimeout: 3600
+      
+  targetGroup:
+    name: app-servers
+    targets:
+      - instanceId: vm-app-01
+        port: 8080
+        weight: 100
+      - instanceId: vm-app-02
+        port: 8080
+        weight: 100
+      - instanceId: vm-app-03
+        port: 8080
+        weight: 100
+  
+  healthCheck:
+    protocol: HTTP
+    port: 8080
+    path: /health
+    interval: 10
+    timeout: 5
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+
+# ============================================
+# Environment Variables Template
+# ============================================
+# Copy to .env file and fill in your credentials
+env_template: |
+  # JD Cloud Credentials
+  JDC_ACCESS_KEY=your_access_key_here
+  JDC_SECRET_KEY=your_secret_key_here
+  JDC_REGION=cn-north-1
+  
+  # Optional Settings
+  JDC_ENDPOINT=lb.jdcloud-api.com
+  JDC_SCHEME=https
+  JDC_TIMEOUT=20
+
+# ============================================
+# jdc CLI Config Template
+# ============================================
+jdc_config_template: |
+  # Save to ~/.jdc/config
+  [default]
+  access_key = your_access_key_here
+  secret_key = your_secret_key_here
+  region_id = cn-north-1
+  endpoint = lb.jdcloud-api.com
+  scheme = https
+  timeout = 20
+
+# ============================================
+# Monitoring Configuration
+# ============================================
+monitoring:
+  metrics:
+    - name: lb_bytes_in
+      alarm_threshold: 1000000000  # 1GB
+      comparison: ">="
+      period: 300
+      
+    - name: lb_bytes_out
+      alarm_threshold: 1000000000  # 1GB
+      comparison: ">="
+      period: 300
+      
+    - name: lb_active_connections
+      alarm_threshold: 10000
+      comparison: ">="
+      period: 300
+      
+    - name: lb_healthy_host_count
+      alarm_threshold: 1
+      comparison: "<"
+      period: 60
+      
+    - name: lb_http_5xx
+      alarm_threshold: 10
+      comparison: ">="
+      period: 300
+
+# ============================================
+# Security Group Rules Template
+# ============================================
+security_group_rules:
+  inbound:
+    - protocol: TCP
+      portRange: 80/80
+      source: 0.0.0.0/0
+      description: HTTP access
+      
+    - protocol: TCP
+      portRange: 443/443
+      source: 0.0.0.0/0
+      description: HTTPS access
+      
+  outbound:
+    - protocol: TCP
+      portRange: 8080/8080
+      destination: 10.0.0.0/8
+      description: Backend server access

@@ -13,8 +13,8 @@ compatibility: >-
   frontmatter conventions.
 metadata:
   author: jdcloud
-  version: "1.4.0"
-  last_updated: "2026-05-03"
+  version: "1.5.0"
+  last_updated: "2026-05-06"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: meta-skill
 ---
@@ -210,9 +210,11 @@ If SDK verification also fails:
 
 | Priority | Source | Description |
 |----------|--------|-------------|
-| 1 (highest) | Shell environment | Explicitly set `export JDC_ACCESS_KEY=...` |
+| 1 (highest) | Shell environment | SDK mode only. CLI mode does NOT read env vars. |
 | 2 | `.env` file | Project root or custom path via parameter |
 | 3 (lowest) | Default values | `JDC_REGION=cn-north-1` only |
+
+> **CRITICAL: CLI vs SDK credential handling differs.** The `jdc` CLI reads credentials exclusively from `~/.jdc/config` (INI format). Environment variables `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` are **ignored** by the CLI. The SDK (fallback path) reads credentials from environment variables. See `Critical jdc CLI Behavioral Notes` below for details and sandbox workaround.
 
 #### `.env` File Support
 
@@ -227,14 +229,13 @@ For local development convenience, the Agent MAY load environment variables from
 
 **Format (INI-style):**
 ```ini
-# JD Cloud credentials
+# JD Cloud credentials (used by SDK mode)
 JDC_ACCESS_KEY=your_access_key_here
 JDC_SECRET_KEY=your_secret_key_here
 JDC_REGION=cn-north-1
-
-# Optional: CLI configuration
-JDC_CLI_OUTPUT=json
 ```
+
+> **Note:** The `jdc` CLI does NOT read environment variables `JDC_ACCESS_KEY`/`JDC_SECRET_KEY`. The `.env` file is for SDK mode only. CLI credentials must be configured in `~/.jdc/config` INI file. See "Critical jdc CLI Behavioral Notes" below for details.
 
 **Multi-cloud mixing (recommended namespace prefixes):**
 ```ini
@@ -301,7 +302,8 @@ After loading, the Agent SHOULD verify credentials before proceeding to Step 1:
 
 ```bash
 # Primary: try jdc CLI validation
-jdc vm describe-instance-types --region-id cn-north-1 --output json --page-number 1 --page-size 1
+# NOTE: --output json MUST be placed BEFORE the subcommand (top-level argument)
+jdc --output json vm describe-instance-types --region-id cn-north-1 --page-number 1 --page-size 1
 ```
 
 If `jdc` validation fails, attempt retries per the **Retry Logic** above. After 3 failures, fall back to SDK credential check:
@@ -322,6 +324,89 @@ else:
 If all verification paths fail:
 - HALT with clear message: "Credentials invalid or environment not set up"
 - Suggest: Check `.env` file or run `uv venv` / `uv pip install jdcloud_cli jdcloud_sdk`
+
+## Critical jdc CLI Behavioral Notes (Reproductive Evidence from Empirical Testing)
+
+These notes document real failures observed when using the `jdc` CLI, with verified root causes and fixes. **Every generated skill MUST follow these conventions.**
+
+### Failure 1: `--output json` must be TOP-LEVEL, not subcommand-level
+
+**Root Cause:** The `--output` argument is defined in `base_controller.py` (the Cement framework base controller), which means it is a **top-level argument** that must be placed **before** the subcommand, not after.
+
+```
+# CORRECT (works):
+jdc --output json redis describe-cache-instances --region-id cn-north-1
+
+# WRONG (fails with "unrecognized arguments: --output json"):
+jdc redis describe-cache-instances --region-id cn-north-1 --output json
+```
+
+**Fix:** Always place `--output json` at the top level, immediately after `jdc`.
+
+### Failure 2: `--no-interactive` does NOT exist
+
+**Root Cause:** The `jdc` CLI does not define `--no-interactive` anywhere in its codebase. All `jdc` commands are non-interactive by default.
+
+```
+$ jdc redis describe-cache-instances --region-id cn-north-1 --no-interactive
+unrecognized arguments: --no-interactive
+```
+
+**Fix:** Remove `--no-interactive` from all CLI commands. It is unnecessary.
+
+### Failure 3: CLI does NOT read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` environment variables
+
+**Root Cause:** The `ProfileManager` class reads credentials exclusively from `~/.jdc/config` (INI format). It never checks `os.environ` for `JDC_ACCESS_KEY` or `JDC_SECRET_KEY`.
+
+```
+$ export JDC_ACCESS_KEY=xxx JDC_SECRET_KEY=yyy
+$ jdc --output json redis describe-cache-instances --region-id cn-north-1
+Please use `jdc configure add` command to add cli configure first.
+```
+
+**Fix:** Create `~/.jdc/config` with proper INI content, or use SDK for env-var-based auth.
+
+### Failure 4: `PermissionError` on `~/.jdc/` directory creation in sandbox
+
+**Root Cause:** `ProfileManager.__init__()` → `__make_config_dir()` calls `os.makedirs(os.path.expanduser("~") + "/.jdc")`. In sandboxed environments where the home directory is read-only, this fails.
+
+**Fix:** Redirect `HOME` to a writable location and pre-create config files:
+
+```bash
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+
+# CRITICAL: ~/.jdc/current must contain exactly "default" with NO trailing newline
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+```
+
+### Summary: Correct CLI Pattern
+
+```bash
+# 1. Set up credentials (mandatory — env vars won't work)
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = {{env.JDC_ACCESS_KEY}}
+secret_key = {{env.JDC_SECRET_KEY}}
+region_id = {{env.JDC_REGION}}
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+
+# 2. Run command (--output json BEFORE subcommand, no --no-interactive)
+jdc --output json <product> <command> --flag1 value1 --flag2 value2
+```
 
 ### Step 1: Analyze sources
 
@@ -361,7 +446,7 @@ Replace placeholders and **wire JSON paths / SDK calls / `jdc` invocations** to 
 
 - **core-concepts.md** — Architecture, limits, regions, quotas.  
 - **api-sdk-usage.md** — Operation map, required fields, pagination, example request/response snippets (**no secrets**).  
-- **cli-usage.md** — **`jdc` CLI cheat sheet**: command map, `--output json`, non-interactive flags, **CLI–API coverage gap** table, and documented JSON paths (verify with a real run). This is the **primary path** reference.  
+- **cli-usage.md** — **`jdc` CLI cheat sheet**: command map, `--output json` (MUST be top-level, BEFORE subcommand), **no `--no-interactive`** (flag does NOT exist), **CLI–API coverage gap** table, documented JSON paths (verify with a real run), and **credential note** (CLI reads from `~/.jdc/config` INI only, NOT env vars). This is the **primary path** reference.  
 - **troubleshooting.md** — API/CLI error codes, ordered diagnostics.  
 - **monitoring.md** — Metrics, dashboards, alerts.  
 - **integration.md** — **uv** Python environment bootstrap (command-based quick start + `pyproject.toml` project setup), SDK install pins, **`jdc` install/config** (required for primary path), env vars, optional MCP notes.
@@ -396,7 +481,7 @@ Optional later improvements (not required to start): PR template checkbox linkin
 - [ ] **CLI fidelity:** Subcommands/flags match official CLI docs; JSON paths **verified** with a real `--output json` run.  
 - [ ] **Safety gates** for destructive operations (before **each** documented path: `jdc` **and** SDK fallback).  
 - [ ] **Timeouts** for polling and long-running operations.  
-- [ ] **CLI quality:** `--output json` (or equivalent), non-interactive where supported, no console-only primary flows in `SKILL.md`.
+- [ ] **CLI quality:** `--output json` (MUST be top-level, BEFORE subcommand), no `--no-interactive` (does NOT exist), no console-only primary flows in `SKILL.md`.
 
 ### P1 — SHOULD PASS
 

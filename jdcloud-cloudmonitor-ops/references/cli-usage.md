@@ -3,12 +3,13 @@
 ## 安装和配置
 
 - 安装: 参考 [京东云 CLI](https://github.com/jdcloud-api/jdcloud-cli)
-- 配置: `jdc config init` 或通过环境变量 `JDC_ACCESS_KEY` / `JDC_SECRET_KEY`
+- **重要：`jdc` CLI 仅从 `~/.jdc/config` INI 文件读取凭证，不支持环境变量 `JDC_ACCESS_KEY`/`JDC_SECRET_KEY`**
+- 沙箱环境需将 HOME 重定向到可写目录并预创建配置文件（参见 SKILL.md "Critical jdc CLI Behavioral Notes"）
 
 ## 约定（Agent 执行）
 
-- **必须** 追加 `--output json` 用于自动化解析
-- **必须** 追加 `--no-interactive`（或等价参数）避免阻塞
+- `--output json` 是**顶层参数**，必须放在子命令**之前**：`jdc --output json monitor <command> ...`
+- `--no-interactive` **不存在**于 `jdc` CLI — 所有命令默认非交互式，删除此标志
 - JSON 路径需通过实际调用验证，CLI 输出可能与原始 API 字段名不同
 
 ## CLI vs API 覆盖对比
@@ -66,7 +67,7 @@ jdc monitor <command> [options]
 查询云监控支持的所有服务列表。
 
 ```bash
-jdc monitor describe-services \
+jdc --output json monitor describe-services \
   --region-id cn-north-1
 ```
 
@@ -100,7 +101,7 @@ jdc monitor describe-services \
 查询指定服务的监控项列表。
 
 ```bash
-jdc monitor describe-metrics \
+jdc --output json monitor describe-metrics \
   --region-id cn-north-1 \
   --service-code vm \
   --resource-id i-xxx
@@ -139,7 +140,7 @@ jdc monitor describe-metrics \
 查询指定时间范围内的监控数据。
 
 ```bash
-jdc monitor describe-metric-data \
+jdc --output json monitor describe-metric-data \
   --region-id cn-north-1 \
   --metric vm.cpu.util \
   --service-code vm \
@@ -184,7 +185,7 @@ jdc monitor describe-metric-data \
 查询资源的最新监控数据点。
 
 ```bash
-jdc monitor last-downsample \
+jdc --output json monitor last-downsample \
   --region-id cn-north-1 \
   --service-code vm \
   --resource-id i-xxx \
@@ -224,7 +225,7 @@ jdc monitor last-downsample \
 创建新的告警规则。
 
 ```bash
-jdc monitor create-alarm \
+jdc --output json monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "HighCPUAlarm" \
   --service-code vm \
@@ -271,7 +272,7 @@ jdc monitor create-alarm \
 查询告警规则列表。
 
 ```bash
-jdc monitor describe-alarms \
+jdc --output json monitor describe-alarms \
   --region-id cn-north-1 \
   --service-code vm \
   --page-number 1 \
@@ -314,7 +315,7 @@ jdc monitor describe-alarms \
 查询单个告警规则的详细信息。
 
 ```bash
-jdc monitor describe-alarm \
+jdc --output json monitor describe-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx
 ```
@@ -331,7 +332,7 @@ jdc monitor describe-alarm \
 修改告警规则配置。
 
 ```bash
-jdc monitor update-alarm \
+jdc --output json monitor update-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
   --alarm-name "UpdatedAlarmName" \
@@ -357,13 +358,13 @@ jdc monitor update-alarm \
 
 ```bash
 # 启用告警
-jdc monitor enable-alarm \
+jdc --output json monitor enable-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
   --enabled true
 
 # 禁用告警
-jdc monitor enable-alarm \
+jdc --output json monitor enable-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
   --enabled false
@@ -382,7 +383,7 @@ jdc monitor enable-alarm \
 删除告警规则。
 
 ```bash
-jdc monitor delete-alarms \
+jdc --output json monitor delete-alarms \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx
 ```
@@ -399,7 +400,7 @@ jdc monitor delete-alarms \
 查询告警触发历史。
 
 ```bash
-jdc monitor describe-alarm-history \
+jdc --output json monitor describe-alarm-history \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
   --start-time "2024-01-01T00:00:00Z" \
@@ -442,7 +443,7 @@ jdc monitor describe-alarm-history \
 查询告警联系人信息。
 
 ```bash
-jdc monitor describe-alarm-contacts \
+jdc --output json monitor describe-alarm-contacts \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
@@ -462,7 +463,7 @@ jdc monitor describe-alarm-contacts \
 上报自定义监控数据点。
 
 ```bash
-jdc monitor put-metric-data \
+jdc --output json monitor put-metric-data \
   --region-id cn-north-1 \
   --namespace "my-namespace" \
   --metric-name "order-count" \
@@ -488,7 +489,7 @@ jdc monitor put-metric-data \
 查询自定义监控数据。
 
 ```bash
-jdc monitor describe-custom-metric-data \
+jdc --output json monitor describe-custom-metric-data \
   --region-id cn-north-1 \
   --namespace "my-namespace" \
   --metric-name "order-count" \
@@ -516,7 +517,7 @@ jdc monitor describe-custom-metric-data \
 ```bash
 for vm_id in i-xxx1 i-xxx2 i-xxx3; do
   echo "Querying CPU for $vm_id"
-  jdc monitor last-downsample \
+  jdc --output json monitor last-downsample \
     --region-id cn-north-1 \
     --service-code vm \
     --resource-id $vm_id \
@@ -527,7 +528,7 @@ done
 ### 场景2：创建磁盘使用率告警
 
 ```bash
-jdc monitor create-alarm \
+jdc --output json monitor create-alarm \
   --region-id cn-north-1 \
   --alarm-name "DiskUsageAlarm" \
   --service-code vm \
@@ -548,7 +549,7 @@ jdc monitor create-alarm \
 start_time=$(date -u -v-7d +"%Y-%m-%dT%H:%M:%SZ")
 end_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-jdc monitor describe-alarm-history \
+jdc --output json monitor describe-alarm-history \
   --region-id cn-north-1 \
   --start-time "$start_time" \
   --end-time "$end_time" \
@@ -559,7 +560,7 @@ jdc monitor describe-alarm-history \
 
 ```bash
 # 上报订单量指标
-jdc monitor put-metric-data \
+jdc --output json monitor put-metric-data \
   --region-id cn-north-1 \
   --namespace "ecommerce-metrics" \
   --metric-name "order-count-per-minute" \
@@ -570,17 +571,17 @@ jdc monitor put-metric-data \
 
 ## 输出格式
 
-CLI 支持多种输出格式，可通过 `--output` 参数指定。
+CLI 支持多种输出格式，可通过 `--output` 顶层参数指定。注意：`--output` 必须放在**子命令之前**。
 
 | 格式 | 说明 |
 |------|------|
-| json | JSON 格式（默认） |
+| json | JSON 格式（推荐用于自动化） |
 | table | 表格格式 |
 | text | 纯文本格式 |
 
 示例：
 ```bash
-jdc monitor describe-alarms --region-id cn-north-1 --output table
+jdc --output table monitor describe-alarms --region-id cn-north-1
 ```
 
 ## 全局参数
@@ -590,6 +591,6 @@ jdc monitor describe-alarms --region-id cn-north-1 --output table
 | 参数 | 说明 |
 |------|------|
 | --debug | 显示调试信息 |
-| --output | 输出格式(json/table/text) |
+| --output | 输出格式(json/table/text) — 必须放在子命令之前 |
 | --profile | 使用指定的配置文件 |
 | --region-id | 区域 ID |

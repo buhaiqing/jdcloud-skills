@@ -1,18 +1,40 @@
 # JD Cloud VM CLI Usage Guide
 
-## Prerequisites
+## Prerequisites and Conventions
 
-Ensure that the JD Cloud CLI is installed and configured:
+**CRITICAL: CLI credential handling differs from SDK:**
+- The `jdc` CLI reads credentials **only** from `~/.jdc/config` INI file
+- Environment variables `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` are **ignored** by the CLI
+- For sandbox environments, redirect `HOME` and pre-create config (see SKILL.md "Critical jdc CLI Behavioral Notes")
+
+**Conventions for Agent Execution:**
+- `--output json` is a **top-level argument** — MUST be placed BEFORE the subcommand: `jdc --output json vm <command> ...`
+- `--no-interactive` does NOT exist in `jdc` CLI — all commands are non-interactive by default; omit this flag
+- Credentials: CLI uses `~/.jdc/config` INI, SDK uses env vars `JDC_ACCESS_KEY`/`JDC_SECRET_KEY`
+
+### Basic Setup
 
 ```bash
 # Install CLI
 pip install jdcloud_cli
 
-# Initialize configuration
-jdc config init
+# Initialize CLI credentials (interactive, or use the manual config approach below)
+# For sandbox:
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = vm.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
 
 # Verify configuration
-jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1
+jdc --output json vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1
 ```
 
 ## Instance Management
@@ -21,23 +43,23 @@ jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 1
 
 ```bash
 # Query all instances
-jdc vm describe-instances \
+jdc --output json vm describe-instances \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
 # Query by instance ID
-jdc vm describe-instances \
+jdc --output json vm describe-instances \
   --region-id cn-north-1 \
   --instance-ids '["i-xxxxx"]'
 
 # Filter by name
-jdc vm describe-instances \
+jdc --output json vm describe-instances \
   --region-id cn-north-1 \
   --filters '[{"name":"instance-name","values":["my-vm"]}]'
 
 # Query instances with a specific status
-jdc vm describe-instances \
+jdc --output json vm describe-instances \
   --region-id cn-north-1 \
   --filters '[{"name":"status","values":["running"]}]'
 ```
@@ -46,7 +68,7 @@ jdc vm describe-instances \
 
 ```bash
 # Create a single instance
-jdc vm create-instances \
+jdc --output json vm create-instances \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
   --instance-type "g.n2.medium" \
@@ -72,7 +94,7 @@ jdc vm create-instances \
   --charge-mode "postpaid_by_duration"
 
 # Batch create instances
-jdc vm create-instances \
+jdc --output json vm create-instances \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
   --instance-type "g.n2.medium" \
@@ -91,23 +113,23 @@ jdc vm create-instances \
 
 ```bash
 # Start instance
-jdc vm start-instance \
+jdc --output json vm start-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 
 # Stop instance (normal shutdown)
-jdc vm stop-instance \
+jdc --output json vm stop-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 
 # Force stop instance
-jdc vm stop-instance \
+jdc --output json vm stop-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --force-stop true
 
 # Reboot instance
-jdc vm reboot-instance \
+jdc --output json vm reboot-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 ```
@@ -116,12 +138,12 @@ jdc vm reboot-instance \
 
 ```bash
 # Delete a single instance
-jdc vm delete-instance \
+jdc --output json vm delete-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx
 
 # Delete instance and release associated resources
-jdc vm delete-instance \
+jdc --output json vm delete-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --delete-data-disks true \
@@ -132,15 +154,15 @@ jdc vm delete-instance \
 
 ```bash
 # Resize instance specification
-jdc vm resize-instance \
+jdc --output json vm resize-instance \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --instance-type "g.n2.large"
 
 # Note: Resizing requires the instance to be in stopped state
-jdc vm stop-instance --region-id cn-north-1 --instance-id i-xxxxx
-jdc vm resize-instance --region-id cn-north-1 --instance-id i-xxxxx --instance-type "g.n2.large"
-jdc vm start-instance --region-id cn-north-1 --instance-id i-xxxxx
+jdc --output json vm stop-instance --region-id cn-north-1 --instance-id i-xxxxx
+jdc --output json vm resize-instance --region-id cn-north-1 --instance-id i-xxxxx --instance-type "g.n2.large"
+jdc --output json vm start-instance --region-id cn-north-1 --instance-id i-xxxxx
 ```
 
 ## Image Management
@@ -149,19 +171,19 @@ jdc vm start-instance --region-id cn-north-1 --instance-id i-xxxxx
 
 ```bash
 # Query public images
-jdc vm describe-images \
+jdc --output json vm describe-images \
   --region-id cn-north-1 \
   --owners official \
   --page-number 1 \
   --page-size 20
 
 # Query custom images
-jdc vm describe-images \
+jdc --output json vm describe-images \
   --region-id cn-north-1 \
   --owners self
 
 # Query specific image details
-jdc vm describe-images \
+jdc --output json vm describe-images \
   --region-id cn-north-1 \
   --image-ids '["img-xxxxx"]'
 ```
@@ -170,14 +192,14 @@ jdc vm describe-images \
 
 ```bash
 # Create image from an instance
-jdc vm create-image \
+jdc --output json vm create-image \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --name "my-custom-image" \
   --description "Custom image from production server"
 
 # Create image from a snapshot
-jdc vm create-image \
+jdc --output json vm create-image \
   --region-id cn-north-1 \
   --snapshot-id "snap-xxxxx" \
   --name "my-snapshot-image" \
@@ -187,7 +209,7 @@ jdc vm create-image \
 ### Delete Image
 
 ```bash
-jdc vm delete-image \
+jdc --output json vm delete-image \
   --region-id cn-north-1 \
   --image-id img-xxxxx
 ```
@@ -198,18 +220,18 @@ jdc vm delete-image \
 
 ```bash
 # List cloud disks
-jdc disk describe-disks \
+jdc --output json disk describe-disks \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
 # Query a specific cloud disk
-jdc disk describe-disks \
+jdc --output json disk describe-disks \
   --region-id cn-north-1 \
   --disk-ids '["vol-xxxxx"]'
 
 # Query disks attached to a specific instance
-jdc disk describe-disks \
+jdc --output json disk describe-disks \
   --region-id cn-north-1 \
   --filters '[{"name":"instance-id","values":["i-xxxxx"]}]'
 ```
@@ -218,7 +240,7 @@ jdc disk describe-disks \
 
 ```bash
 # Create a cloud disk
-jdc disk create-disk \
+jdc --output json disk create-disk \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
   --disk-type "ssd" \
@@ -228,7 +250,7 @@ jdc disk create-disk \
   --charge-mode "postpaid_by_duration"
 
 # Create a cloud disk and attach it to an instance
-jdc disk create-disk \
+jdc --output json disk create-disk \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
   --disk-type "ssd" \
@@ -243,14 +265,14 @@ jdc disk create-disk \
 
 ```bash
 # Attach cloud disk
-jdc disk attach-disk \
+jdc --output json disk attach-disk \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --instance-id i-xxxxx \
   --device-name "/dev/vdb"
 
 # Detach cloud disk
-jdc disk detach-disk \
+jdc --output json disk detach-disk \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --instance-id i-xxxxx
@@ -260,7 +282,7 @@ jdc disk detach-disk \
 
 ```bash
 # Resize cloud disk (can only increase, cannot decrease)
-jdc disk resize-disk \
+jdc --output json disk resize-disk \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --disk-size-gb 200
@@ -272,8 +294,8 @@ jdc disk resize-disk \
 
 ```bash
 # Delete cloud disk (must detach first)
-jdc disk detach-disk --region-id cn-north-1 --disk-id vol-xxxxx --instance-id i-xxxxx
-jdc disk delete-disk --region-id cn-north-1 --disk-id vol-xxxxx
+jdc --output json disk detach-disk --region-id cn-north-1 --disk-id vol-xxxxx --instance-id i-xxxxx
+jdc --output json disk delete-disk --region-id cn-north-1 --disk-id vol-xxxxx
 ```
 
 ## Snapshot Management
@@ -282,14 +304,14 @@ jdc disk delete-disk --region-id cn-north-1 --disk-id vol-xxxxx
 
 ```bash
 # Create a snapshot for a cloud disk
-jdc disk create-snapshot \
+jdc --output json disk create-snapshot \
   --region-id cn-north-1 \
   --disk-id vol-xxxxx \
   --snapshot-name "backup-2026-04-28" \
   --description "Daily backup snapshot"
 
 # Create snapshots for all cloud disks of an instance
-jdc disk create-snapshots \
+jdc --output json disk create-snapshots \
   --region-id cn-north-1 \
   --instance-id i-xxxxx \
   --snapshot-name-prefix "instance-backup"
@@ -299,18 +321,18 @@ jdc disk create-snapshots \
 
 ```bash
 # List snapshots
-jdc disk describe-snapshots \
+jdc --output json disk describe-snapshots \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
 # Query a specific snapshot
-jdc disk describe-snapshots \
+jdc --output json disk describe-snapshots \
   --region-id cn-north-1 \
   --snapshot-ids '["snap-xxxxx"]'
 
 # Query snapshots for a specific cloud disk
-jdc disk describe-snapshots \
+jdc --output json disk describe-snapshots \
   --region-id cn-north-1 \
   --filters '[{"name":"disk-id","values":["vol-xxxxx"]}]'
 ```
@@ -318,7 +340,7 @@ jdc disk describe-snapshots \
 ### Delete Snapshot
 
 ```bash
-jdc disk delete-snapshot \
+jdc --output json disk delete-snapshot \
   --region-id cn-north-1 \
   --snapshot-id snap-xxxxx
 ```
@@ -326,7 +348,7 @@ jdc disk delete-snapshot \
 ### Create Cloud Disk from Snapshot
 
 ```bash
-jdc disk create-disk \
+jdc --output json disk create-disk \
   --region-id cn-north-1 \
   --az "cn-north-1a" \
   --snapshot-id "snap-xxxxx" \
@@ -340,13 +362,13 @@ jdc disk create-disk \
 
 ```bash
 # List security groups
-jdc vpc describe-security-groups \
+jdc --output json vpc describe-security-groups \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
 # Query specific security group details
-jdc vpc describe-security-group \
+jdc --output json vpc describe-security-group \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx
 ```
@@ -354,7 +376,7 @@ jdc vpc describe-security-group \
 ### Create Security Group
 
 ```bash
-jdc vpc create-security-group \
+jdc --output json vpc create-security-group \
   --region-id cn-north-1 \
   --vpc-id "vpc-xxxxx" \
   --security-group-name "web-sg" \
@@ -365,7 +387,7 @@ jdc vpc create-security-group \
 
 ```bash
 # Add inbound rule - Allow HTTP access
-jdc vpc add-security-group-rules \
+jdc --output json vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
   --rules '[{
@@ -378,7 +400,7 @@ jdc vpc add-security-group-rules \
   }]'
 
 # Add inbound rule - Allow SSH access (recommend restricting IP range)
-jdc vpc add-security-group-rules \
+jdc --output json vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
   --rules '[{
@@ -391,7 +413,7 @@ jdc vpc add-security-group-rules \
   }]'
 
 # Add inbound rule - Allow HTTPS access
-jdc vpc add-security-group-rules \
+jdc --output json vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
   --rules '[{
@@ -404,7 +426,7 @@ jdc vpc add-security-group-rules \
   }]'
 
 # Add outbound rule - Allow all outbound traffic
-jdc vpc add-security-group-rules \
+jdc --output json vpc add-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
   --rules '[{
@@ -420,7 +442,7 @@ jdc vpc add-security-group-rules \
 ### Delete Security Group Rules
 
 ```bash
-jdc vpc remove-security-group-rules \
+jdc --output json vpc remove-security-group-rules \
   --region-id cn-north-1 \
   --security-group-id sg-xxxxx \
   --rule-ids '["rule-xxxxx"]'
@@ -430,7 +452,7 @@ jdc vpc remove-security-group-rules \
 
 ```bash
 # Assign security group to network interface
-jdc vpc assign-security-group \
+jdc --output json vpc assign-security-group \
   --region-id cn-north-1 \
   --network-interface-id "eni-xxxxx" \
   --security-group-id sg-xxxxx
@@ -442,7 +464,7 @@ jdc vpc assign-security-group \
 
 ```bash
 # Create a key pair (private key will be downloaded automatically)
-jdc vm create-keypair \
+jdc --output json vm create-keypair \
   --region-id cn-north-1 \
   --key-name "my-keypair" \
   --description "Key pair for production servers"
@@ -452,13 +474,13 @@ jdc vm create-keypair \
 
 ```bash
 # List key pairs
-jdc vm describe-keypairs \
+jdc --output json vm describe-keypairs \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
 # Query a specific key pair
-jdc vm describe-keypairs \
+jdc --output json vm describe-keypairs \
   --region-id cn-north-1 \
   --key-names '["my-keypair"]'
 ```
@@ -467,7 +489,7 @@ jdc vm describe-keypairs \
 
 ```bash
 # Import an existing public key
-jdc vm import-keypair \
+jdc --output json vm import-keypair \
   --region-id cn-north-1 \
   --key-name "existing-keypair" \
   --public-key "ssh-rsa AAAAB3NzaC1yc2E... user@host"
@@ -476,7 +498,7 @@ jdc vm import-keypair \
 ### Delete Key Pair
 
 ```bash
-jdc vm delete-keypair \
+jdc --output json vm delete-keypair \
   --region-id cn-north-1 \
   --key-name "my-keypair"
 ```
@@ -486,7 +508,7 @@ jdc vm delete-keypair \
 ### Apply for EIP
 
 ```bash
-jdc vpc create-elastic-ip \
+jdc --output json vpc create-elastic-ip \
   --region-id cn-north-1 \
   --bandwidth-mbps 10 \
   --charge-mode "postpaid_by_duration" \
@@ -497,13 +519,13 @@ jdc vpc create-elastic-ip \
 
 ```bash
 # List EIPs
-jdc vpc describe-elastic-ips \
+jdc --output json vpc describe-elastic-ips \
   --region-id cn-north-1 \
   --page-number 1 \
   --page-size 20
 
 # Query a specific EIP
-jdc vpc describe-elastic-ips \
+jdc --output json vpc describe-elastic-ips \
   --region-id cn-north-1 \
   --elastic-ip-ids '["eip-xxxxx"]'
 ```
@@ -512,13 +534,13 @@ jdc vpc describe-elastic-ips \
 
 ```bash
 # Associate EIP with instance
-jdc vpc associate-elastic-ip \
+jdc --output json vpc associate-elastic-ip \
   --region-id cn-north-1 \
   --elastic-ip-id eip-xxxxx \
   --instance-id i-xxxxx
 
 # Disassociate EIP
-jdc vpc disassociate-elastic-ip \
+jdc --output json vpc disassociate-elastic-ip \
   --region-id cn-north-1 \
   --elastic-ip-id eip-xxxxx
 ```
@@ -526,7 +548,7 @@ jdc vpc disassociate-elastic-ip \
 ### Modify Bandwidth
 
 ```bash
-jdc vpc modify-elastic-ip-bandwidth \
+jdc --output json vpc modify-elastic-ip-bandwidth \
   --region-id cn-north-1 \
   --elastic-ip-id eip-xxxxx \
   --bandwidth-mbps 20
@@ -535,7 +557,7 @@ jdc vpc modify-elastic-ip-bandwidth \
 ### Release EIP
 
 ```bash
-jdc vpc delete-elastic-ip \
+jdc --output json vpc delete-elastic-ip \
   --region-id cn-north-1 \
   --elastic-ip-id eip-xxxxx
 ```
@@ -545,7 +567,7 @@ jdc vpc delete-elastic-ip \
 ### View Instance Details (including IP, status, etc.)
 
 ```bash
-jdc vm describe-instances \
+jdc --output json vm describe-instances \
   --region-id cn-north-1 \
   --instance-ids '["i-xxxxx"]' | jq '.result.instances[0] | {
     instanceId: .instanceId,
@@ -562,13 +584,13 @@ jdc vm describe-instances \
 
 ```bash
 # Get all running instance IDs and stop them
-jdc vm describe-instances \
+jdc --output json vm describe-instances \
   --region-id cn-north-1 \
   --filters '[{"name":"status","values":["running"]}]' \
   | jq -r '.result.instances[].instanceId' \
   | while read instance_id; do
       echo "Stopping instance: $instance_id"
-      jdc vm stop-instance --region-id cn-north-1 --instance-id "$instance_id"
+      jdc --output json vm stop-instance --region-id cn-north-1 --instance-id "$instance_id"
     done
 ```
 
@@ -576,12 +598,12 @@ jdc vm describe-instances \
 
 ```bash
 # Find and release unbound EIPs
-jdc vpc describe-elastic-ips \
+jdc --output json vpc describe-elastic-ips \
   --region-id cn-north-1 \
   | jq -r '.result.elasticIps[] | select(.instanceId == null) | .elasticIpId' \
   | while read eip_id; do
       echo "Releasing EIP: $eip_id"
-      jdc vpc delete-elastic-ip --region-id cn-north-1 --elastic-ip-id "$eip_id"
+      jdc --output json vpc delete-elastic-ip --region-id cn-north-1 --elastic-ip-id "$eip_id"
     done
 ```
 
@@ -589,7 +611,7 @@ jdc vpc describe-elastic-ips \
 
 ```bash
 # Query CPU usage (last 1 hour)
-jdc monitor describe-metric-data \
+jdc --output json monitor describe-metric-data \
   --region-id cn-north-1 \
   --metric "vm.cpu.util" \
   --service-code vm \
@@ -605,23 +627,23 @@ jdc monitor describe-metric-data \
 
 ```bash
 # 1. Check instance status
-jdc vm describe-instances --region-id cn-north-1 --instance-ids '["i-xxxxx"]'
+jdc --output json vm describe-instances --region-id cn-north-1 --instance-ids '["i-xxxxx"]'
 
 # 2. Check security group rules
-jdc vpc describe-security-group --region-id cn-north-1 --security-group-id sg-xxxxx
+jdc --output json vpc describe-security-group --region-id cn-north-1 --security-group-id sg-xxxxx
 
 # 3. Check network interface
-jdc vpc describe-network-interface --region-id cn-north-1 --network-interface-id eni-xxxxx
+jdc --output json vpc describe-network-interface --region-id cn-north-1 --network-interface-id eni-xxxxx
 ```
 
 ### Disk Space Full
 
 ```bash
 # 1. View current disk information
-jdc disk describe-disks --region-id cn-north-1 --filters '[{"name":"instance-id","values":["i-xxxxx"]}]'
+jdc --output json disk describe-disks --region-id cn-north-1 --filters '[{"name":"instance-id","values":["i-xxxxx"]}]'
 
 # 2. Resize disk
-jdc disk resize-disk --region-id cn-north-1 --disk-id vol-xxxxx --disk-size-gb 200
+jdc --output json disk resize-disk --region-id cn-north-1 --disk-id vol-xxxxx --disk-size-gb 200
 ```
 
 ## Best Practice Tips

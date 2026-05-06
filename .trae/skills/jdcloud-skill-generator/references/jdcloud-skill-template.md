@@ -149,13 +149,17 @@ resp = client.create_method(req)  # replace with real SDK method name
 
 #### Execution — CLI (`jdc`) (**required** when `cli_applicability: dual-path`)
 
-**Omit this subsection only** when `cli_applicability: sdk-only` (and `references/cli-usage.md` is omitted). Otherwise use the [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli). Every command MUST use **`--output json`** (or documented equivalent) and **`--no-interactive`** (or equivalent) when supported. **Verify** JSON paths against a real run; CLI wrappers may not match raw API field names.
+**Omit this subsection only** when `cli_applicability: sdk-only` (and `references/cli-usage.md` is omitted). Otherwise use the [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli). 
+
+> **Critical:** The `jdc` CLI has specific behavioral constraints verified through empirical testing:
+> - `--output json` is a **top-level argument** and MUST be placed BEFORE the subcommand: `jdc --output json <product> <command> ...`
+> - `--no-interactive` does NOT exist — all commands are non-interactive by default
+> - Credentials MUST come from `~/.jdc/config` INI file; environment variables are NOT read by CLI
+> - See generator's `Critical jdc CLI Behavioral Notes` for full details and sandbox workaround
 
 ```bash
-jdc [product] create-[resource] \
-  --region-id "<region-from-user>" \
-  --output json \
-  --no-interactive
+jdc --output json [product] create-[resource] \
+  --region-id "<region-from-user>"
   # add flags per official `jdc [product] create-[resource] --help`
 ```
 
@@ -231,36 +235,67 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
 ## Prerequisites
 
-1. **Install** the JD Cloud SDK package(s) and, when **`cli_applicability: dual-path`**, the **CLI** (pin versions in `references/integration.md`; `jdc` install is **required** for dual-path).
+1. **Install uv** (system-wide, one-time per machine) — `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
 
-2. **Configure Credentials** — Three methods:
+   ```bash
+   # macOS / Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   # or: brew install uv
 
-   **Method 1: `.env` File (Recommended for Local Development)**
-   Create `.env` in project root (copy from `.env.example`):
-   ```ini
-   JDC_ACCESS_KEY=your_access_key_here
-   JDC_SECRET_KEY=your_secret_key_here
-   JDC_REGION=cn-north-1
+   # Windows (PowerShell)
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
    ```
-   
-   > **Note:** Agent Runtime auto-loads `.env` if present. Shell env vars have **higher priority** (won't be overridden by `.env`).
 
-   **Method 2: Shell Environment Variables (Recommended for Production)**
+   > **Note:** Installing uv itself is a one-time system setup. The commands below are **idempotent** and safe to re-run.
+
+2. **Bootstrap Python environment** (idempotent — safe to re-run):
+
+   ```bash
+   uv venv --python 3.10
+
+   # Activate: macOS/Linux
+   source .venv/bin/activate
+   # Activate: Windows
+   # .venv\Scripts\activate
+
+   uv pip install jdcloud_cli jdcloud_sdk
+   jdc --version
+   ```
+
+   > `uv venv` is idempotent: re-running on an existing `.venv` is a no-op. `uv pip install` skips already-satisfied packages. Pin versions in `references/integration.md`.
+
+3. **Configure Credentials** — Two methods (CLI vs SDK differ):
+
+   **CRITICAL:** The `jdc` CLI reads credentials **only** from `~/.jdc/config` INI file. Environment variables (`JDC_ACCESS_KEY`, `JDC_SECRET_KEY`) are **ignored** by the CLI. The SDK mode reads from environment variables. Use the appropriate method below.
+
+   **Method A: Configure Credentials for SDK (env vars)**
    ```bash
    export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
    export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
    export JDC_REGION="cn-north-1"
    ```
 
-   **Method 3: CLI Interactive Config**
+   **Method B: Configure Credentials for CLI (`~/.jdc/config` INI)**
    ```bash
-   jdc config init
+   # For sandbox environments, redirect HOME to a writable location
+   export HOME=/tmp/jdc-home
+   mkdir -p /tmp/jdc-home/.jdc
+   cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+   [default]
+   access_key = {{env.JDC_ACCESS_KEY}}
+   secret_key = {{env.JDC_SECRET_KEY}}
+   region_id = {{env.JDC_REGION}}
+   endpoint = [product].jdcloud-api.com
+   scheme = https
+   timeout = 20
+   CONFIGEOF
+   printf "%s" "default" > /tmp/jdc-home/.jdc/current
    ```
 
-3. **Verify Configuration**:
+4. **Verify Configuration**:
    ```bash
-   # Quick validation
-   jdc [product] describe-... --region-id cn-north-1 --output json
+   # Quick validation (--output json BEFORE subcommand)
+   jdc --output json [product] describe-... --region-id cn-north-1
    ```
 
 > **Security:** Never commit `.env` to version control (already in `.gitignore`). All credentials use `{{env.*}}` placeholders in generated Skills — never real values.
@@ -328,11 +363,12 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
 ## Install and config
 - Install: see [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)
-- `jdc config init` / env vars per official docs
+- **CRITICAL:** The `jdc` CLI reads credentials exclusively from `~/.jdc/config` INI file, NOT from environment variables.
+- For sandbox environments, redirect `HOME` and pre-create config files (see generator SKILL.md "Critical jdc CLI Behavioral Notes").
 
 ## Conventions (agent execution)
-- Append `--output json` (or documented equivalent) for every command used in automation.
-- Append `--no-interactive` (or equivalent) when supported.
+- `--output json` is a **top-level argument** — MUST be placed BEFORE the subcommand: `jdc --output json <product> <command> ...`
+- `--no-interactive` does NOT exist in `jdc` CLI — all commands are non-interactive by default; omit this flag.
 - Document **exact** JSON paths after verifying with a real invocation (CLI output may differ from raw API).
 
 ## CLI vs API coverage gap
@@ -344,8 +380,8 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 ## Command map
 | Goal | Example `jdc` invocation | Notes |
 |------|--------------------------|-------|
-| Create | `jdc [product] create-…` | … |
-| Describe | `jdc [product] describe-…` | … |
+| Create | `jdc --output json [product] create-…` | `--output json` BEFORE subcommand |
+| Describe | `jdc --output json [product] describe-…` | `--output json` BEFORE subcommand |
 ```
 
 ## references/monitoring.md
@@ -365,6 +401,65 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
 ````markdown
 # Integration
+
+## Environment Setup (uv)
+
+`jdc` CLI and JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
+
+### Quick Start (Command-based)
+
+**Bootstrap (idempotent — safe to re-run):**
+```bash
+uv venv --python 3.10
+
+# Activate: macOS/Linux
+source .venv/bin/activate
+# Activate: Windows
+# .venv\Scripts\activate
+
+uv pip install jdcloud_cli jdcloud_sdk
+```
+
+**Pin versions for reproducibility (optional):**
+```bash
+uv pip install jdcloud_cli==1.2.30 jdcloud_sdk==1.6.26
+```
+> Replace version numbers with the latest stable releases verified against the product's OpenAPI.
+
+### Advanced: Project-based Setup (Recommended for Teams)
+
+For reproducible, version-locked environments, use `pyproject.toml` with `uv sync`:
+
+**1. Create `pyproject.toml`:**
+```toml
+[project]
+name = "jdcloud-ops"
+version = "1.0.0"
+requires-python = ">=3.10"
+dependencies = [
+    "jdcloud_cli>=1.2.0",
+    "jdcloud_sdk>=1.6.0",
+]
+
+[tool.uv]
+python-version = "3.10"
+```
+
+**2. Sync environment (idempotent):**
+```bash
+# Creates .venv and installs all dependencies in one command
+uv sync
+
+# Activate
+source .venv/bin/activate  # macOS/Linux
+# .venv\Scripts\activate   # Windows
+```
+
+**Benefits:**
+- **Fully idempotent**: `uv sync` always produces the same environment
+- **Lock file**: `uv.lock` pins exact versions for reproducibility
+- **Team consistency**: All developers use identical dependencies
+- **CI/CD ready**: `uv sync` works identically in pipelines
 
 ## Python SDK bootstrap
 

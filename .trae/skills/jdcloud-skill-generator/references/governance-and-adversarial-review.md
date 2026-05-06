@@ -30,6 +30,10 @@ Use together with the meta-skill **P0/P1** checklist in `jdcloud-skill-generator
 - [ ] **API fidelity**: Operation names, request fields, and response JSON paths are traceable to **OpenAPI** (or SDK docs) for the stated API version—not invented.
 - [ ] **Dual-path rule**: If official `jdc` supports the product: `references/cli-usage.md` exists; `SKILL.md` shows **SDK and `jdc`** for each CLI-covered operation; any CLI limitation has a **gap** table. If **SDK-only**: **CLI applicability** + evidence present; omission of `cli-usage.md` justified.  
 - [ ] **CLI fidelity (when `jdc` applies)**: Subcommands and flags match official CLI docs; JSON paths match verified `--output json` output.
+  - **`--output json`**: MUST be placed BEFORE the subcommand (top-level argument), NOT after.
+  - **`--no-interactive`**: MUST NOT be used — this flag does NOT exist in `jdc` CLI.
+  - **Credentials**: CLI reads from `~/.jdc/config` INI only — env vars `JDC_ACCESS_KEY`/`JDC_SECRET_KEY` are NOT supported.
+  - See `jdcloud-skill-generator` SKILL.md "Critical jdc CLI Behavioral Notes" for full details.
 - [ ] **Recovery**: HALT vs retry is specified for quota, balance, invalid parameters, and throttling.
 - [ ] **Polling**: Interval and **max wait** are stated for async operations.
 - [ ] **Changelog / metadata**: Version and `last_updated` bumped for non-trivial edits.

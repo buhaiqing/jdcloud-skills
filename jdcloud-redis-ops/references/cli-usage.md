@@ -10,7 +10,9 @@ pip install jdcloud_cli
 
 ### Configure CLI
 
-Initialize configuration with credentials:
+**IMPORTANT**: The `jdc` CLI reads credentials exclusively from `~/.jdc/config` (INI format). Environment variables (`JDC_ACCESS_KEY`, `JDC_SECRET_KEY`) are NOT supported.
+
+Initialize configuration with credentials using the interactive command:
 
 ```bash
 jdc configure add \
@@ -19,12 +21,21 @@ jdc configure add \
   --region-id cn-north-1
 ```
 
-Or set environment variables:
+For sandboxed environments where `~` is not writable, manually create the config:
 
 ```bash
-export JDC_ACCESS_KEY="YOUR_ACCESS_KEY"
-export JDC_SECRET_KEY="YOUR_SECRET_KEY"
-export JDC_REGION="cn-north-1"
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
 ```
 
 ### Verify Installation
@@ -43,22 +54,44 @@ jdc redis help
 
 ### Output Format
 
-- **ALWAYS** append `--output json` for machine-parseable output
-- JSON output is required for automated workflows and response parsing
-- Example: `jdc redis describe-cache-instance --output json`
+- The `--output json` argument is a **top-level** argument (defined in `base_controller.py`), NOT a subcommand argument
+- It MUST be placed **before** the subcommand, not after
+- **CORRECT**: `jdc --output json redis describe-cache-instances`
+- **WRONG**: `jdc redis describe-cache-instances --output json` (fails with `unrecognized arguments`)
+- JSON output is the default and only output format
 
 ### Non-Interactive Mode
 
-- Append `--no-interactive` when supported to avoid prompts
-- Required for automation and agent workflows
-- Example: `jdc redis create-cache-instance ... --no-interactive`
+- The `--no-interactive` flag is **NOT supported** by jdc CLI. Do not use it.
+- All jdc CLI commands are non-interactive by default when all required arguments are provided.
+
+### Credential Configuration
+
+- **CRITICAL**: `jdc` CLI does **NOT** read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` environment variables
+- It reads credentials exclusively from `~/.jdc/config` (INI file)
+- In sandboxed environments, set `HOME` to a writable path and pre-create the config:
+
+```bash
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+```
 
 ### JSON Path Verification
 
-- CLI JSON output may differ slightly from raw API response
+- CLI output is always JSON (printed via `Printer.print_result()`)
+- Output structure: `{"request_id": "...", "error": null, "result": {...}}`
 - Verify exact JSON paths with real CLI invocations before documenting
 - Use `jq` for JSON parsing in shell scripts
-- Example: `jdc redis describe-cache-instance --output json | jq -r '.result.cacheInstance.status'`
 
 ## CLI vs API Coverage
 
@@ -99,7 +132,7 @@ jdc redis help
 #### Create Redis Instance
 
 ```bash
-jdc redis create-cache-instance \
+jdc --output json redis create-cache-instance \
   --region-id "cn-north-1" \
   --cache-instance-name "my-redis-cluster" \
   --cache-instance-class "redis.cluster.g.small" \
@@ -110,9 +143,7 @@ jdc redis create-cache-instance \
   --redis-version "5.0" \
   --db-num 32 \
   --replica-number 2 \
-  --charge '{"chargeMode":"postpaid_by_duration"}' \
-  --output json \
-  --no-interactive
+  --charge '{"chargeMode":"postpaid_by_duration"}'
 ```
 
 **JSON Path for Instance ID**: `$.result.cacheInstanceId`
@@ -120,10 +151,9 @@ jdc redis create-cache-instance \
 #### Describe Single Instance
 
 ```bash
-jdc redis describe-cache-instance \
+jdc --output json redis describe-cache-instance \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json
+  --cache-instance-id "redis-abc123"
 ```
 
 **Key JSON Paths**:
@@ -136,11 +166,10 @@ jdc redis describe-cache-instance \
 #### List Instances
 
 ```bash
-jdc redis describe-cache-instances \
+jdc --output json redis describe-cache-instances \
   --region-id "cn-north-1" \
   --page-number 1 \
-  --page-size 20 \
-  --output json
+  --page-size 20
 ```
 
 **JSON Paths**:
@@ -150,34 +179,28 @@ jdc redis describe-cache-instances \
 #### Modify Instance Attribute
 
 ```bash
-jdc redis modify-cache-instance-attribute \
+jdc --output json redis modify-cache-instance-attribute \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
-  --cache-instance-name "new-redis-name" \
-  --output json \
-  --no-interactive
+  --cache-instance-name "new-redis-name"
 ```
 
 #### Modify Instance Class (Scale Up/Down)
 
 ```bash
-jdc redis modify-cache-instance-class \
+jdc --output json redis modify-cache-instance-class \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
-  --cache-instance-class "redis.cluster.g.medium" \
-  --output json \
-  --no-interactive
+  --cache-instance-class "redis.cluster.g.medium"
 ```
 
 #### Delete Instance
 
 ```bash
 # Safety gate: Must obtain explicit user confirmation first
-jdc redis delete-cache-instance \
+jdc --output json redis delete-cache-instance \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json \
-  --no-interactive
+  --cache-instance-id "redis-abc123"
 ```
 
 ### Backup and Recovery
@@ -185,11 +208,9 @@ jdc redis delete-cache-instance \
 #### Create Manual Backup
 
 ```bash
-jdc redis create-backup \
+jdc --output json redis create-backup \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json \
-  --no-interactive
+  --cache-instance-id "redis-abc123"
 ```
 
 **JSON Path**: `$.result.backupId`
@@ -197,44 +218,39 @@ jdc redis create-backup \
 #### List Backups
 
 ```bash
-jdc redis describe-backups \
+jdc --output json redis describe-backups \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
   --page-number 1 \
-  --page-size 20 \
-  --output json
+  --page-size 20
 ```
 
 #### Restore from Backup
 
 ```bash
-jdc redis restore-instance \
+# Note: restore uses --base-id (not --backup-id)
+jdc --output json redis restore-instance \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
-  --backup-id "backup-def456" \
-  --output json \
-  --no-interactive
+  --base-id "backup-def456"
 ```
 
 #### Query Backup Policy
 
 ```bash
-jdc redis describe-backup-policy \
+jdc --output json redis describe-backup-policy \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json
+  --cache-instance-id "redis-abc123"
 ```
 
 #### Modify Backup Policy
 
 ```bash
-jdc redis modify-backup-policy \
+jdc --output json redis modify-backup-policy \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
   --backup-period '["Monday","Wednesday","Friday"]' \
-  --backup-time "02:00-Z+8" \
-  --output json \
-  --no-interactive
+  --backup-time "02:00-Z+8"
 ```
 
 ### Configuration and Parameters
@@ -242,21 +258,18 @@ jdc redis modify-backup-policy \
 #### Describe Instance Config
 
 ```bash
-jdc redis describe-instance-config \
+jdc --output json redis describe-instance-config \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json
+  --cache-instance-id "redis-abc123"
 ```
 
 #### Modify Instance Config
 
 ```bash
-jdc redis modify-instance-config \
+jdc --output json redis modify-instance-config \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
-  --config-parameter '[{"name":"maxmemory-policy","value":"volatile-lru"}]' \
-  --output json \
-  --no-interactive
+  --config-parameter '[{"name":"maxmemory-policy","value":"volatile-lru"}]'
 ```
 
 ### Network and Security
@@ -264,41 +277,35 @@ jdc redis modify-instance-config \
 #### Describe IP Whitelist
 
 ```bash
-jdc redis describe-ip-white-list \
+jdc --output json redis describe-ip-white-list \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json
+  --cache-instance-id "redis-abc123"
 ```
 
 #### Modify IP Whitelist
 
 ```bash
-jdc redis modify-ip-white-list \
+jdc --output json redis modify-ip-white-list \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
-  --ip-white-list '["192.168.1.0/24","10.0.0.100"]' \
-  --output json \
-  --no-interactive
+  --ip-white-list '["192.168.1.0/24","10.0.0.100"]'
 ```
 
 #### Reset Password
 
 ```bash
-jdc redis reset-cache-instance-password \
+jdc --output json redis reset-cache-instance-password \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
-  --password "NewSecurePassword123!" \
-  --output json \
-  --no-interactive
+  --password "NewSecurePassword123!"
 ```
 
 #### Describe Connected Clients
 
 ```bash
-jdc redis describe-client-list \
+jdc --output json redis describe-client-list \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json
+  --cache-instance-id "redis-abc123"
 ```
 
 ### Performance Analysis
@@ -306,14 +313,13 @@ jdc redis describe-client-list \
 #### Query Slow Log
 
 ```bash
-jdc redis describe-slow-log \
+jdc --output json redis describe-slow-log \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123" \
   --start-time "2026-05-01T00:00:00Z" \
   --end-time "2026-05-03T00:00:00Z" \
   --page-number 1 \
-  --page-size 100 \
-  --output json
+  --page-size 100
 ```
 
 ### Resource Queries
@@ -321,25 +327,22 @@ jdc redis describe-slow-log \
 #### Describe Available Specs
 
 ```bash
-jdc redis describe-instance-class \
-  --region-id "cn-north-1" \
-  --output json
+jdc --output json redis describe-instance-class \
+  --region-id "cn-north-1"
 ```
 
 #### Describe Spec Config (Recommended)
 
 ```bash
-jdc redis describe-spec-config \
-  --region-id "cn-north-1" \
-  --output json
+jdc --output json redis describe-spec-config \
+  --region-id "cn-north-1"
 ```
 
 #### Query User Quota
 
 ```bash
-jdc redis describe-user-quota \
-  --region-id "cn-north-1" \
-  --output json
+jdc --output json redis describe-user-quota \
+  --region-id "cn-north-1"
 ```
 
 ## Shell Script Examples
@@ -354,10 +357,9 @@ MAX_WAIT=600  # seconds
 POLL_INTERVAL=10
 
 for i in $(seq 1 $((MAX_WAIT / POLL_INTERVAL))); do
-  STATUS=$(jdc redis describe-cache-instance \
+  STATUS=$(jdc --output json redis describe-cache-instance \
     --region-id "$REGION" \
-    --cache-instance-id "$INSTANCE_ID" \
-    --output json | jq -r '.result.cacheInstance.status')
+    --cache-instance-id "$INSTANCE_ID" | jq -r '.result.cacheInstance.status')
   
   echo "[$i] Instance status: $STATUS"
   
@@ -385,11 +387,10 @@ exit 1
 REGION="cn-north-1"
 PAGE_SIZE=100
 
-jdc redis describe-cache-instances \
+jdc --output json redis describe-cache-instances \
   --region-id "$REGION" \
   --page-number 1 \
-  --page-size $PAGE_SIZE \
-  --output json | jq -r '.result.cacheInstances[] | [.cacheInstanceId, .cacheInstanceName, .status] | @tsv'
+  --page-size $PAGE_SIZE | jq -r '.result.cacheInstances[] | [.cacheInstanceId, .cacheInstanceName, .status] | @tsv'
 ```
 
 ### Create and Verify Instance
@@ -401,7 +402,7 @@ NAME="test-redis-cluster"
 SPEC="redis.cluster.g.micro"
 
 # Create instance
-INSTANCE_ID=$(jdc redis create-cache-instance \
+INSTANCE_ID=$(jdc --output json redis create-cache-instance \
   --region-id "$REGION" \
   --cache-instance-name "$NAME" \
   --cache-instance-class "$SPEC" \
@@ -409,9 +410,7 @@ INSTANCE_ID=$(jdc redis create-cache-instance \
   --subnet-id "subnet-yyy" \
   --az-id-spec '{"azSpecifyType":"SpecifyByReplicaGroup","master":"cn-north-1a","slave":"cn-north-1b"}' \
   --cache-instance-type "cluster" \
-  --redis-version "5.0" \
-  --output json \
-  --no-interactive | jq -r '.result.cacheInstanceId')
+  --redis-version "5.0" | jq -r '.result.cacheInstanceId')
 
 echo "Created instance: $INSTANCE_ID"
 
@@ -442,10 +441,22 @@ When to use CLI vs SDK:
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `configure not found` | CLI not configured | Run `jdc configure add` |
+| `configure not found` | CLI not configured | Run `jdc configure add` or manually create `~/.jdc/config` |
+| `unrecognized arguments: --output json` | `--output` placed after subcommand | Move `--output json` to top-level: `jdc --output json redis ...` |
+| `unrecognized arguments: --no-interactive` | `--no-interactive` not supported | Remove `--no-interactive` (all commands are non-interactive by default) |
+| `PermissionError: [Errno 1] Operation not permitted: '/home/user/.jdc'` | Home directory not writable (sandbox) | Set `HOME=/tmp/jdc-home` and pre-create config files |
 | `InvalidParameter` | Parameter format error | Check parameter syntax, use JSON for complex objects |
 | `RegionId not found` | Invalid region | Use valid region: cn-north-1, cn-south-1, cn-east-2 |
 | `Rate limit exceeded` | Too many requests | Slow down; CLI does not auto-retry rate limits |
+
+### Credential Not Found
+
+If `jdc` returns `Please use \`jdc configure add\` command to add cli configure first.`:
+
+1. The CLI does NOT read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` env vars
+2. Check if `~/.jdc/config` exists and has correct INI format
+3. For sandbox environments, export `HOME=/tmp/jdc-home` and pre-create the config
+4. The `~/.jdc/current` file must contain exactly `default` (no trailing newline)
 
 ### JSON Parameter Syntax
 
@@ -458,9 +469,7 @@ When to use CLI vs SDK:
 
 ```bash
 # Enable debug mode
-jdc redis describe-cache-instance \
+jdc --debug --output json redis describe-cache-instance \
   --region-id "cn-north-1" \
-  --cache-instance-id "redis-abc123" \
-  --output json \
-  --debug
+  --cache-instance-id "redis-abc123"
 ```

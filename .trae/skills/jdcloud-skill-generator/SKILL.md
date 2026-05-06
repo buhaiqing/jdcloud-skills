@@ -13,8 +13,8 @@ compatibility: >-
   frontmatter conventions.
 metadata:
   author: jdcloud
-  version: "1.4.0"
-  last_updated: "2026-05-03"
+  version: "1.5.0"
+  last_updated: "2026-05-06"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: meta-skill
 ---
@@ -23,15 +23,13 @@ metadata:
 
 ## Overview
 
-This **meta-skill** defines **how** to author a new **product-scoped** operational skill (e.g. `jdcloud-rds-ops`) **inside this repo**. It does **not** perform maintenance against a user’s cloud account. Live work uses the generated **`jdcloud-[product]-ops`** skills (official **SDK/API** and, when applicable, official **`jdc` CLI**).
+This **meta-skill** defines **how** to author a new **product-scoped** operational skill (e.g. `jdcloud-rds-ops`) **inside this repo**. It does **not** perform maintenance against a user's cloud account. Live work uses the generated **`jdcloud-[product]-ops`** skills (official **`jdc` CLI** with **SDK/API fallback**).
 
 **Repository scope:** All generated layout and policies apply **only** to the `jdcloud-skills` monorepo unless explicitly stated otherwise elsewhere.
 
-**Execution surface — dual path when CLI exists:** For every **new or materially updated** ops skill, you **MUST** document **SDK/API** (or direct REST per OpenAPI) **and** **`jdc`** for **every operation** that the official CLI exposes for this product. If the CLI supports **only a subset** of API operations, you **MUST** still document **full** SDK/API coverage in `references/api-sdk-usage.md` and **`jdc` for the subset** in `references/cli-usage.md`, with an explicit **coverage gap** table (which flows are SDK-only). **Console click-paths** are not an agent execution surface in `SKILL.md` except brief optional notes in `references/troubleshooting.md`. All `jdc` examples MUST be **machine-parseable** (`--output json` or equivalent), **non-interactive** where supported, and **verified** against real CLI output for JSON paths. Semantics MUST stay consistent with **OpenAPI/official API docs**—see [governance-and-adversarial-review.md](references/governance-and-adversarial-review.md).
+**Execution surface — jdc-first with fallback:** For every **new or materially updated** ops skill, the Agent MUST attempt to use the **`jdc` CLI** as the primary execution path. If `jdc` installation or command execution fails, the Agent MUST retry up to **3 times** (with exponential backoff). Only after **3 consecutive failures** should the Agent fall back to **SDK/API** (or direct REST per OpenAPI). Both paths MUST be documented so that either is executable depending on environment readiness. **Console click-paths** are not an agent execution surface in `SKILL.md` except brief optional notes in `references/troubleshooting.md`. Semantics MUST stay consistent with **OpenAPI/official API docs**—see [governance-and-adversarial-review.md](references/governance-and-adversarial-review.md).
 
-**SDK-only exception:** Allowed **only** when the **official** JD Cloud CLI does **not** ship commands for this product. The skill **MUST** contain a short **“CLI applicability”** subsection (e.g. under Overview or Prerequisites) stating that fact and citing **evidence** (e.g. `jdc help` product list, official CLI README, or doc URL). Reviewers **MUST** accept that evidence before merge.
-
-**Core principle:** Generated skills are **agent-readable runbooks**: triggers, env vs user placeholders, pre-flight → execute → validate → recover, safety gates, and outputs **grounded in OpenAPI and verified SDK and (when applicable) CLI behavior**, not guessed.
+**Core principle:** Generated skills are **agent-readable runbooks**: triggers, env vs user placeholders, pre-flight → execute → validate → recover, safety gates, and outputs **grounded in OpenAPI and verified CLI/SDK behavior**, not guessed.
 
 ## Role Boundary (Agent-Readable)
 
@@ -75,8 +73,11 @@ If the user wants **operational execution** (e.g. “create a resource”), load
 5. **Secrets**  
    - Only `{{env.*}}` **names** and documentation; never real keys or customer data.
 
-6. **Dual-path readiness**  
-   - Confirm whether **`jdc` supports this product** (official CLI docs / `jdc <product> --help`). If yes, plan **both** `api-sdk-usage.md` and `cli-usage.md` and **parallel** execution subsections in `SKILL.md` for each documented operation. If no, prepare **SDK-only** text plus **CLI applicability** evidence for the exception.
+6. **Dual-path readiness (jdc-first with fallback)**  
+   - The **primary** execution path is the **`jdc` CLI**. The Agent MUST attempt `jdc` setup and execution first.  
+   - If `jdc` installation/execution fails after **3 retries**, fall back to the **JD Cloud Python SDK** (`jdcloud_sdk`).  
+   - Both paths (`jdc` + SDK/API) MUST be documented in the generated skill so either is executable.  
+   - Verify the SDK package name for the target product. If unknown, check PyPI or JD Cloud SDK documentation.
 
 ## Input Requirements (from Requester)
 
@@ -86,21 +87,134 @@ If the user wants **operational execution** (e.g. “create a resource”), load
 4. **OpenAPI/Swagger URL or path** (**strongly recommended**; required to claim API-accurate fields and error mapping).  
 5. **Operation list** (create, describe, modify, delete, list, product-specific).  
 6. **SDK language/runtime** if not Python (default examples in template are Python).  
-7. **CLI support verdict:** Does official **`jdc`** expose this product? If **yes**: CLI product slug, link or command used to confirm, and note any **partial** CLI coverage vs OpenAPI. If **no**: evidence for the **SDK-only exception** (see above).
+7. **CLI support evidence:** Confirm the official **`jdc`** product slug (via `jdc <product> --help` or CLI docs). If `jdc` does not support this product, note the **SDK-only** gap for the fallback path.
 
 ## Generation Process
 
 ### Step 0: Environment Setup
 
-Before analyzing sources, the Agent MUST ensure environment variables are available for SDK/CLI validation during Skill generation.
+Before analyzing sources, the Agent MUST ensure a working execution environment. The setup follows a **jdc-first with fallback** strategy:
+
+1. **Attempt `jdc` CLI setup** via `uv` (primary path)
+2. On failure, **retry up to 3 times** with exponential backoff
+3. After **3 consecutive failures**, fall back to **SDK-only** setup
+
+#### Python Runtime (uv)
+
+Both `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management. Every command below is safe to re-run — designed for zero side effects on repeated execution.
+
+**Install uv (system-wide, one-time per machine):**
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or via Homebrew
+brew install uv
+
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+> **Note:** Installing uv itself is a one-time system setup. The commands below (`uv venv`, `uv pip install`) are **idempotent** and safe to re-run.
+
+#### Phase 1: jdc CLI Setup (Primary Path)
+
+**Create and activate a local virtual environment (idempotent):**
+```bash
+# From the skill directory root — creates .venv if not exists
+uv venv --python 3.10
+
+# Activate (required per shell session)
+# macOS / Linux:
+source .venv/bin/activate
+# Windows:
+# .venv\Scripts\activate
+```
+
+> `uv venv` is **idempotent**: re-running on an existing `.venv` is a safe no-op. Include it in every bootstrap script without guards.
+
+**Install jdc CLI and JD Cloud SDK (idempotent):**
+```bash
+uv pip install jdcloud_cli jdcloud_sdk
+```
+
+> `uv pip install` against an existing environment is **idempotent**: already-satisfied packages are skipped; only missing or outdated packages are touched.
+
+**One-shot bootstrap (copy-paste ready, fully idempotent):**
+```bash
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install jdcloud_cli jdcloud_sdk
+jdc --version
+```
+
+**Verification after bootstrap:**
+```bash
+source .venv/bin/activate
+jdc --version
+python -c "import jdcloud_sdk; print('SDK OK')"
+```
+
+##### Retry Logic (Up to 3 Attempts)
+
+If `jdc --version` or any `jdc` command fails, use the following retry procedure:
+
+```bash
+# Retry 1: re-run pip install
+uv pip install jdcloud_cli jdcloud_sdk
+jdc --version && echo "OK" || echo "FAIL"
+
+# Wait 2 seconds, then Retry 2
+sleep 2
+uv pip install --force-reinstall jdcloud_cli
+jdc --version && echo "OK" || echo "FAIL"
+
+# Wait 4 seconds, then Retry 3
+sleep 4
+uv pip install --force-reinstall jdcloud_cli jdcloud_sdk
+jdc --version && echo "OK" || echo "FAIL"
+```
+
+> Exponential backoff: retry 1 (instant) → retry 2 (2s delay) → retry 3 (4s delay).
+
+If all **3 retries** fail, proceed to **Phase 2: SDK Fallback**.
+
+**Phase 1 failure message:**
+```
+jdc CLI setup failed after 3 attempts. Falling back to SDK-only mode.
+```
+
+#### Phase 2: SDK Fallback (After 3 jdc Failures)
+
+When `jdc` is unavailable after retries, set up the SDK-only environment:
+
+```bash
+# Ensure SDK is installed (jdc may be partially installed; SDK should still work)
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install jdcloud_sdk
+python -c "import jdcloud_sdk; print('SDK OK')"
+```
+
+**Verification after fallback:**
+```bash
+source .venv/bin/activate
+python -c "import jdcloud_sdk; print('SDK OK')"
+```
+
+If SDK verification also fails:
+- HALT with clear message: "uv Python environment setup failed"
+- Suggest: Check `uv --version`, Python 3.10+ availability, and network access to PyPI
 
 #### Environment Variable Sources (Priority Order)
 
 | Priority | Source | Description |
 |----------|--------|-------------|
-| 1 (highest) | Shell environment | Explicitly set `export JDC_ACCESS_KEY=...` |
+| 1 (highest) | Shell environment | SDK mode only. CLI mode does NOT read env vars. |
 | 2 | `.env` file | Project root or custom path via parameter |
 | 3 (lowest) | Default values | `JDC_REGION=cn-north-1` only |
+
+> **CRITICAL: CLI vs SDK credential handling differs.** The `jdc` CLI reads credentials exclusively from `~/.jdc/config` (INI format). Environment variables `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` are **ignored** by the CLI. The SDK (fallback path) reads credentials from environment variables. See `Critical jdc CLI Behavioral Notes` below for details and sandbox workaround.
 
 #### `.env` File Support
 
@@ -115,14 +229,13 @@ For local development convenience, the Agent MAY load environment variables from
 
 **Format (INI-style):**
 ```ini
-# JD Cloud credentials
+# JD Cloud credentials (used by SDK mode)
 JDC_ACCESS_KEY=your_access_key_here
 JDC_SECRET_KEY=your_secret_key_here
 JDC_REGION=cn-north-1
-
-# Optional: CLI configuration
-JDC_CLI_OUTPUT=json
 ```
+
+> **Note:** The `jdc` CLI does NOT read environment variables `JDC_ACCESS_KEY`/`JDC_SECRET_KEY`. The `.env` file is for SDK mode only. CLI credentials must be configured in `~/.jdc/config` INI file. See "Critical jdc CLI Behavioral Notes" below for details.
 
 **Multi-cloud mixing (recommended namespace prefixes):**
 ```ini
@@ -167,14 +280,14 @@ for var in required_vars:
         raise EnvironmentError(f"Missing required environment variable: {var}")
 ```
 
-#### Dual-Path Support (CLI and SDK)
+#### Dual-Path Credential Support (CLI and SDK)
 
 The `.env` file supports both execution modes:
 
-- **CLI mode**: Agent Runtime loads `.env` and passes vars to `jdc` commands
-- **SDK mode**: Agent Runtime loads `.env` and injects into `os.environ` for SDK calls
+- **CLI mode**: Agent Runtime loads `.env` and passes vars to `jdc` commands (primary path)
+- **SDK mode**: Agent Runtime loads `.env` and injects into `os.environ` for SDK calls (fallback path)
 
-Both modes share the same credential source, ensuring consistency.
+Both modes share the same credential source, ensuring consistency across retry/fallback transitions.
 
 #### Safety Rules (Per Governance)
 
@@ -186,14 +299,114 @@ Both modes share the same credential source, ensuring consistency.
 #### Verification
 
 After loading, the Agent SHOULD verify credentials before proceeding to Step 1:
+
 ```bash
-# Quick CLI validation
-jdc vm describe-instance-types --region-id cn-north-1 --output json --page-number 1 --page-size 1
+# Primary: try jdc CLI validation
+# NOTE: --output json MUST be placed BEFORE the subcommand (top-level argument)
+jdc --output json vm describe-instance-types --region-id cn-north-1 --page-number 1 --page-size 1
 ```
 
-If validation fails:
-- HALT with clear message: "Credentials invalid or network unreachable"
-- Suggest: Check `.env` file or run `jdc config init`
+If `jdc` validation fails, attempt retries per the **Retry Logic** above. After 3 failures, fall back to SDK credential check:
+
+```bash
+python -c "
+import os
+ak = os.environ.get('JDC_ACCESS_KEY')
+sk = os.environ.get('JDC_SECRET_KEY')
+if ak and sk:
+    print('Credentials OK (SDK fallback mode)')
+else:
+    print('Missing JDC_ACCESS_KEY or JDC_SECRET_KEY')
+    exit(1)
+"
+```
+
+If all verification paths fail:
+- HALT with clear message: "Credentials invalid or environment not set up"
+- Suggest: Check `.env` file or run `uv venv` / `uv pip install jdcloud_cli jdcloud_sdk`
+
+## Critical jdc CLI Behavioral Notes (Reproductive Evidence from Empirical Testing)
+
+These notes document real failures observed when using the `jdc` CLI, with verified root causes and fixes. **Every generated skill MUST follow these conventions.**
+
+### Failure 1: `--output json` must be TOP-LEVEL, not subcommand-level
+
+**Root Cause:** The `--output` argument is defined in `base_controller.py` (the Cement framework base controller), which means it is a **top-level argument** that must be placed **before** the subcommand, not after.
+
+```
+# CORRECT (works):
+jdc --output json redis describe-cache-instances --region-id cn-north-1
+
+# WRONG (fails with "unrecognized arguments: --output json"):
+jdc redis describe-cache-instances --region-id cn-north-1 --output json
+```
+
+**Fix:** Always place `--output json` at the top level, immediately after `jdc`.
+
+### Failure 2: `--no-interactive` does NOT exist
+
+**Root Cause:** The `jdc` CLI does not define `--no-interactive` anywhere in its codebase. All `jdc` commands are non-interactive by default.
+
+```
+$ jdc redis describe-cache-instances --region-id cn-north-1 --no-interactive
+unrecognized arguments: --no-interactive
+```
+
+**Fix:** Remove `--no-interactive` from all CLI commands. It is unnecessary.
+
+### Failure 3: CLI does NOT read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` environment variables
+
+**Root Cause:** The `ProfileManager` class reads credentials exclusively from `~/.jdc/config` (INI format). It never checks `os.environ` for `JDC_ACCESS_KEY` or `JDC_SECRET_KEY`.
+
+```
+$ export JDC_ACCESS_KEY=xxx JDC_SECRET_KEY=yyy
+$ jdc --output json redis describe-cache-instances --region-id cn-north-1
+Please use `jdc configure add` command to add cli configure first.
+```
+
+**Fix:** Create `~/.jdc/config` with proper INI content, or use SDK for env-var-based auth.
+
+### Failure 4: `PermissionError` on `~/.jdc/` directory creation in sandbox
+
+**Root Cause:** `ProfileManager.__init__()` → `__make_config_dir()` calls `os.makedirs(os.path.expanduser("~") + "/.jdc")`. In sandboxed environments where the home directory is read-only, this fails.
+
+**Fix:** Redirect `HOME` to a writable location and pre-create config files:
+
+```bash
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = YOUR_ACCESS_KEY
+secret_key = YOUR_SECRET_KEY
+region_id = cn-north-1
+endpoint = redis.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+
+# CRITICAL: ~/.jdc/current must contain exactly "default" with NO trailing newline
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+```
+
+### Summary: Correct CLI Pattern
+
+```bash
+# 1. Set up credentials (mandatory — env vars won't work)
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = {{env.JDC_ACCESS_KEY}}
+secret_key = {{env.JDC_SECRET_KEY}}
+region_id = {{env.JDC_REGION}}
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+
+# 2. Run command (--output json BEFORE subcommand, no --no-interactive)
+jdc --output json <product> <command> --flag1 value1 --flag2 value2
+```
 
 ### Step 1: Analyze sources
 
@@ -213,7 +426,7 @@ jdcloud-[product]-ops/
 ├── references/
 │   ├── core-concepts.md
 │   ├── api-sdk-usage.md
-│   ├── cli-usage.md          # required if jdc supports this product; omit only under SDK-only exception (documented)
+│   ├── cli-usage.md              # jdc CLI usage (primary path)
 │   ├── troubleshooting.md
 │   ├── monitoring.md
 │   └── integration.md
@@ -233,10 +446,10 @@ Replace placeholders and **wire JSON paths / SDK calls / `jdc` invocations** to 
 
 - **core-concepts.md** — Architecture, limits, regions, quotas.  
 - **api-sdk-usage.md** — Operation map, required fields, pagination, example request/response snippets (**no secrets**).  
-- **cli-usage.md** — **Required** when `jdc` supports this product: command cheat sheet, `--output json`, non-interactive flags, **CLI–API coverage gap** table if CLI is partial, and **documented JSON paths** (verify with a real run). Omit **only** under the documented **SDK-only exception**.  
+- **cli-usage.md** — **`jdc` CLI cheat sheet**: command map, `--output json` (MUST be top-level, BEFORE subcommand), **no `--no-interactive`** (flag does NOT exist), **CLI–API coverage gap** table, documented JSON paths (verify with a real run), and **credential note** (CLI reads from `~/.jdc/config` INI only, NOT env vars). This is the **primary path** reference.  
 - **troubleshooting.md** — API/CLI error codes, ordered diagnostics.  
 - **monitoring.md** — Metrics, dashboards, alerts.  
-- **integration.md** — SDK install pins, **`jdc` install/config** when CLI applies (required for dual-path skills), env vars, optional MCP notes.
+- **integration.md** — **uv** Python environment bootstrap (command-based quick start + `pyproject.toml` project setup), SDK install pins, **`jdc` install/config** (required for primary path), env vars, optional MCP notes.
 
 ### Step 5: Frontmatter and versioning
 
@@ -261,14 +474,14 @@ Optional later improvements (not required to start): PR template checkbox linkin
 
 - [ ] **Trigger & Scope** with SHOULD-use / SHOULD-NOT-use and delegation.  
 - [ ] **Variables:** `{{env.*}}` vs `{{user.*}}`; no secret literals.  
-- [ ] **Flows:** Pre-flight → Execute → Validate → Recover for **each** critical operation; **each** flow documents **SDK/API** and, when `jdc` supports it, **parallel `jdc`** (or explicit **SDK-only** exception with evidence).  
+- [ ] **Flows:** Pre-flight → Execute → Validate → Recover for **each** critical operation; **each** flow documents **`jdc` as primary path** and **SDK/API as fallback**.  
 - [ ] **Failure recovery:** HALT vs retry; throttling; non-retryable business errors.  
 - [ ] **API fidelity:** Fields and paths traceable to OpenAPI/SDK for the stated version.  
-- [ ] **Dual-path completeness:** If the product has official `jdc` support: `references/cli-usage.md` present; `SKILL.md` execution sections include **both** SDK and `jdc` for every CLI-covered operation; partial CLI documented with a **gap** table.  
-- [ ] **CLI fidelity (when `jdc` applies):** Subcommands/flags match official CLI docs; JSON paths **verified** with a real `--output json` run.  
-- [ ] **Safety gates** for destructive operations (before **each** documented path: SDK **and** `jdc` when dual-path).  
-- [ ] **Timeouts** for polling and long-running operations (state for **each** path or shared semantics).  
-- [ ] **CLI quality (when `jdc` applies):** `--output json` (or equivalent), non-interactive where supported, no console-only primary flows in `SKILL.md`.
+- [ ] **jdc-first with fallback:** `references/cli-usage.md` present as primary path; `SKILL.md` execution sections include both `jdc` and SDK/API paths; explicit **3-retry fallback** documented.  
+- [ ] **CLI fidelity:** Subcommands/flags match official CLI docs; JSON paths **verified** with a real `--output json` run.  
+- [ ] **Safety gates** for destructive operations (before **each** documented path: `jdc` **and** SDK fallback).  
+- [ ] **Timeouts** for polling and long-running operations.  
+- [ ] **CLI quality:** `--output json` (MUST be top-level, BEFORE subcommand), no `--no-interactive` (does NOT exist), no console-only primary flows in `SKILL.md`.
 
 ### P1 — SHOULD PASS
 
@@ -277,14 +490,14 @@ Optional later improvements (not required to start): PR template checkbox linkin
 - [ ] **Pinned** SDK/API baseline where drift matters.  
 - [ ] **Idempotency** or duplicate-resource behavior documented when automation applies.  
 - [ ] **Adversarial scenarios** considered using the governance doc.  
-- [ ] **Path preference:** When dual-path, `SKILL.md` states when to prefer SDK vs `jdc` if non-obvious.  
-- [ ] **Metadata:** Ops skill frontmatter includes `cli_applicability` and `cli_support_evidence` per template.
+- [ ] **Path preference:** `SKILL.md` states when to prefer `jdc` vs SDK fallback if non-obvious.  
+- [ ] **Metadata:** Ops skill frontmatter includes appropriate metadata per template.
 
 ## Example Request
 
 > Add a JD Cloud skill for Cloud Monitor in this repo: alarms, metric query, dashboards. Docs: `https://docs.jdcloud.com/cn/cloudmonitor`. OpenAPI: [URL]. Python SDK.
 
-**Expected output:** `jdcloud-cloudmonitor-ops` tree (or extend if present) with **real** operationIds, SDK types, response paths, **and** matching `jdc` commands if the CLI supports the product (otherwise SDK-only with **CLI applicability** evidence).
+**Expected output:** `jdcloud-cloudmonitor-ops` tree (or extend if present) with **real** operationIds, SDK types, response paths, **and** matching `jdc` commands (primary path), plus SDK fallback documentation.
 
 ## See Also
 
@@ -292,5 +505,5 @@ Optional later improvements (not required to start): PR template checkbox linkin
 - [Governance & adversarial review](references/governance-and-adversarial-review.md)  
 - [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)  
 - [Agent Skills Open Specification](https://agentskills.io/specification)  
-- Example ops skills (target: dual-path where CLI exists): `jdcloud-vm-ops`, `jdcloud-vpc-ops`, `jdcloud-clb-ops`, `jdcloud-redis-ops`, `jdcloud-cloudmonitor-ops`  
+- Example ops skills (jdc-first with SDK fallback): `jdcloud-vm-ops`, `jdcloud-vpc-ops`, `jdcloud-clb-ops`, `jdcloud-redis-ops`, `jdcloud-cloudmonitor-ops`  
 - Idempotency pattern: `jdcloud-vpc-ops/references/idempotency-checklist.md`
