@@ -89,6 +89,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv venv --python 3.10
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv pip install jdcloud_cli
+
+# 如需指定 pip 源（项目根目录已有 pyproject.toml 配置，默认使用阿里云镜像）
+# 如需临时使用其他源，可通过 --index-url 参数覆盖：
+# uv pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple/ jdcloud_cli
 ```
 
 **方式二：pip**
