@@ -234,6 +234,106 @@ ss -tuln | head -20
 ps aux --sort=-%cpu | head -10
 ```
 
+## Cloud Assistant Quick Reference
+
+> **Important**: `jdc` CLI does NOT support cloud assistant commands. All operations use **SDK/API only** via the `assistant.jdcloud-api.com` endpoint.
+
+### Create Command
+```python
+import base64
+from jdcloud_sdk.services.assistant.client import AssistantClient
+from jdcloud_sdk.services.assistant.apis.CreateCommandRequest import CreateCommandRequest
+
+client = AssistantClient(credential, 'cn-north-1')
+
+content = base64.b64encode("hostname && uptime".encode()).decode()
+request = CreateCommandRequest({
+    "regionId": "cn-north-1",
+    "commandName": "check-status",
+    "commandType": "shell",
+    "commandContent": content,
+    "timeout": 60
+})
+resp = client.create_command(request)
+command_id = resp.result.commandId
+```
+
+### Invoke Command (Batch Execute)
+```python
+from jdcloud_sdk.services.assistant.apis.InvokeCommandRequest import InvokeCommandRequest
+
+request = InvokeCommandRequest({
+    "regionId": "cn-north-1",
+    "commandId": "cmd-xxxxxxxx",
+    "instances": ["i-xxxxxxxx", "i-yyyyyyyy"],
+    "timeout": 120
+})
+resp = client.invoke_command(request)
+invoke_id = resp.result.invokeId
+```
+
+### Query Command List
+```python
+from jdcloud_sdk.services.assistant.apis.DescribeCommandsRequest import DescribeCommandsRequest
+
+request = DescribeCommandsRequest({
+    "regionId": "cn-north-1",
+    "pageNumber": 1,
+    "pageSize": 20
+})
+resp = client.describe_commands(request)
+for cmd in resp.result.commands:
+    print(f"{cmd.commandId}: {cmd.commandName} ({cmd.commandType})")
+```
+
+### Query Execution Results
+```python
+from jdcloud_sdk.services.assistant.apis.DescribeInvocationsRequest import DescribeInvocationsRequest
+
+request = DescribeInvocationsRequest({
+    "regionId": "cn-north-1",
+    "invokeIds": ["t-xxxxxxxx"],
+    "pageNumber": 1,
+    "pageSize": 20
+})
+resp = client.describe_invocations(request)
+for inv in resp.result.invocations:
+    for inst in inv.invocationInstances:
+        print(f"{inst.instanceId}: exitCode={inst.exitCode}, status={inst.status}")
+        print(f"  output: {inst.output}")
+```
+
+### Delete Command
+```python
+from jdcloud_sdk.services.assistant.apis.DeleteCommandsRequest import DeleteCommandsRequest
+
+request = DeleteCommandsRequest({
+    "regionId": "cn-north-1",
+    "commandIds": ["cmd-xxxxxxxx"]
+})
+resp = client.delete_commands(request)
+```
+
+### Execution Status Values
+
+| Aggregate Status | Description |
+|------------------|-------------|
+| `pending` | Command being dispatched |
+| `running` | Executing on instances |
+| `finished` | All instances succeeded |
+| `failed` | All instances failed |
+| `partial_failed` | Mixed results |
+
+| Instance Status | Description |
+|-----------------|-------------|
+| `finish` | Completed (exit code 0) |
+| `failed` | Execution failed |
+| `timeout` | Exceeded timeout |
+| `aborted` | Aborted |
+| `invalid` | Invalid request |
+
+> Full reference: [Cloud Assistant Guide](references/cloud-assistant.md)
+
 ## Code Examples
 
 ### Python SDK Quick Start

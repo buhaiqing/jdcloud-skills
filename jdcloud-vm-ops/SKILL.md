@@ -10,8 +10,8 @@ compatibility: >-
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
 metadata:
   author: jdcloud
-  version: "1.3.0"
-  last_updated: "2026-05-06"
+  version: "1.4.0"
+  last_updated: "2026-05-07"
   runtime: Harness AI Agent
   api_profile: "VM API v1.0 - https://docs.jdcloud.com/cn/virtual-machines/api"
   cli_applicability: jdc-first-with-fallback
@@ -42,7 +42,8 @@ JD Cloud Virtual Machine (VM) is a core computing service that provides elastic,
 - User mentions "JD Cloud VM" OR "云主机" OR "Virtual Machine" OR "CVM" OR "VM"
 - Task involves CRUD operations on VM instances: create, describe, start, stop, reboot, delete, resize
 - Task involves image management, disk management, keypair management
-- Task keywords: create-instances, describe-instances, start-instance, stop-instance, delete-instance
+- Task involves cloud assistant (云助手) operations: create commands, invoke commands on VMs, batch execute scripts
+- Task keywords: create-instances, describe-instances, start-instance, stop-instance, delete-instance, createCommand, invokeCommand, describeCommands, describeInvocations, cloud-assistant, 云助手, 批量执行命令
 
 ### SHOULD NOT Use This Skill When
 - Task is about monitoring metrics / alarms for VMs → delegate to: `jdcloud-cloudmonitor-ops`
@@ -99,6 +100,7 @@ This Skill uses structured placeholders to avoid prompt injection and parsing am
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-05-07 | **Cloud Assistant support**: Added cloud assistant (云助手) operations — createCommand, invokeCommand, describeCommands, deleteCommands, describeInvocations. Added new reference `cloud-assistant.md`. Cloud assistant uses SDK/API only (`jdc` CLI not supported). |
 | 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: Fixed `--output json` positioning (must be BEFORE subcommand), removed non-existent `--no-interactive` flag, corrected credential docs (CLI uses `~/.jdc/config` INI, NOT env vars), added sandbox config workaround |
 | 1.2.0 | 2026-05-06 | **jdc-first with fallback strategy**: execution flows now prioritize `jdc` CLI (primary) with SDK/API fallback after 3 retries; Prerequisites updated to `uv`-based bootstrap with Phase 1 (jdc) / Phase 2 (SDK fallback); Path Preference flipped to jdc-first; pre-flight checks reordered |
 | 1.1.0 | 2026-05-03 | Added dual-path execution (SDK + CLI), complete frontmatter, api-sdk-usage.md, path preference |
@@ -306,6 +308,137 @@ else:
 #### Post-execution Validation
 1. Poll `describe-instances` until HTTP 404 (max 300s)
 
+## Cloud Assistant Operations
+
+> **Important**: Cloud assistant uses the separate endpoint `assistant.jdcloud-api.com`. `jdc` CLI does **NOT** currently support cloud assistant commands. Use **SDK/API only** for all cloud assistant operations. See [Cloud Assistant Guide](references/cloud-assistant.md) for complete reference.
+
+### Operation: Create Cloud Assistant Command
+
+#### Pre-flight Checks
+| Check | Command | Expected | On Failure |
+|-------|---------|----------|------------|
+| SDK available | `python -c "import jdcloud_sdk"` | No import error | Install SDK via `uv pip install jdcloud_sdk` |
+| Region ID known | - | Non-empty | Prompt user or default to `cn-north-1` |
+
+#### Execution — SDK
+
+```python
+import os
+import base64
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.assistant.client import AssistantClient
+from jdcloud_sdk.services.assistant.apis.CreateCommandRequest import CreateCommandRequest
+
+credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
+client = AssistantClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
+
+command_content = base64.b64encode("{{user.command_content}}".encode()).decode()
+
+request = CreateCommandRequest({
+    "regionId": "{{env.JDC_REGION}}",
+    "commandName": "{{user.command_name}}",
+    "commandType": "{{user.command_type}}",
+    "commandContent": command_content,
+    "timeout": {{user.timeout}},
+    "username": "{{user.username}}",
+    "workdir": "{{user.workdir}}",
+    "commandDescription": "{{user.command_description}}",
+    "enableParameter": {{user.enable_parameter}}
+})
+
+response = client.create_command(request)
+if response.error is None:
+    command_id = response.result.commandId
+    print(f"Command created: {command_id}")
+else:
+    print(f"Error: {response.error.code} - {response.error.message}")
+```
+
+#### Post-execution Validation
+1. Capture `{{output.command_id}}` from `response.result.commandId`
+2. Verify by calling `describeCommands` with the command ID
+
+#### Failure Recovery
+| Error Pattern (regex) | Max Retries | Backoff | Agent Action |
+|-----------------------|-------------|---------|--------------|
+| `QUOTA_EXCEEDED` | 0 | - | HALT. Inform user to delete unused commands |
+| `INVALID_ARGUMENT` | 1 | - | Re-check field values, retry with corrected params |
+| `OUT_OF_RANGE` | 1 | - | Adjust parameter values to valid range |
+| `INTERNAL\|UNKNOWN` | 3 | 2s, 4s, 8s | Retry with exponential backoff |
+
+### Operation: Invoke Cloud Assistant Command
+
+#### Pre-flight (Safety Gate)
+- **MUST** confirm with user: "Execute command `{{user.command_name}}` on {{user.instance_count}} VM(s)? This will run the command immediately."
+- **MUST** wait for explicit "yes" / "confirm" before proceeding
+
+#### Pre-flight Checks
+| Check | Command | Expected | On Failure |
+|-------|---------|----------|------------|
+| SDK available | `python -c "import jdcloud_sdk"` | No import error | Install SDK |
+| Command exists | `describeCommands` with `commandIds` | Returns command | Suggest creating command first |
+| VMs are running | `describe-instances` for each `instanceId` | All status == `running` | Skip non-running instances, warn user |
+
+#### Execution — SDK
+
+```python
+from jdcloud_sdk.services.assistant.apis.InvokeCommandRequest import InvokeCommandRequest
+
+request = InvokeCommandRequest({
+    "regionId": "{{env.JDC_REGION}}",
+    "commandId": "{{user.command_id}}",
+    "instances": {{user.instance_ids}},
+    "timeout": {{user.timeout}},
+    "username": "{{user.username}}",
+    "workdir": "{{user.workdir}}",
+    "enableParameter": {{user.enable_parameter}},
+    "parameters": {{user.parameters}}
+})
+
+response = client.invoke_command(request)
+if response.error is None:
+    invoke_id = response.result.invokeId
+    print(f"Command invoked: {invoke_id}")
+else:
+    print(f"Error: {response.error.code} - {response.error.message}")
+```
+
+#### Post-execution Validation
+1. Capture `{{output.invoke_id}}` from `response.result.invokeId`
+2. Poll for results:
+```python
+import time
+from jdcloud_sdk.services.assistant.apis.DescribeInvocationsRequest import DescribeInvocationsRequest
+
+invoke_id = "{{output.invoke_id}}"
+max_wait = 300
+interval = 5
+
+for _ in range(max_wait // interval):
+    time.sleep(interval)
+    check_req = DescribeInvocationsRequest({
+        "regionId": "{{env.JDC_REGION}}",
+        "invokeIds": [invoke_id]
+    })
+    check_resp = client.describe_invocations(check_req)
+    if check_resp.error is not None:
+        break
+    inv = check_resp.result.invocations[0]
+    if inv.status in ("finished", "failed", "partial_failed"):
+        break
+```
+3. Report results to user in a table:
+
+| Field | Source | Display |
+|-------|--------|---------|
+| Aggregate Status | `inv.status` | ✅ finished / ❌ failed / ⚠️ partial_failed |
+| Instance ID | `inst.instanceId` | Plain text |
+| Per-Instance Status | `inst.status` | Status badge |
+| Exit Code | `inst.exitCode` | Plain text (0 = success) |
+| Output | `inst.output` | Truncated (max 6000B) |
+| Error | `inst.errorInfo` | Red text if non-empty |
+| Duration | `inst.duration` | e.g., `3s` |
+
 ## Prerequisites
 
 Environment setup follows a **jdc-first with fallback** strategy:
@@ -401,6 +534,7 @@ printf "%s" "default" > /tmp/jdc-home/.jdc/current
 - [Core Concepts](references/core-concepts.md)
 - [API & SDK Usage](references/api-sdk-usage.md)
 - [CLI Usage](references/cli-usage.md)
+- [Cloud Assistant](references/cloud-assistant.md)
 - [Troubleshooting Guide](references/troubleshooting.md)
 - [Monitoring & Alerts](references/monitoring.md)
 - [Integration (MCP/SDK)](references/integration.md)

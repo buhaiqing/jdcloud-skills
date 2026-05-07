@@ -54,6 +54,18 @@
 | Describe Snapshots | `describeSnapshots` | `DiskClient.describe_snapshots()` | `jdc disk describe-snapshots` |
 | Delete Snapshot | `deleteSnapshot` | `DiskClient.delete_snapshot()` | `jdc disk delete-snapshot` |
 
+### Cloud Assistant Operations
+
+| Goal | API operationId | SDK Method | CLI Command |
+|------|-----------------|------------|-------------|
+| Create Command | `createCommand` | `AssistantClient.create_command()` | Not supported |
+| Describe Commands | `describeCommands` | `AssistantClient.describe_commands()` | Not supported |
+| Delete Commands | `deleteCommands` | `AssistantClient.delete_commands()` | Not supported |
+| Invoke Command | `invokeCommand` | `AssistantClient.invoke_command()` | Not supported |
+| Describe Invocations | `describeInvocations` | `AssistantClient.describe_invocations()` | Not supported |
+
+> **Note**: Cloud assistant uses the separate endpoint `assistant.jdcloud-api.com`. `jdc` CLI does **NOT** currently support cloud assistant commands. Use **SDK/API only**. See [Cloud Assistant Guide](cloud-assistant.md) for details.
+
 ## SDK Initialization
 
 ```python
@@ -221,8 +233,9 @@ except ServerException as e:
 | Key Pair Operations | Yes | Yes | Full coverage |
 | Disk Operations | Yes | Yes | Use `disk` subcommand |
 | Snapshot Operations | Yes | Yes | Use `disk` subcommand |
+| Cloud Assistant Operations | Yes | **No** | Use SDK/API only; `jdc` not supported |
 
-> **Note**: VM and Disk operations are fully covered by both SDK and CLI. No SDK-only operations for this product.
+> **Note**: VM and Disk operations are fully covered by both SDK and CLI. Cloud assistant operations are **SDK-only** (`jdc` CLI not yet supported).
 
 ## Idempotency Notes
 

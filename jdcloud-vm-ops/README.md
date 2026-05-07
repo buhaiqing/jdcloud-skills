@@ -1,7 +1,7 @@
 ---
 name: jdcloud-vm-ops
-version: 1.0.1
-description: Manage JD Cloud Virtual Machine resources, including instance management, monitoring, troubleshooting, and automation integration.
+version: 1.4.0
+description: Manage JD Cloud Virtual Machine resources, including instance management, monitoring, troubleshooting, cloud assistant, and automation integration.
 ---
 
 # JD Cloud VM Operations Skill
@@ -15,6 +15,7 @@ Operational Skill for managing JD Cloud VM resources, providing instance managem
 - ✅ Instance Management: Create, start, stop, delete
 - ✅ Storage Management: Cloud disk, snapshots, disk expansion
 - ✅ Network Configuration: Security groups, EIP, VPC
+- ✅ Cloud Assistant: Create commands, batch execute scripts, query results
 - ✅ Monitoring & Alerting: CPU, memory, disk, network
 - ✅ Troubleshooting: Common issue diagnosis
 - ✅ Automation: SDK, MCP Server, Terraform, Ansible
@@ -27,6 +28,7 @@ jdcloud-vm-ops/
 ├── references/
 │   ├── core-concepts.md
 │   ├── cli-usage.md
+│   ├── cloud-assistant.md
 │   ├── troubleshooting.md
 │   ├── monitoring.md
 │   └── integration.md
@@ -42,6 +44,7 @@ jdcloud-vm-ops/
 - Configure security group rules and EIP
 - Query instance status and monitoring metrics
 - Troubleshoot: connectivity, performance, disk issues
+- Create and execute cloud assistant commands (batch VM script execution)
 
 ### SHOULD NOT Use
 
@@ -79,6 +82,7 @@ jdc vm describe-instances --region-id cn-north-1 --page-number 1 --page-size 20
 
 - [Core Concepts](references/core-concepts.md) - Instance types, lifecycle, billing
 - [CLI Usage](references/cli-usage.md) - Instance, storage, network management
+- [Cloud Assistant](references/cloud-assistant.md) - Command creation, batch execution, result query
 - [Troubleshooting](references/troubleshooting.md) - Connectivity, performance, disk issues
 - [Monitoring](references/monitoring.md) - Metrics, alerts, dashboards
 - [Integration](references/integration.md) - SDK, MCP Server, Terraform
@@ -145,6 +149,36 @@ jdc vpc describe-security-group --region-id cn-north-1 --security-group-id sg-xx
 jdc vpc describe-elastic-ips --region-id cn-north-1 | jq '.result.elasticIps[] | select(.instanceId == "i-xxxxx")'
 ```
 
+### Scenario 5: Batch Execute Script with Cloud Assistant
+
+```python
+from jdcloud_sdk.services.assistant.client import AssistantClient
+from jdcloud_sdk.services.assistant.apis.InvokeCommandRequest import InvokeCommandRequest
+
+client = AssistantClient(credential, 'cn-north-1')
+
+request = InvokeCommandRequest({
+    "regionId": "cn-north-1",
+    "commandId": "cmd-xxxxxxxx",
+    "instances": ["i-xxxxxxxx", "i-yyyyyyyy"],
+    "timeout": 60
+})
+
+response = client.invoke_command(request)
+invoke_id = response.result.invokeId
+
+# Poll results
+from jdcloud_sdk.services.assistant.apis.DescribeInvocationsRequest import DescribeInvocationsRequest
+
+check_req = DescribeInvocationsRequest({
+    "regionId": "cn-north-1",
+    "invokeIds": [invoke_id]
+})
+result = client.describe_invocations(check_req)
+for inst in result.result.invocations[0].invocationInstances:
+    print(f"{inst.instanceId}: exitCode={inst.exitCode}, output={inst.output}")
+```
+
 ## Best Practices
 
 ### 1. High Availability
@@ -180,8 +214,9 @@ jdc vpc describe-elastic-ips --region-id cn-north-1 | jq '.result.elasticIps[] |
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0.0 | 2026-04-28 | Initial version |
+| 1.4.0 | 2026-05-07 | Added Cloud Assistant (云助手) support |
 | 1.0.1 | 2026-04-28 | Added CLI commands and troubleshooting |
+| 1.0.0 | 2026-04-28 | Initial version |
 
 ## Related Resources
 
