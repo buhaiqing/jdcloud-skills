@@ -1,0 +1,123 @@
+# JD Cloud IAM Example Configuration
+# This file provides example configuration patterns for IAM operations
+
+# Sub-user configuration examples
+sub_users:
+  - name: "dev-user-01"
+    description: "Developer account for frontend team"
+    groups: ["dev-team", "frontend-team"]
+    policies: ["dev-readonly-policy"]
+    
+  - name: "ops-user-01"
+    description: "Operations engineer for production"
+    groups: ["ops-team"]
+    policies: ["ops-full-access-policy"]
+    
+  - name: "finance-user-01"
+    description: "Finance team member"
+    groups: ["finance-team"]
+    policies: ["billing-readonly-policy"]
+
+# Group configuration examples
+groups:
+  - name: "dev-team"
+    description: "Development team group"
+    policies: ["dev-readonly-policy"]
+    
+  - name: "ops-team"
+    description: "Operations team group"
+    policies: ["ops-full-access-policy"]
+    
+  - name: "finance-team"
+    description: "Finance team group"
+    policies: ["billing-readonly-policy"]
+
+# Role configuration examples
+roles:
+  - name: "cross-account-dev-role"
+    description: "Cross-account role for development access"
+    assume_role_policy:
+      version: "2018-10-01"
+      statement:
+        - effect: "Allow"
+          principal:
+            jdcloud: ["arn:jdcloud:iam::ACCOUNT_ID:user/*"]
+          action: ["iam:assumeRole"]
+    policies: ["dev-readonly-policy"]
+    
+  - name: "service-role-ecs"
+    description: "Service role for ECS to access OSS"
+    assume_role_policy:
+      version: "2018-10-01"
+      statement:
+        - effect: "Allow"
+          principal:
+            service: ["ecs.jdcloud.com"]
+          action: ["iam:assumeRole"]
+    policies: ["oss-readonly-policy"]
+
+# Policy configuration examples (custom policies)
+policies:
+  - name: "dev-readonly-policy"
+    description: "Read-only access for developers"
+    policy_document:
+      version: "2018-10-01"
+      statement:
+        - effect: "Allow"
+          action:
+            - "vm:describe*"
+            - "vpc:describe*"
+            - "oss:list*"
+            - "oss:get*"
+          resource: ["*"]
+    
+  - name: "ops-full-access-policy"
+    description: "Full access for operations team"
+    policy_document:
+      version: "2018-10-01"
+      statement:
+        - effect: "Allow"
+          action: ["*"]
+          resource: ["*"]
+        - effect: "Deny"
+          action:
+            - "iam:createSubUser"
+            - "iam:deleteSubUser"
+            - "iam:createPolicy"
+            - "iam:deletePolicy"
+          resource: ["*"]
+    
+  - name: "billing-readonly-policy"
+    description: "Read-only access to billing information"
+    policy_document:
+      version: "2018-10-01"
+      statement:
+        - effect: "Allow"
+          action:
+            - "billing:describe*"
+            - "billing:list*"
+          resource: ["*"]
+
+# AccessKey rotation policy
+access_key_rotation:
+  enabled: true
+  rotation_period_days: 90
+  alert_before_expiry_days: 14
+  auto_disable_old_key: true
+  
+# MFA configuration
+mfa_settings:
+  required_for_admin: true
+  required_for_cross_account: true
+  virtual_mfa_enabled: true
+  
+# Security audit schedule
+audit_schedule:
+  monthly:
+    - review_sub_users
+    - check_policy_attachments
+    - rotate_access_keys
+  quarterly:
+    - audit_custom_policies
+    - review_cross_account_roles
+    - clean_orphaned_resources

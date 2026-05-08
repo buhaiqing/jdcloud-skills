@@ -1,0 +1,336 @@
+# Example Configuration for JD Cloud KMS Operations
+# This file provides example configurations for common KMS scenarios
+
+# ============================================================
+# Key Creation Examples
+# ============================================================
+
+# Symmetric key for data encryption
+symmetric_encryption_key:
+  keyName: "app-data-encryption-key"
+  keyUsage: "ENCRYPT_DECRYPT"
+  keySpec: "AES_256"
+  description: "Primary key for encrypting application data"
+  # Optional: Enable automatic key rotation
+  # automaticRotation: true
+  # rotationInterval: "90d"  # 90 days rotation interval
+
+# Asymmetric key for digital signatures
+asymmetric_signing_key:
+  keyName: "document-signing-key"
+  keyUsage: "SIGN_VERIFY"
+  keySpec: "RSA_2048"
+  description: "RSA key for signing documents"
+
+# Asymmetric key for asymmetric encryption
+asymmetric_encryption_key:
+  keyName: "public-key-encryption"
+  keyUsage: "ENCRYPT_DECRYPT"
+  keySpec: "RSA_4096"
+  description: "RSA-4096 key for asymmetric encryption"
+
+# ============================================================
+# Secrets Management Examples
+# ============================================================
+
+# Database credentials secret
+database_credentials:
+  secretName: "production-db-password"
+  secretData: "MySecurePassword123!"
+  description: "Production database password"
+  # Secret data can be JSON for structured secrets
+  # secretData: '{"username":"admin","password":"secure123"}'
+
+# API key secret
+api_key_secret:
+  secretName: "third-party-api-key"
+  secretData: "sk_live_abcdef123456789"
+  description: "Third-party service API key"
+
+# SSL certificate secret
+ssl_certificate_secret:
+  secretName: "web-server-ssl-cert"
+  secretData: |
+    -----BEGIN CERTIFICATE-----
+    MIIFxTCCB... (PEM-encoded certificate)
+    -----END CERTIFICATE-----
+    -----BEGIN PRIVATE KEY-----
+    MIIEvgIB... (PEM-encoded private key)
+    -----END PRIVATE KEY-----
+  description: "Web server SSL certificate and private key"
+
+# ============================================================
+# Encryption Context Examples
+# ============================================================
+
+# Encryption context for additional metadata (if supported)
+encryption_context_example:
+  keyId: "key-abc123def456"
+  plaintext: "Sensitive data to encrypt"
+  # Optional: Encryption context for audit and access control
+  encryptionContext:
+    application: "payment-service"
+    environment: "production"
+    purpose: "credit-card-data"
+
+# ============================================================
+# CLI Configuration Examples
+# ============================================================
+
+# jdc CLI config file structure (~/.jdc/config)
+jdc_config_example:
+  profile: "default"
+  access_key: "YOUR_ACCESS_KEY_HERE"  # Replace with actual key
+  secret_key: "YOUR_SECRET_KEY_HERE"  # Replace with actual key
+  region_id: "cn-north-1"
+  endpoint: "kms.jdcloud-api.com"
+  scheme: "https"
+  timeout: 20
+
+# Multiple profile configuration
+jdc_multi_profile_example:
+  profiles:
+    production:
+      access_key: "PROD_ACCESS_KEY"
+      secret_key: "PROD_SECRET_KEY"
+      region_id: "cn-north-1"
+      endpoint: "kms.jdcloud-api.com"
+    
+    development:
+      access_key: "DEV_ACCESS_KEY"
+      secret_key: "DEV_SECRET_KEY"
+      region_id: "cn-east-2"
+      endpoint: "kms.jdcloud-api.com"
+
+# ============================================================
+# Envelope Encryption Workflow Example
+# ============================================================
+
+# Workflow for encrypting large data using envelope encryption
+envelope_encryption_workflow:
+  # Step 1: Generate data key
+  step1_generate_data_key:
+    keyId: "master-key-abc123"
+    operation: "generateDataKey"
+    output:
+      plaintextDataKey: "base64-encoded-plaintext-key"  # Use for local encryption
+      dataKeyCiphertextBlob: "base64-encoded-encrypted-key"  # Store this
+  
+  # Step 2: Encrypt data locally (using plaintext data key)
+  step2_local_encryption:
+    algorithm: "AES-256-GCM"
+    plaintextDataKey: "from-step1"
+    dataToEncrypt: "Large file or dataset"
+    output:
+      encryptedData: "locally-encrypted-data"
+  
+  # Step 3: Store encrypted data + encrypted data key
+  step3_storage:
+    encryptedData: "from-step2"
+    dataKeyCiphertextBlob: "from-step1"
+    storageLocation: "OSS bucket or database"
+  
+  # Step 4: Decrypt workflow
+  step4_decrypt_workflow:
+    # Retrieve encrypted data + encrypted data key
+    # Decrypt data key via KMS
+    decryptDataKey:
+      operation: "decrypt"
+      ciphertextBlob: "stored-dataKeyCiphertextBlob"
+      output:
+        plaintextDataKey: "base64-encoded-key"
+    
+    # Decrypt data locally
+    localDecryption:
+      algorithm: "AES-256-GCM"
+      plaintextDataKey: "from-decryptDataKey"
+      encryptedData: "stored-encryptedData"
+      output:
+        plaintext: "original data"
+
+# ============================================================
+# Monitoring Configuration Examples
+# ============================================================
+
+# Cloud Monitor alert rule configuration
+monitoring_alerts:
+  # Alert for high error rate
+  high_error_rate:
+    metric: "kms.error.count"
+    aggregation: "Sum"
+    period: "5m"
+    threshold: 10
+    comparisonOperator: "GreaterThanThreshold"
+    actions:
+      - type: "email"
+        recipients: ["admin@example.com"]
+      - type: "sms"
+        recipients: ["+86-138-xxxx-xxxx"]
+  
+  # Alert for key deletion events
+  key_deletion_alert:
+    metric: "kms.scheduleKeyDeletion.callCount"
+    aggregation: "Sum"
+    period: "1d"
+    threshold: 0
+    comparisonOperator: "GreaterThanThreshold"
+    actions:
+      - type: "email"
+        recipients: ["security@example.com"]
+  
+  # Alert for key rotation compliance
+  key_rotation_reminder:
+    metric: "kms.key.age"
+    aggregation: "Max"
+    period: "1d"
+    threshold: 90  # days
+    comparisonOperator: "GreaterThanThreshold"
+    actions:
+      - type: "email"
+        recipients: ["devops@example.com"]
+
+# ============================================================
+# IAM Policy Examples
+# ============================================================
+
+# IAM policy for encrypt/decrypt only (application role)
+iam_policy_encrypt_decrypt_only:
+  version: "2019-05-01"
+  statement:
+    - effect: "Allow"
+      action:
+        - "kms:Encrypt"
+        - "kms:Decrypt"
+        - "kms:DescribeKey"
+      resource: "kms:cn-north-1:*"  # All keys in cn-north-1 region
+
+# IAM policy for full key management (admin role)
+iam_policy_full_management:
+  version: "2019-05-01"
+  statement:
+    - effect: "Allow"
+      action:
+        - "kms:*"  # All KMS operations
+      resource: "kms:cn-north-1:*"
+
+# IAM policy for specific key only
+iam_policy_specific_key:
+  version: "2019-05-01"
+  statement:
+    - effect: "Allow"
+      action:
+        - "kms:Encrypt"
+        - "kms:Decrypt"
+      resource: "kms:cn-north-1:key-abc123def456"  # Specific key ID
+
+# ============================================================
+# Region Endpoint Configuration
+# ============================================================
+
+# KMS endpoints for different regions
+kms_endpoints:
+  cn-north-1:  # 华北-北京
+    public: "kms.cn-north-1.jdcloud-api.com"
+    internal: "kms.internal.cn-north-1.jdcloud-api.com"  # For VPC access
+  
+  cn-east-2:  # 华东-上海
+    public: "kms.cn-east-2.jdcloud-api.com"
+    internal: "kms.internal.cn-east-2.jdcloud-api.com"
+  
+  cn-east-1:  # 华东-宿迁
+    public: "kms.cn-east-1.jdcloud-api.com"
+    internal: "kms.internal.cn-east-1.jdcloud-api.com"
+  
+  cn-south-1:  # 华南-广州
+    public: "kms.cn-south-1.jdcloud-api.com"
+    internal: "kms.internal.cn-south-1.jdcloud-api.com"
+
+# ============================================================
+# Integration Examples
+# ============================================================
+
+# OSS bucket encryption with KMS
+oss_encryption_integration:
+  bucketName: "encrypted-data-bucket"
+  serverSideEncryption:
+    type: "KMS"
+    kmsKeyId: "key-abc123def456"
+
+# Cloud disk encryption with KMS
+disk_encryption_integration:
+  diskName: "encrypted-volume"
+  encryption:
+    enabled: true
+    kmsKeyId: "key-abc123def456"
+
+# RDS database encryption with KMS
+rds_encryption_integration:
+  instanceName: "encrypted-db-instance"
+  storageEncryption:
+    enabled: true
+    kmsKeyId: "key-abc123def456"
+
+# ============================================================
+# Best Practices Checklist
+# ============================================================
+
+kms_best_practices:
+  key_management:
+    - "Use separate keys for different purposes (encryption vs. signing)"
+    - "Enable automatic key rotation for frequently-used keys"
+    - "Monitor key age and rotate keys older than 365 days"
+    - "Delete unused keys to reduce costs"
+    - "Never store plaintext master keys in files or databases"
+  
+  secrets_management:
+    - "Store all sensitive configuration in KMS secrets"
+    - "Use secret versions for password rotation"
+    - "Restrict secret access via IAM policies"
+    - "Never hardcode secrets in source code"
+  
+  encryption:
+    - "Use envelope encryption for large data (>4KB)"
+    - "Base64-encode plaintext before encryption"
+    - "Store encrypted data key with encrypted data"
+    - "Never persist plaintext data keys"
+  
+  security:
+    - "Grant minimal IAM permissions (encrypt-only for apps)"
+    - "Use internal VPC endpoints for better performance"
+    - "Monitor API error rates for permission issues"
+    - "Enable audit logging for all key operations"
+  
+  cost_optimization:
+    - "Use envelope encryption to reduce API calls"
+    - "Delete unused keys and secrets"
+    - "Monitor API call volume for billing"
+
+# ============================================================
+# Example Usage Commands (CLI)
+# ============================================================
+
+# Example CLI commands for reference
+example_cli_commands:
+  create_key: |
+    jdc --output json kms create-key \
+      --key-cfg '{"keyName":"my-key","keyUsage":"ENCRYPT_DECRYPT","keySpec":"AES_256"}'
+  
+  encrypt_data: |
+    # Encrypt plaintext (must be Base64-encoded)
+    jdc --output json kms encrypt \
+      --key-id "key-abc123" \
+      --plaintext "$(echo -n 'Secret data' | base64)"
+  
+  decrypt_data: |
+    jdc --output json kms decrypt \
+      --key-id "key-abc123" \
+      --ciphertext-blob "base64-encoded-ciphertext"
+  
+  create_secret: |
+    jdc --output json kms create-secret \
+      --secret-cfg '{"secretName":"db-password","secretData":"MyPassword123"}'
+  
+  list_keys: |
+    jdc --output json kms describe-key-list \
+      --page-number 1 \
+      --page-size 100
