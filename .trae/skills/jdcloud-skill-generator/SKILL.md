@@ -313,6 +313,7 @@ python -c "
 import os
 ak = os.environ.get('JDC_ACCESS_KEY')
 sk = os.environ.get('JDC_SECRET_KEY')
+# SECURITY: NEVER print the actual secret key value
 if ak and sk:
     print('Credentials OK (SDK fallback mode)')
 else:
@@ -320,6 +321,8 @@ else:
     exit(1)
 "
 ```
+
+> **SECURITY WARNING:** The verification code above **ONLY checks for existence** of credentials. **NEVER** log, print, or expose `JDC_SECRET_KEY` (or any secret) in console output, debug messages, or logs. If you need to log credential status, use masked placeholders like `JDC_SECRET_KEY=<masked>` or `JDC_SECRET_KEY=***`. This rule applies to all execution paths (SDK, CLI, and any debugging scripts).
 
 If all verification paths fail:
 - HALT with clear message: "Credentials invalid or environment not set up"

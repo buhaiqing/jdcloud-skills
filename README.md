@@ -159,6 +159,8 @@ export JDC_REGION="cn-north-1"
 > **优先级**：Shell 环境变量 > `.env` 文件 > CLI 配置文件 > 默认值
 > **安全**：`.env` 已在 `.gitignore` 中，不会被提交。生成的 Skill 使用 `{{env.*}}` 占位符，不含真实凭证。
 
+> **⚠️ 安全警告**：**绝不**在日志、控制台输出或调试信息中打印 `JDC_SECRET_KEY` 的值。验证凭证时仅检查存在性（如 `[ -n "$JDC_SECRET_KEY" ]`），如需记录状态请使用脱敏占位符（如 `JDC_SECRET_KEY=<masked>`）。
+
 #### ⚠️ 重要提示：jdc CLI 凭证配置
 
 **jdc CLI 不读取环境变量**，它只从 `~/.jdc/config` 文件读取凭证。在沙盒/容器环境中，需要特殊处理：

@@ -86,6 +86,8 @@ source .venv/bin/activate  # macOS/Linux
 
 ## Credential Configuration
 
+> **⚠️ Security Warning:** **NEVER** log, print, or expose `JDC_SECRET_KEY` in console output, debug messages, or logs. When verification is needed, check existence only without printing the actual value. Use masked placeholders like `<masked>` or `***` for credential status logging.
+
 ### Method A: Configure for SDK (Environment Variables)
 
 SDK reads credentials from environment variables — no config file needed.

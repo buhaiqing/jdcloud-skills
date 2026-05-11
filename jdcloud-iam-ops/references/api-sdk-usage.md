@@ -277,10 +277,14 @@ req = CreateUserAccessKeyRequest(parameters=params)
 resp = client.send(req)
 
 # ⚠️ CRITICAL: Save secretKey immediately (only returned once)
+# SECURITY: NEVER log or print the actual secretKey value
 access_key_id = resp.result["accessKey"]["accessKeyId"]
 secret_key = resp.result["accessKey"]["secretKey"]
+
+# Store securely (e.g., environment variable, secret manager) - NEVER print
+# Example: os.environ["MY_SECRET_KEY"] = secret_key
 print(f"AccessKey created: {access_key_id}")
-print(f"SecretKey (SAVE NOW): {secret_key}")
+print(f"SecretKey: <masked> (SAVE SECURELY - only returned once)")
 ```
 
 ### Assume Role (STS)
@@ -301,12 +305,15 @@ req = AssumeRoleRequest(parameters=params)
 resp = sts_client.send(req)
 
 # Temporary credentials
+# SECURITY: NEVER log or print the actual secretKey value
 temp_ak = resp.result["credentials"]["accessKeyId"]
-temp_sk = resp.result["credentials"]["secretKey"]
-session_token = resp.result["credentials"]["sessionToken"]
+temp_sk = resp.result["credentials"]["secretKey"]  # Store securely, NEVER print
+session_token = resp.result["credentials"]["sessionToken"]  # Store securely, NEVER print
 expiration = resp.result["credentials"]["expiration"]
 
 print(f"Temporary AK: {temp_ak}")
+print(f"SecretKey: <masked> (store securely)")
+print(f"SessionToken: <masked> (store securely)")
 print(f"Expires: {expiration}")
 ```
 

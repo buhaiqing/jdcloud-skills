@@ -165,10 +165,14 @@
 
 **解决方案**：
 
-1. **检查环境变量**
+1. **检查环境变量（不要打印实际值，避免泄露）**
    ```bash
-   echo $JDC_ACCESS_KEY
-   echo $JDC_SECRET_KEY
+   # SECURITY: NEVER print the actual secret key value
+   if [ -n "$JDC_ACCESS_KEY" ] && [ -n "$JDC_SECRET_KEY" ]; then
+       echo "环境变量已设置 (JDC_SECRET_KEY=<masked>)"
+   else
+       echo "错误：JDC_ACCESS_KEY 或 JDC_SECRET_KEY 未设置"
+   fi
    ```
 
 2. **重新配置凭证**

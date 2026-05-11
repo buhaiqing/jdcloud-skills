@@ -127,6 +127,8 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 > **`{{env.*}}` MUST NOT** be collected from the user. **`{{user.*}}`** MUST be collected interactively when missing.
 
+> **Security Warning:** **NEVER** log, print, or expose `JDC_SECRET_KEY` (or any secret) in console output, debug messages, or logs. When verification is needed, check existence only (e.g., `if os.environ.get('JDC_SECRET_KEY')`) without printing the actual value. If logging credential status is required, use masked placeholders like `JDC_SECRET_KEY=<masked>` or `JDC_SECRET_KEY=***`. This applies to all execution flows (SDK, CLI, and debugging scripts).
+
 ## API and Response Conventions (Agent-Readable)
 
 - **OpenAPI is canonical** for path, query, body fields, enums, and response shapes. Base path: `https://iam.jdcloud-api.com/v1/...`

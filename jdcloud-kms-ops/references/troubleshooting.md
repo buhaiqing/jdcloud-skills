@@ -339,13 +339,19 @@ jdc --output json kms describe-key-list --page-number 1 --page-size 1
 
 **Verify credentials:**
 ```bash
-# CLI mode: check config file
-cat ~/.jdc/config
+# CLI mode: check config file exists (DO NOT print actual values)
+test -f ~/.jdc/config && echo "CLI config OK" || echo "CLI config missing"
 
-# SDK mode: check environment variables
-echo $JDC_ACCESS_KEY
-echo $JDC_SECRET_KEY
+# SDK mode: check environment variables exist (DO NOT print actual values)
+# SECURITY: Never print JDC_SECRET_KEY value
+if [ -n "$JDC_ACCESS_KEY" ] && [ -n "$JDC_SECRET_KEY" ]; then
+    echo "SDK credentials OK (JDC_SECRET_KEY=<masked>)"
+else
+    echo "Missing JDC_ACCESS_KEY or JDC_SECRET_KEY"
+fi
 ```
+
+> **SECURITY WARNING:** **NEVER** print or log the actual value of `JDC_SECRET_KEY`. The verification above only checks **existence** of credentials, not their values. If you need to log credential status, use masked placeholders like `JDC_SECRET_KEY=<masked>` or `JDC_SECRET_KEY=***`.
 
 **Check key metadata:**
 ```bash

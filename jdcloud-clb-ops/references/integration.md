@@ -1,5 +1,7 @@
 # Integration — JD Cloud Load Balancer (CLB)
 
+> **⚠️ Security Warning:** **NEVER** log, print, or expose `JDC_SECRET_KEY` in console output, debug messages, or logs. When verification is needed, check existence only without printing the actual value. Use masked placeholders like `<masked>` or `***` for credential status logging.
+
 ## Environment Setup (uv)
 
 `jdc` CLI and JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.

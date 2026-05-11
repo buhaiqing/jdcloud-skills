@@ -80,6 +80,8 @@ metadata:
 
 > 规则：`{{env.*}}` 占位符不得向用户暴露或索取。`{{user.*}}` 占位符须通过交互收集。
 
+> **安全警告：** **绝不**在控制台输出、调试信息或日志中记录、打印或暴露 `JDC_SECRET_KEY`（或任何密钥）。验证时仅检查存在性（如 `if os.environ.get('JDC_SECRET_KEY')`），不打印实际值。如需记录凭证状态，使用脱敏占位符如 `JDC_SECRET_KEY=<masked>` 或 `JDC_SECRET_KEY=***`。此规则适用于所有执行路径（SDK、CLI 及调试脚本）。
+
 ## 输出解析规则（Agent 可读）
 
 ### CLI 强制约定

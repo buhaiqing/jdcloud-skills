@@ -4,6 +4,8 @@
 
 This document describes how to integrate JD Cloud VM services with other tools and platforms, including SDK development, MCP Server configuration, Terraform automation, and more.
 
+> **⚠️ Security Warning:** **NEVER** log, print, or expose `JDC_SECRET_KEY` in console output, debug messages, or logs. When verification is needed, check existence only without printing the actual value. Use masked placeholders like `<masked>` or `***` for credential status logging.
+
 ## SDK Integration
 
 ### Python SDK

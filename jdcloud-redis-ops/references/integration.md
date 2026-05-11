@@ -1,5 +1,7 @@
 # Integration - JD Cloud Redis
 
+> **⚠️ Security Warning:** **NEVER** log, print, or expose `JDC_SECRET_KEY` in console output, debug messages, or logs. When verification is needed, check existence only without printing the actual value. Use masked placeholders like `<masked>` or `***` for credential status logging.
+
 ## Python SDK Bootstrap
 
 ### Installation

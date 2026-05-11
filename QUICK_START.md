@@ -77,6 +77,8 @@ chmod 600 .env
 
 > ⚠️ **安全警告**: 切勿将 `.env` 文件提交到代码仓库！`.env` 包含敏感凭证信息，必须在 `.gitignore` 中排除。
 
+> **🔒 密钥脱敏规范**: **绝不**在日志、控制台输出或调试信息中打印 `JDC_SECRET_KEY` 的值。验证凭证时仅检查存在性（如 `[ -n "$JDC_SECRET_KEY" ]`），如需记录状态请使用脱敏占位符（如 `JDC_SECRET_KEY=<masked>`）。
+
 **方式二：Shell 环境变量（优先级更高，可覆盖 `.env`）**
 
 当 `.env` 文件和 Shell 环境变量同时存在时，Shell 环境变量优先生效：
@@ -142,6 +144,7 @@ from jdcloud_sdk.core.config import Config
 from jdcloud_sdk.services.monitor.client import MonitorClient
 from jdcloud_sdk.core.exception import ClientException, ServerException
 
+# SECURITY: NEVER print the actual secret_key value
 access_key = os.environ.get('JDC_ACCESS_KEY')
 secret_key = os.environ.get('JDC_SECRET_KEY')
 region = os.environ.get('JDC_REGION', 'cn-north-1')
@@ -170,8 +173,8 @@ except Exception as e:
 运行验证：
 
 ```bash
-# 1. 确保 .env 文件存在
-cat .env
+# 1. 确保 .env 文件存在（不要打印内容，避免泄露凭证）
+test -f .env && echo ".env 文件存在" || echo ".env 文件不存在"
 
 # 2. 方式 A：加载 .env 后运行（手动场景）
 source .env && python verify_config.py
@@ -179,6 +182,8 @@ source .env && python verify_config.py
 # 3. 方式 B：Agent Runtime 自动加载 .env，直接运行即可
 python verify_config.py
 ```
+
+> **⚠️ 安全警告**: 切勿使用 `cat .env` 或类似命令打印凭证文件内容，这会泄露敏感信息到控制台历史记录。
 
 > 💡 **提示**: 对于大部分 CLI 命令，使用 `jdc <command> --help` 可查看所有可用参数。
 
@@ -466,12 +471,16 @@ jdc monitor describe-alarm --region-id cn-north-1 --alarm-id alarm-xxxxxxxx --ou
 
 **排查步骤**：
 ```bash
-# 1. 检查 .env 文件是否存在
-cat .env
+# 1. 检查 .env 文件是否存在（不要打印内容，避免泄露凭证）
+test -f .env && echo ".env 文件存在" || echo ".env 文件不存在"
 
-# 2. 检查环境变量（Shell 变量会覆盖 .env）
-echo $JDC_ACCESS_KEY
-echo $JDC_SECRET_KEY
+# 2. 检查环境变量是否存在（不要打印实际值，避免泄露）
+# SECURITY: NEVER print the actual secret key value
+if [ -n "$JDC_ACCESS_KEY" ] && [ -n "$JDC_SECRET_KEY" ]; then
+    echo "环境变量已设置 (JDC_SECRET_KEY=<masked>)"
+else
+    echo "错误：JDC_ACCESS_KEY 或 JDC_SECRET_KEY 未设置"
+fi
 
 # 3. 验证 .env 文件格式是否正确（不能有引号）
 # 正确格式：JDC_ACCESS_KEY=your_key_here
@@ -480,6 +489,8 @@ echo $JDC_SECRET_KEY
 # 4. 如果使用交互式配置，重新配置
 jdc config init
 ```
+
+> **⚠️ 安全警告**: 切勿使用 `cat .env` 或 `echo $JDC_SECRET_KEY` 打印凭证内容，这会泄露敏感信息到控制台历史记录。仅检查存在性即可。
 
 **常见 `.env` 文件错误**：
 
