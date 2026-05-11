@@ -15,6 +15,8 @@ metadata:
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
+  cli_version_locked: "1.2.12"
+  sdk_version_locked: ">=1.6.26"
   cli_support_evidence: >-
     Official jdc supports monitor product. Verified via `jdc monitor --help`
     and official CLI documentation at https://github.com/jdcloud-api/jdcloud-cli

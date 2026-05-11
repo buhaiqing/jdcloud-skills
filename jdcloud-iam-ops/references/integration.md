@@ -4,6 +4,40 @@
 
 Both `jdc` CLI and JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
 
+## SDK Version Locking
+
+> **Recommended**: Use locked SDK versions for reproducible environments. See [SDK Version Locking Guide](../../docs/SDK_VERSION_LOCKING.md) for detailed strategy.
+
+### Recommended Versions
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| jdcloud_cli | 1.2.12 | CLI for IAM operations (supports full IAM subcommands) |
+| jdcloud_sdk | >=1.6.26 | SDK fallback for CLI failures |
+
+### Install Locked Versions
+
+```bash
+# Using uv (recommended)
+uv pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
+
+# Or using pip
+pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
+```
+
+### Verify Versions
+
+```bash
+jdc --version
+python -c "import jdcloud_sdk; print(f'SDK version: {jdcloud_sdk.__version__}')"
+```
+
+### Version Compatibility
+
+| SDK Version | CLI Version | Python | IAM API | Status |
+|-------------|-------------|--------|---------|--------|
+| >=1.6.26 | 1.2.12 | 3.10+ | IAM API v1 | ✅ Tested |
+
 ### Install uv (System-Wide)
 
 **macOS / Linux:**
@@ -42,12 +76,12 @@ jdc --version
 python -c "import jdcloud_sdk; print('SDK OK')"
 ```
 
-**Pin versions for reproducibility (optional):**
+**Pin versions for reproducibility (recommended):**
 ```bash
-uv pip install jdcloud_cli==1.2.12 jdcloud_sdk==1.6.293
+uv pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
 ```
 
-> Replace version numbers with latest stable releases.
+> These are the tested and recommended versions. See [SDK Version Locking Guide](../../docs/SDK_VERSION_LOCKING.md) for details.
 
 ### Advanced: Project-based Setup (Recommended for Teams)
 

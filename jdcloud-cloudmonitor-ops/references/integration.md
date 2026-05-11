@@ -2,6 +2,40 @@
 
 > **⚠️ 安全警告：** **绝不**在日志、控制台输出或调试信息中打印 `JDC_SECRET_KEY` 的值。验证凭证时仅检查存在性，如需记录状态请使用脱敏占位符（如 `JDC_SECRET_KEY=<masked>`）。
 
+## SDK 版本锁定
+
+> **推荐**：使用锁定的SDK版本确保可重现环境。详见 [SDK版本锁定指南](../../docs/SDK_VERSION_LOCKING.md)。
+
+### 推荐版本
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| jdcloud_cli | 1.2.12 | 云监控CLI (supports full Monitor subcommands) |
+| jdcloud_sdk | >=1.6.26 | SDK兜底 |
+
+### 安装锁定版本
+
+```bash
+# 使用 uv（推荐）
+uv pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
+
+# 或使用 pip
+pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
+```
+
+### 验证版本
+
+```bash
+jdc --version
+python -c "import jdcloud_sdk; print(f'SDK version: {jdcloud_sdk.__version__}')"
+```
+
+### 版本兼容性
+
+| SDK Version | CLI Version | Python | Monitor API | Status |
+|-------------|-------------|--------|-------------|--------|
+| >=1.6.26 | 1.2.12 | 3.10+ | Monitor API v1.0 | ✅ Tested |
+
 ## SDK 集成
 
 ### Python SDK 集成

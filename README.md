@@ -1,3 +1,11 @@
+---
+name: jdcloud-skills
+description: JD Cloud 运维 Agent Skills 集合
+license: MIT
+---
+
+> **中文版本** | **[English Version](README_EN.md)**
+
 # Skills Farm - JDCloud Skills 开发指南
 
 本项目是京东云（JD Cloud）运维 Agent Skills 集合，提供云产品的自动化运维、监控和管理能力。

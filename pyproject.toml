@@ -1,2 +1,22 @@
+[project]
+name = "jdcloud-skills"
+version = "1.0.0"
+requires-python = ">=3.10"
+description = "JD Cloud Operations Agent Skills Collection"
+dependencies = [
+    "jdcloud_cli==1.2.12",
+    "jdcloud_sdk>=1.6.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "mdformat>=0.7.0",
+]
+
 [tool.uv]
 index-url = "https://mirrors.aliyun.com/pypi/simple/"
+
+# Version locking configuration
+# See docs/SDK_VERSION_LOCKING.md for detailed strategy

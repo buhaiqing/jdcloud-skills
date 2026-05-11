@@ -1,3 +1,10 @@
+---
+name: jdcloud-cloudmonitor-quickstart
+description: JD Cloud 云监控快速入门教程
+---
+
+> **中文版本** | **[English Version](QUICK_START_EN.md)**
+
 # JD Cloud 云监控(CloudMonitor) Quick Start
 
 ## 目录

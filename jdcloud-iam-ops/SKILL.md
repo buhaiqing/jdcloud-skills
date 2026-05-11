@@ -18,6 +18,8 @@ metadata:
   runtime: Harness AI Agent
   api_profile: "JD Cloud IAM API v1 - https://iam.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
+  cli_version_locked: "1.2.12"
+  sdk_version_locked: ">=1.6.26"
   cli_support_evidence: >-
     Confirmed via `jdc iam --help` output showing full IAM subcommands:
     create-sub-user, create-group, create-role, create-policy, create-user-access-key,

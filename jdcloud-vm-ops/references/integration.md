@@ -6,6 +6,41 @@ This document describes how to integrate JD Cloud VM services with other tools a
 
 > **⚠️ Security Warning:** **NEVER** log, print, or expose `JDC_SECRET_KEY` in console output, debug messages, or logs. When verification is needed, check existence only without printing the actual value. Use masked placeholders like `<masked>` or `***` for credential status logging.
 
+## SDK Version Locking
+
+> **Recommended**: Use locked SDK versions for reproducible environments. See [SDK Version Locking Guide](../../docs/SDK_VERSION_LOCKING.md) for detailed strategy.
+
+### Recommended Versions
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| jdcloud_cli | 1.2.12 | CLI for VM operations |
+| jdcloud_sdk | >=1.6.26 | SDK fallback for CLI failures |
+
+### Install Locked Versions
+
+```bash
+# Using uv (recommended)
+uv pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
+
+# Or using pip
+pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
+```
+
+### Verify Versions
+
+```bash
+jdc --version
+python -c "import jdcloud_sdk; print(f'SDK version: {jdcloud_sdk.__version__}')"
+```
+
+### Version Compatibility
+
+| SDK Version | CLI Version | Python | API Profile | Status |
+|-------------|-------------|--------|-------------|--------|
+| >=1.6.26 | 1.2.12 | 3.10+ | VM API v1.0 | ✅ Tested |
+| >=1.6.26 | 1.2.12 | 3.11+ | VM API v1.0 | ✅ Tested |
+
 ## SDK Integration
 
 ### Python SDK

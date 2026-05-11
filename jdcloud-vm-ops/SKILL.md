@@ -15,6 +15,8 @@ metadata:
   runtime: Harness AI Agent
   api_profile: "VM API v1.0 - https://docs.jdcloud.com/cn/virtual-machines/api"
   cli_applicability: jdc-first-with-fallback
+  cli_version_locked: "1.2.12"
+  sdk_version_locked: ">=1.6.26"
   cli_support_evidence: >-
     Official `jdc` CLI supports VM operations. Verified via `jdc vm --help`
     and documentation at https://docs.jdcloud.com/cn/cli
