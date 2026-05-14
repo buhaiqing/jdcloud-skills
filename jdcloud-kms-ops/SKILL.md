@@ -1,10 +1,11 @@
 ---
 name: jdcloud-kms-ops
 description: >-
-  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
-  Key Management Service (KMS) via official API/SDK or official `jdc` CLI; 
-  user mentions KMS, 密钥管理服务, 密钥管理, Key Management Service, 
-  or tasks target cryptographic keys, secrets, encryption, decryption.
+  Use this skill for JD Cloud key management and encryption — create and manage
+  encryption keys; encrypt/decrypt sensitive data; store and retrieve secrets;
+  rotate keys; schedule key deletion. Apply when the user mentions KMS, 密钥管理,
+  加密, 解密, 密钥, or asks about data encryption, key management, secrets storage,
+  or protecting sensitive data on JD Cloud, even without explicit "KMS" mentions.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network

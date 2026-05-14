@@ -1,10 +1,14 @@
 ---
 name: jdcloud-skill-generator
 description: >-
-  Use when adding or scaffolding a new JD Cloud operational Agent Skill under
-  `jdcloud-*-ops` in this repository, regenerating structure from official docs
-  or OpenAPI, or aligning an existing ops skill to the API/SDK template and P0/P1
-  bar. Not for executing live changes against a JD Cloud account.
+  Use when the user wants to create, scaffold, standardize, refactor, or
+  regenerate a JD Cloud operational skill (jdcloud-*-ops); update an existing
+  skill to match the latest OpenAPI, jdc CLI, or SDK changes; or verify a skill
+  against the P0/P1 quality bar. Also use when the user mentions jdc CLI,
+  jdcloud_sdk, OpenAPI, skill templates, or asks to add a new JD Cloud product
+  to the skill repository — even if they do not explicitly say 'skill' or
+  'scaffold'. Do not use for live operational execution against a JD Cloud
+  account; use the generated jdcloud-[product]-ops skill instead.
 license: MIT
 compatibility: >-
   Access to JD Cloud official documentation, OpenAPI/Swagger for the product,

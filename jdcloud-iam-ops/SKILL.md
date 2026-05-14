@@ -1,11 +1,11 @@
 ---
 name: jdcloud-iam-ops
 description: >-
-  Use when you need to create, manage, or troubleshoot JD Cloud IAM (Identity
-  and Access Management) resources including sub-users, groups, roles, policies,
-  and access keys via official API/SDK or official `jdc` CLI; user mentions IAM,
-  访问控制, 子用户, 用户组, 角色, 策略, AKSK, or tasks target identity and
-  permission management.
+  Use this skill for JD Cloud identity and access management — create sub-users,
+  groups, roles, and policies; manage access keys; grant or revoke permissions;
+  set up cross-account access. Apply when the user mentions IAM, 访问控制, 子用户,
+  子账号, 角色, 策略, 授权, 权限, or asks about account security, access control,
+  or permission management on JD Cloud, even without explicit "IAM" mentions.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network

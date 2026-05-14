@@ -1,0 +1,126 @@
+{
+  "train_queries": [
+    {
+      "id": "train-1",
+      "query": "帮我创建一台京东云的云主机，配置为4核8G，使用SSD系统盘",
+      "should_trigger": true,
+      "reasoning": "明确的VM创建任务，包含'云主机'关键词"
+    },
+    {
+      "id": "train-2",
+      "query": "我需要启动 i-xxxxxxxx 这台实例",
+      "should_trigger": true,
+      "reasoning": "明确的VM操作任务，虽然没有直接说'云主机'，但操作目标是云服务器"
+    },
+    {
+      "id": "train-3",
+      "query": "批量给10台CVM安装nginx",
+      "should_trigger": true,
+      "reasoning": "明确的VM批量操作任务，使用'CVM'简称"
+    },
+    {
+      "id": "train-4",
+      "query": "查看我的云服务器列表，筛选出状态为running的实例",
+      "should_trigger": true,
+      "reasoning": "云服务器生命周期管理任务，虽然用的是'云服务器'而非'云主机'"
+    },
+    {
+      "id": "train-5",
+      "query": "给这台VM挂载一块500G的数据盘",
+      "should_trigger": true,
+      "reasoning": "明确的VM存储管理任务"
+    },
+    {
+      "id": "train-6",
+      "query": "配置一下安全组规则，允许80端口入站",
+      "should_trigger": true,
+      "reasoning": "VM网络配置相关任务，属于VM技能范围"
+    },
+    {
+      "id": "train-7",
+      "query": "我想删除那台测试服务器，怎么操作",
+      "should_trigger": true,
+      "reasoning": "隐含的VM删除任务，'测试服务器'指代云主机"
+    },
+    {
+      "id": "train-8",
+      "query": "在所有VM上执行一个bash脚本清理日志",
+      "should_trigger": true,
+      "reasoning": "云助手批量执行脚本任务，属于VM技能范围"
+    },
+    {
+      "id": "train-9",
+      "query": "查询京东云VM实例的CPU使用情况",
+      "should_trigger": false,
+      "reasoning": "监控指标查询，应该使用cloudmonitor-ops而非vm-ops"
+    },
+    {
+      "id": "train-10",
+      "query": "创建一个新的VPC网络，配置子网和路由表",
+      "should_trigger": false,
+      "reasoning": "VPC网络创建，应该委托给jdcloud-vpc-ops"
+    },
+    {
+      "id": "train-11",
+      "query": "这台云主机SSH连不上，帮我排查一下",
+      "should_trigger": true,
+      "reasoning": "VM连接性故障排查任务"
+    },
+    {
+      "id": "train-12",
+      "query": "设置CPU使用率超过80%时发送告警",
+      "should_trigger": false,
+      "reasoning": "告警规则管理，应该委托给jdcloud-cloudmonitor-ops"
+    }
+  ],
+  "validation_queries": [
+    {
+      "id": "val-1",
+      "query": "查看京东云账户账单和消费明细",
+      "should_trigger": false,
+      "reasoning": "账单管理任务，与VM无关"
+    },
+    {
+      "id": "val-2",
+      "query": "我想把实例规格从2核升级到4核",
+      "should_trigger": true,
+      "reasoning": "VM实例规格调整任务"
+    },
+    {
+      "id": "val-3",
+      "query": "配置负载均衡，将流量分发到后端服务器",
+      "should_trigger": false,
+      "reasoning": "负载均衡配置，应该委托给jdcloud-lb-ops"
+    },
+    {
+      "id": "val-4",
+      "query": "导入一个已有的SSH密钥对",
+      "should_trigger": true,
+      "reasoning": "VM密钥管理任务"
+    },
+    {
+      "id": "val-5",
+      "query": "查看API调用次数和限流情况",
+      "should_trigger": false,
+      "reasoning": "API使用统计，与VM生命周期管理无关"
+    },
+    {
+      "id": "val-6",
+      "query": "给实例绑定一个弹性公网IP",
+      "should_trigger": true,
+      "reasoning": "VM网络配置任务，EIP绑定"
+    },
+    {
+      "id": "val-7",
+      "query": "为什么我的云服务器最近很卡",
+      "should_trigger": true,
+      "reasoning": "VM性能问题排查，用户虽未明确说'云主机'，但'云服务器'指代VM"
+    },
+    {
+      "id": "val-8",
+      "query": "创建一个快照备份系统盘数据",
+      "should_trigger": true,
+      "reasoning": "VM存储管理任务，快照创建"
+    }
+  ]
+}

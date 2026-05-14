@@ -1,9 +1,14 @@
 ---
 name: jdcloud-cloudmonitor-ops
 description: >-
-  Use when you need to query monitoring metrics, create or manage alarm rules,
-  view alarm history, or configure custom monitoring on JD Cloud resources.
-  User mentions CloudMonitor, 云监控, monitoring, 告警, or metric-related tasks.
+  Use when you need to query monitoring metrics, set up alarm thresholds,
+  check resource health, view alarm history, or configure custom monitoring
+  on JD Cloud CloudMonitor. This DevOps runbook handles metric queries,
+  threshold alerts, health checks, and incident response. Applicable when
+  user mentions CloudMonitor, 云监控, monitoring, 告警, 指标查询, 资源告警,
+  监控面板, health check, 阈值告警, or metric-related tasks. Use even when
+  user describes cloud resource status issues without explicitly mentioning
+  "monitoring" or "alarm."
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network access

@@ -1,17 +1,19 @@
 ---
 name: jdcloud-vm-ops
 description: >-
-  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
-  Virtual Machine (VM) via official API/SDK or official `jdc` CLI; user mentions
-  VM, 云主机, CVM, or tasks target VM instances.
+  Use when managing JD Cloud VMs — create, start, stop, restart, delete, resize;
+  manage disks, key pairs, snapshots; configure EIPs, security groups; run
+  scripts via cloud assistant; diagnose issues. Works with "实例", "服务器",
+  "云服务器", or "CVM" without saying "VM". NOT for monitoring, VPC,
+  load balancers, or billing.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
 metadata:
   author: jdcloud
-  version: "1.4.0"
-  last_updated: "2026-05-07"
+  version: "1.6.0"
+  last_updated: "2026-05-15"
   runtime: Harness AI Agent
   api_profile: "VM API v1.0 - https://docs.jdcloud.com/cn/virtual-machines/api"
   cli_applicability: jdc-first-with-fallback

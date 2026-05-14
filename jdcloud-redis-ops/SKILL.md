@@ -1,10 +1,11 @@
 ---
 name: jdcloud-redis-ops
 description: >-
-  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
-  Redis (distributed cache compatible with Redis) via official API/SDK or 
-  official `jdc` CLI; user mentions Redis, 云缓存, 分布式缓存, JCS for Redis,
-  or tasks target Redis cache instances.
+  Use this skill for JD Cloud Redis cache management — create, configure, and
+  scale Redis instances; backup and restore data; analyze performance;
+  troubleshoot connection or latency issues. Apply when the user mentions Redis,
+  云缓存, 分布式缓存, 缓存, or asks about caching, cache performance, or Redis
+  instances on JD Cloud, even without explicit "Redis" mentions.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network

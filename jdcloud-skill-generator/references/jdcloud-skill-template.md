@@ -1,10 +1,14 @@
 ---
 name: jdcloud-[product-name]-ops
 description: >-
-  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
-  [Product Name] via official API/SDK or official `jdc` CLI; user mentions
-  [Product Name], [Product Chinese Name], or [Product Alias], or tasks target
-  [Resource Type].
+  Use when the user needs to deploy, configure, manage, troubleshoot, or monitor
+  JD Cloud [Product Name] resources via API, SDK, or the jdc CLI. Trigger when
+  the user mentions [Product Name], [Product Chinese Name], [Product Alias], or
+  [Resource Type] in an operational context — even if they do not explicitly
+  mention 'JD Cloud' or 'API'. Also use when the user asks about jdc CLI
+  commands, jdcloud_sdk usage, OpenAPI operations, or automation scripts for
+  this product. Do not use for billing-only or IAM-only tasks; delegate to the
+  appropriate dedicated skill.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (e.g. Python 3.10+), valid API credentials, network

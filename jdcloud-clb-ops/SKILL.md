@@ -1,10 +1,11 @@
 ---
 name: jdcloud-clb-ops
 description: >-
-  Use when you need to deploy, configure, troubleshoot, or monitor JD Cloud
-  Load Balancer (CLB) via official API/SDK or official `jdc` CLI; user mentions
-  CLB, 负载均衡, Load Balancer, SLB, or tasks target load balancer instances,
-  listeners, backend servers, or target groups.
+  Use this skill to manage JD Cloud Load Balancer (CLB): deploy, configure,
+  troubleshoot, or monitor via API/SDK or `jdc` CLI. Trigger for CLB, 负载均衡,
+  Load Balancer, SLB, or tasks involving load balancer instances, listeners,
+  backend servers, target groups, health checks, or traffic distribution —
+  even without explicit "CLB" mention.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network
@@ -89,30 +90,34 @@ The CLI's `ProfileManager.__init__()` calls `__make_config_dir()` which does `os
 
 ### SHOULD Use This Skill When
 
-- User mentions "JD Cloud CLB" OR "负载均衡" OR "Load Balancer" OR "SLB" OR "CLB实例"
-- Task involves CRUD operations on load balancers: create, describe, modify, delete, list
-- Task involves listener management: create listener, modify listener, delete listener
-- Task involves backend server management: register/deregister targets, target groups
-- Task involves health check configuration
-- Task keywords: createLoadBalancer, describeLoadBalancers, createListener, registerTargets, healthCheck
-- User asks to deploy, configure, troubleshoot, or monitor load balancers **via API, SDK, CLI, or automation**
+- User explicitly mentions "JD Cloud CLB", "负载均衡", "Load Balancer", "SLB", or "CLB实例"
+- User wants to **deploy**, **configure**, **troubleshoot**, or **monitor** load balancers via automation
+- Task involves CRUD operations: create, describe, modify, delete, or list load balancer instances
+- Task involves listener management: create, modify, or delete TCP/UDP/HTTP/HTTPS listeners
+- Task involves backend server management: register/deregister targets, manage target groups
+- Task involves health check configuration or status verification
+- Task involves traffic distribution, session persistence, or load balancing algorithms
+- Keywords detected: createLoadBalancer, describeLoadBalancers, createListener, registerTargets, healthCheck, listener, backend, target
+- User describes load balancing needs without naming "CLB" (e.g., "distribute traffic across my servers", "set up a VIP for my web app", "configure health checks for backend servers")
 
 ### SHOULD NOT Use This Skill When
 
 - Task is purely billing / account management → delegate to: `jdcloud-billing-ops` (when present)
 - Task is IAM / permission model only → delegate to: `jdcloud-iam-ops` (when present)
-- Task is about VPC / subnet / security group → delegate to: `jdcloud-vpc-ops`
-- Task is about VM / ECS instances (backend servers) → delegate to: `jdcloud-vm-ops`
-- Task is about SSL certificates → delegate to: `jdcloud-ssl-ops` (when present)
+- Task is about VPC / subnet / security group configuration → delegate to: `jdcloud-vpc-ops`
+- Task is about VM / ECS instance management → delegate to: `jdcloud-vm-ops`
+- Task is about SSL certificate management → delegate to: `jdcloud-ssl-ops` (when present)
 - Task is about monitoring metrics / alarms → delegate to: `jdcloud-cloudmonitor-ops`
 - User insists on **console-only** flows with no API → state limitation; do not invent undocumented HTTP steps
+- Task involves database load balancing (not CLB) → delegate to appropriate database skill
 
 ### Delegation Rules
 
-- If CLB requires VPC/subnet, verify or create network resources via `jdcloud-vpc-ops` first.
-- If CLB backend targets are VMs, verify VM instances via `jdcloud-vm-ops` first.
-- If user asks about CLB monitoring metrics or alarm rules, delegate metric query to `jdcloud-cloudmonitor-ops`.
-- Multi-product requests: handle each product with its skill; do not merge unrelated APIs into one ambiguous flow.
+- If CLB requires VPC/subnet resources, verify or create them via `jdcloud-vpc-ops` first.
+- If CLB backend targets are VMs, verify VM instances exist via `jdcloud-vm-ops` first.
+- If user asks about CLB monitoring metrics or alarm rules, delegate metric queries to `jdcloud-cloudmonitor-ops`.
+- For SSL certificate installation on HTTPS listeners, coordinate with `jdcloud-ssl-ops` to get certificate IDs.
+- Multi-product requests: handle each product with its dedicated skill; do not merge unrelated APIs into one ambiguous flow.
 
 ## Variable Convention (Agent-Readable)
 
@@ -170,9 +175,16 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 ## Execution Flows (Agent-Readable)
 
-Every operation: **Pre-flight → Execute (jdc primary / SDK fallback) → Validate → Recover**. Do not skip phases.
+All operations follow this standardized workflow:  
+**Pre-flight Checks → Execute (jdc primary / SDK fallback) → Post-execution Validation → Failure Recovery**  
+Do not skip any phase.
 
-**jdc-first strategy:** The Agent MUST attempt `jdc` CLI first (primary path). If `jdc` fails after **3 retries** with exponential backoff, fall back to SDK/API. Documentation below lists `jdc` before SDK to reflect execution priority.
+### Execution Strategy (jdc-first with SDK Fallback)
+
+1. **Primary Path**: Attempt `jdc` CLI first for all operations
+2. **Retry Logic**: If `jdc` fails, retry up to **3 times** with exponential backoff (0s → 2s → 4s)
+3. **Fallback Path**: Only use SDK/API after 3 consecutive `jdc` failures
+4. **Output Preference**: When both paths succeed, prefer `jdc` output for consistency
 
 ### Operation: Create Load Balancer
 

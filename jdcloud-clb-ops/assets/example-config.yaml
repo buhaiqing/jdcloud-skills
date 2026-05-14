@@ -1,33 +1,35 @@
 # JD Cloud Load Balancer (CLB) Example Configuration
-# This file provides example configurations for common CLB deployment scenarios
+# This file provides production-ready configurations for common CLB deployment scenarios
+# Refer to SKILL.md for detailed execution flows and parameter validation
 
 # ============================================
 # Scenario 1: Basic HTTP Load Balancer
+# Use case: Public-facing web applications, development/test environments
 # ============================================
 basic_http_lb:
   loadBalancer:
     name: web-lb-prod
-    spec: small  # small/medium/large
-    type: external  # external/internal
-    region: cn-north-1
-    vpcId: vpc-xxx
-    subnetId: subnet-xxx
-    azs:
+    spec: small                    # small/medium/large - adjust based on traffic needs
+    type: external                 # external (public) or internal (private)
+    region: cn-north-1             # See core-concepts.md for available regions
+    vpcId: vpc-xxx                 # Must exist in the same region
+    subnetId: subnet-xxx           # Must have available IP addresses
+    azs:                           # Deploy across multiple AZs for high availability
       - cn-north-1a
       - cn-north-1b
   
   listeners:
     - name: http-listener
-      protocol: HTTP
+      protocol: HTTP               # TCP/UDP/HTTP/HTTPS
       port: 80
-      backendPort: 8080
+      backendPort: 8080            # Port on backend servers
       
   targetGroup:
     name: web-servers
     targets:
       - instanceId: vm-web-01
         port: 8080
-        weight: 100
+        weight: 100                # Traffic weight (0-100)
       - instanceId: vm-web-02
         port: 8080
         weight: 100
@@ -35,19 +37,20 @@ basic_http_lb:
   healthCheck:
     protocol: HTTP
     port: 8080
-    path: /health
-    interval: 10
-    timeout: 5
-    healthyThreshold: 2
-    unhealthyThreshold: 3
+    path: /health                  # Health check endpoint
+    interval: 10                   # Check interval in seconds (5-300)
+    timeout: 5                     # Timeout in seconds (2-60)
+    healthyThreshold: 2            # Consecutive successes needed (2-10)
+    unhealthyThreshold: 3          # Consecutive failures needed (2-10)
 
 # ============================================
 # Scenario 2: HTTPS Load Balancer with SSL
+# Use case: Secure API endpoints, e-commerce applications
 # ============================================
 https_lb:
   loadBalancer:
     name: https-lb-prod
-    spec: medium
+    spec: medium                    # Medium spec for production traffic
     type: external
     region: cn-north-1
     vpcId: vpc-xxx
@@ -60,8 +63,8 @@ https_lb:
       protocol: HTTPS
       port: 443
       backendPort: 8080
-      certificateId: cert-xxx  # SSL certificate ID
-      tlsPolicy: TLSv1.2
+      certificateId: cert-xxx       # SSL certificate from JD Cloud SSL service
+      tlsPolicy: TLSv1.2           # TLSv1.0/TLSv1.1/TLSv1.2/TLSv1.3
       
   targetGroup:
     name: api-servers
@@ -80,19 +83,20 @@ https_lb:
     protocol: HTTPS
     port: 8080
     path: /api/health
-    interval: 5
+    interval: 5                     # More frequent checks for API
     timeout: 3
     healthyThreshold: 2
     unhealthyThreshold: 3
 
 # ============================================
 # Scenario 3: TCP Load Balancer (Layer 4)
+# Use case: Database access, internal services, TCP-based applications
 # ============================================
 tcp_lb:
   loadBalancer:
     name: tcp-lb-internal
     spec: small
-    type: internal
+    type: internal                  # Internal LB for private network access
     region: cn-north-1
     vpcId: vpc-xxx
     subnetId: subnet-xxx
@@ -101,9 +105,9 @@ tcp_lb:
       - cn-north-1b
   
   listeners:
-    - name: tcp-listener
+    - name: mysql-listener
       protocol: TCP
-      port: 3306  # MySQL
+      port: 3306                    # MySQL default port
       backendPort: 3306
       
   targetGroup:
@@ -126,11 +130,12 @@ tcp_lb:
 
 # ============================================
 # Scenario 4: Multi-Protocol Load Balancer
+# Use case: Complex applications requiring multiple protocols (HTTP, HTTPS, TCP)
 # ============================================
 multi_protocol_lb:
   loadBalancer:
     name: multi-lb-prod
-    spec: large
+    spec: large                     # Large spec for high-traffic multi-protocol scenarios
     type: external
     region: cn-north-1
     vpcId: vpc-xxx
@@ -138,7 +143,7 @@ multi_protocol_lb:
     azs:
       - cn-north-1a
       - cn-north-1b
-      - cn-north-1c
+      - cn-north-1c                 # Three AZs for maximum availability
   
   listeners:
     - name: http-listener
@@ -152,7 +157,7 @@ multi_protocol_lb:
       backendPort: 8080
       certificateId: cert-xxx
       
-    - name: tcp-listener
+    - name: tcp-direct-listener
       protocol: TCP
       port: 8080
       backendPort: 8080
@@ -197,6 +202,7 @@ multi_protocol_lb:
 
 # ============================================
 # Scenario 5: Load Balancer with Session Persistence
+# Use case: Applications requiring session affinity (e.g., shopping carts, user sessions)
 # ============================================
 sticky_session_lb:
   loadBalancer:
@@ -216,9 +222,9 @@ sticky_session_lb:
       port: 80
       backendPort: 8080
       sessionPersistence:
-        type: cookie  # cookie/source_ip
-        cookieName: JSESSIONID
-        cookieTimeout: 3600
+        type: cookie                 # cookie (HTTP/HTTPS) or source_ip (all protocols)
+        cookieName: JSESSIONID       # Custom cookie name for session tracking
+        cookieTimeout: 3600          # Session timeout in seconds (1-86400)
       
   targetGroup:
     name: app-servers
