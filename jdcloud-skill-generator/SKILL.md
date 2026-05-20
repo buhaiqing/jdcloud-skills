@@ -334,140 +334,26 @@ If all verification paths fail:
 
 ## Critical jdc CLI Behavioral Notes (Reproductive Evidence from Empirical Testing)
 
-These notes document real failures observed when using the `jdc` CLI, with verified root causes and fixes. **Every generated skill MUST follow these conventions.**
+---
 
-### Failure 1: `--output json` must be TOP-LEVEL, not subcommand-level
+## Post-Generation Self-Check (生成后自检 — 宪章执行)
 
-**Root Cause:** The `--output` argument is defined in `base_controller.py` (the Cement framework base controller), which means it is a **top-level argument** that must be placed **before** the subcommand, not after.
+> **机制：生成完成后自动执行，不符合则循环修复直到通过。**
+> **参考：** `references/governance-and-adversarial-review.md` §0 Charter
 
-```
-# CORRECT (works):
-jdc --output json redis describe-cache-instances --region-id cn-north-1
+### Charter Compliance Checklist (强制执行)
 
-# WRONG (fails with "unrecognized arguments: --output json"):
-jdc redis describe-cache-instances --region-id cn-north-1 --output json
-```
+| # | Check | Pass Criteria | Auto-Fix |
+|---|-------|--------------|----------|
+| C1 | Frontmatter | Starts with `---`, has `name`, `description`, `license`, `compatibility`, `metadata` | Add from jdcloud-skill-template.md |
+| C2 | SHOULD/SHOULD NOT | Both trigger sections present | Add Trigger & Scope section |
+| C3 | Trigger & Scope | Complete with product keywords | Add from template |
+| C4 | CLI applicability | `cli_applicability` declared (dual-path/sdk-only) | Add CLI policy section |
+| C5 | Variables | `{{env.JDC_*}}`, `{{user.*}}`, `{{output.*}}` | Add placeholder table |
 
-**Fix:** Always place `--output json` at the top level, immediately after `jdc`.
+> **自解流程**：C1-C5 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
 
-### Failure 2: `--no-interactive` does NOT exist
-
-**Root Cause:** The `jdc` CLI does not define `--no-interactive` anywhere in its codebase. All `jdc` commands are non-interactive by default.
-
-```
-$ jdc redis describe-cache-instances --region-id cn-north-1 --no-interactive
-unrecognized arguments: --no-interactive
-```
-
-**Fix:** Remove `--no-interactive` from all CLI commands. It is unnecessary.
-
-### Failure 3: CLI does NOT read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` environment variables
-
-**Root Cause:** The `ProfileManager` class reads credentials exclusively from `~/.jdc/config` (INI format). It never checks `os.environ` for `JDC_ACCESS_KEY` or `JDC_SECRET_KEY`.
-
-```
-$ export JDC_ACCESS_KEY=xxx JDC_SECRET_KEY=yyy
-$ jdc --output json redis describe-cache-instances --region-id cn-north-1
-Please use `jdc configure add` command to add cli configure first.
-```
-
-**Fix:** Create `~/.jdc/config` with proper INI content, or use SDK for env-var-based auth.
-
-### Failure 4: `PermissionError` on `~/.jdc/` directory creation in sandbox
-
-**Root Cause:** `ProfileManager.__init__()` → `__make_config_dir()` calls `os.makedirs(os.path.expanduser("~") + "/.jdc")`. In sandboxed environments where the home directory is read-only, this fails.
-
-**Fix:** Redirect `HOME` to a writable location and pre-create config files:
-
-```bash
-export HOME=/tmp/jdc-home
-mkdir -p /tmp/jdc-home/.jdc
-
-cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
-[default]
-access_key = YOUR_ACCESS_KEY
-secret_key = YOUR_SECRET_KEY
-region_id = cn-north-1
-endpoint = redis.jdcloud-api.com
-scheme = https
-timeout = 20
-CONFIGEOF
-
-# CRITICAL: ~/.jdc/current must contain exactly "default" with NO trailing newline
-printf "%s" "default" > /tmp/jdc-home/.jdc/current
-```
-
-### Summary: Correct CLI Pattern
-
-```bash
-# 1. Set up credentials (mandatory — env vars won't work)
-export HOME=/tmp/jdc-home
-mkdir -p /tmp/jdc-home/.jdc
-cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
-[default]
-access_key = {{env.JDC_ACCESS_KEY}}
-secret_key = {{env.JDC_SECRET_KEY}}
-region_id = {{env.JDC_REGION}}
-CONFIGEOF
-printf "%s" "default" > /tmp/jdc-home/.jdc/current
-
-# 2. Run command (--output json BEFORE subcommand, no --no-interactive)
-jdc --output json <product> <command> --flag1 value1 --flag2 value2
-```
-
-### Step 1: Analyze sources
-
-Extract:
-
-- Operations, parameters, enums, errors, and **response schemas** from OpenAPI.
-- When `jdc` applies: **full** command map vs SDK operation list; flag parity; **actual JSON** shape per command (may differ from raw API—verify).
-- Async behavior (polling, terminal states) from docs or API patterns.
-- Metrics/alarm dimensions if monitoring is in scope.
-- **Delegation** targets (monitoring, VPC, LB, billing).
-
-### Step 2: Create directory layout
-
-```text
-jdcloud-[product]-ops/
-├── SKILL.md
-├── references/
-│   ├── core-concepts.md
-│   ├── api-sdk-usage.md
-│   ├── cli-usage.md              # jdc CLI usage (primary path)
-│   ├── troubleshooting.md
-│   ├── monitoring.md
-│   └── integration.md
-└── assets/
-    └── example-config.yaml
-```
-
-Add **`references/idempotency-checklist.md`** when retries or automation require documented idempotent behavior (pattern: `jdcloud-vpc-ops/references/idempotency-checklist.md`).
-
-### Step 3: Populate `SKILL.md` from template
-
-Base: [jdcloud-skill-template.md](references/jdcloud-skill-template.md).
-
-Replace placeholders and **wire JSON paths / SDK calls / `jdc` invocations** to verified OpenAPI and **measured** CLI output where applicable. Generic examples in the template are not authoritative.
-
-### Step 4: Fill reference files
-
-- **core-concepts.md** — Architecture, limits, regions, quotas.  
-- **api-sdk-usage.md** — Operation map, required fields, pagination, example request/response snippets (**no secrets**).  
-- **cli-usage.md** — **`jdc` CLI cheat sheet**: command map, `--output json` (MUST be top-level, BEFORE subcommand), **no `--no-interactive`** (flag does NOT exist), **CLI–API coverage gap** table, documented JSON paths (verify with a real run), and **credential note** (CLI reads from `~/.jdc/config` INI only, NOT env vars). This is the **primary path** reference.  
-- **troubleshooting.md** — API/CLI error codes, ordered diagnostics.  
-- **monitoring.md** — Metrics, dashboards, alerts.  
-- **integration.md** — **uv** Python environment bootstrap (command-based quick start + `pyproject.toml` project setup), SDK install pins, **`jdc` install/config** (required for primary path), env vars, optional MCP notes.
-
-### Step 5: Frontmatter and versioning
-
-- `name` matches the directory.  
-- **`description`** on the **ops** skill: third person, **when to use** only (triggers); do not summarize the full workflow ([OpenSpec](https://agentskills.io/specification)).  
-- Bump `metadata.version` and `last_updated`; update **Changelog** in `SKILL.md`.
-
-### Step 6: Verify
-
-- Complete **P0/P1** below.  
-- Run **[governance adversarial scenarios](references/governance-and-adversarial-review.md#minimal-adversarial-scenarios)** (mentally or with a fresh agent context) and patch gaps.
+---
 
 ## Governance (Expert Recommendation)
 

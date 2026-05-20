@@ -2,6 +2,35 @@
 
 This document defines **lightweight governance** for `jdcloud-*-ops` skills **in this repository only**. It is aimed at contributors and reviewers; it does not replace platform-wide security or compliance processes outside this repo.
 
+> **Version:** 1.1.0
+> **Last Updated:** 2026-05-21
+> **Status:** MANDATORY — no skill may be merged without passing this review
+
+---
+
+## 0. Charter (不可违背的基本原则)
+
+> **地位：宪章条款 — 所有生成的 SKILL.md 必须遵守，否则视为无效技能。**
+> **自解机制：Agent 在生成完成后自动执行合规检查，不符合则自动触发修复。**
+
+以下 5 条为不可违背的基本原则（INVIOLABLE PRINCIPLES）：
+
+| # | 原则 | 检查方法 | 违背后果 |
+|---|------|----------|----------|
+| **C1** | **YAML Frontmatter 存在且格式正确** | 文件开头必须是 `---`，包含 `name`、`description`、`license`、`compatibility`、`metadata` 字段 | **自动修复** — Agent 必须添加完整 frontmatter |
+| **C2** | **SHOULD/SHOULD NOT Use 章节存在** | 搜索 `### SHOULD Use This Skill When` 和 `### SHOULD NOT Use This Skill When` | **自动修复** — Agent 必须添加触发条件章节 |
+| **C3** | **Trigger & Scope 章节完整** | 搜索 `## Trigger & Scope` 章节 | **自动修复** — Agent 必须添加完整触发范围章节 |
+| **C4** | **CLI applicability 章节存在** | 搜索 `### CLI applicability` 说明 | **自动修复** — Agent 必须添加 CLI 适用性声明 |
+| **C5** | **变量占位符表格存在** | 搜索环境变量占位符表格 | **自动修复** — Agent 必须添加 `JDC_*` 占位符 |
+
+> **自解规则**：如果任何 C1-C5 不满足，Agent 必须：
+> 1. 竉即停止，报告违规项 `[CHARTER VIOLATION] C{n}: {原因}`
+> 2. 自动修复缺失章节（使用模板内容填充）
+> 3. 重新执行合规检查
+> 4. 循环直到全部通过
+
+---
+
 ## Goals
 
 - Catch **ambiguous triggers**, **missing safety gates**, and **credential mishandling** before merge.
@@ -24,7 +53,19 @@ This document defines **lightweight governance** for `jdcloud-*-ops` skills **in
 
 Use together with the meta-skill **P0/P1** checklist in `jdcloud-skill-generator/SKILL.md`.
 
-- [ ] **Triggers**: SHOULD-use / SHOULD-NOT-use are concrete; delegation names match existing `jdcloud-*-ops` directories where applicable.
+### Charter Pre-Check (宪章检查 — 最高优先级)
+
+> **必须在所有其他检查之前执行。不通过则禁止继续。**
+
+- [ ] **C1:** YAML frontmatter exists with `name`, `description`, `license`, `compatibility`, `metadata`
+- [ ] **C2:** SHOULD Use / SHOULD NOT Use sections present
+- [ ] **C3:** Trigger & Scope section complete with product keywords
+- [ ] **C4:** CLI applicability declaration present (dual-path / sdk-only)
+- [ ] **C5:** Variable placeholders with `{{env.JDC_*}}`, `{{user.*}}`, `{{output.*}}`
+
+> **自解触发**：如果任何 C1-C5 未通过，Agent 必须立即自动修复，不允许跳过。
+
+### Standard Checklist
 - [ ] **Credentials**: `{{env.*}}` rules are explicit; no instruction to paste secrets into chat or files. **NEVER** log or print secret values (including `JDC_SECRET_KEY`) — use masked placeholders (`<masked>`, `***`) for credential status logging.
 - [ ] **Destructive ops**: Delete/stop/terminate (or product equivalents) include an explicit **human confirmation** step before the **SDK call or `jdc` invocation**.
 - [ ] **API fidelity**: Operation names, request fields, and response JSON paths are traceable to **OpenAPI** (or SDK docs) for the stated API version—not invented.
@@ -86,6 +127,20 @@ Run these **mentally** or with a separate agent session **without** loading the 
   - Document rollback path (preserve previous rule config).
   - HALT if target group health check shows unhealthy backends.
   - For critical production LBs: require additional authorization (e.g., "confirm with your team lead").
+
+### Scenario I — Template Compliance (宪章检查)
+
+> **最高优先级场景 — 必须在其他场景之前验证**
+
+| Sub-Scenario | Test | Pass Criteria | Auto-Fix |
+|--------------|------|--------------|----------|
+| I1 | Frontmatter | `head -3 SKILL.md | grep "^---"` | Frontmatter with all fields | Add from jdcloud-skill-template.md |
+| I2 | SHOULD/SHOULD NOT | `grep -c "SHOULD Use This Skill" SKILL.md` | ≥ 1 match each | Add Trigger & Scope section |
+| I3 | Trigger & Scope | `grep -c "Trigger & Scope" SKILL.md` | ≥ 1 match | Add from template |
+| I4 | CLI applicability | `grep -c "CLI applicability" SKILL.md` | ≥ 1 match | Add CLI policy section |
+| I5 | Variables | Search for `JDC_ACCESS_KEY` placeholder | Placeholder table exists | Add variable table |
+
+> **自解流程**：I1-I5 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
 
 ## When to Expand Beyond "Minimal"
 
