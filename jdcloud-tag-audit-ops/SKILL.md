@@ -30,7 +30,7 @@ metadata:
 ## Overview
 
 JD Cloud Tag Audit (`jdcloud-tag-audit-ops`) is a unified skill for auditing resource tags across multiple JD Cloud products and regions. It provides:
-- Cross-product tag compliance checking (Redis, VM, RDS, CLB, EIP)
+- Cross-product tag compliance checking (Redis, VM, RDS, CLB, EIP, MongoDB, Elasticsearch)
 - Multi-region scanning capability
 - Automated audit report generation
 - DOPS ticket creation for non-compliant resources
@@ -43,6 +43,8 @@ JD Cloud Tag Audit (`jdcloud-tag-audit-ops`) is a unified skill for auditing res
 | VM | `vm describe-instances` | `$.result.instances[]` | `instanceId` | `name` | N/A |
 | RDS MySQL | `rds describe-instances` | `$.result.dbInstances[]` | `instanceId` | `instanceName` | `engine` |
 | RDS PostgreSQL | `rds describe-instances` | `$.result.dbInstances[]` | `instanceId` | `instanceName` | `engine` |
+| MongoDB | `mongodb describe-instances` | `$.result.instances[]` | `instanceId` | `instanceName` | `engine` |
+| Elasticsearch | `es describe-instances` (SDK-only) | `$.result.instances[]` | `instanceId` | `instanceName` | N/A |
 | CLB | `clb describe-load-balancers` | `$.result.loadBalancers[]` | `loadBalancerId` | `loadBalancerName` | N/A |
 | EIP | `eip describe-addresses` | `$.result.addresses[]` | `addressId` | `name` | N/A |
 
@@ -202,6 +204,30 @@ for region in cn-north-1 cn-east-2 cn-south-1; do
             missingTags: .
         }'
 done
+
+# Audit MongoDB tags across regions
+for region in cn-north-1 cn-east-2 cn-south-1; do
+    echo "=== MongoDB - $region ==="
+    jdc --output json mongodb describe-instances \
+      --region-id $region --page-number 1 --page-size 100 | \
+    jq '.result.instances[] | 
+        . as $instance |
+        ($instance.tags // []) | map(.key) | . as $existing |
+        [($required_tags[] | select(. as $tag | $existing | contains([$tag]) | not))] |
+        select(length > 0) |
+        {
+            product: "mongodb",
+            region: "'"$region"'",
+            id: $instance.instanceId,
+            name: $instance.instanceName,
+            engine: $instance.engine,
+            engineVersion: $instance.engineVersion,
+            missingTags: .
+        }'
+done
+
+# Audit Elasticsearch tags across regions (SDK-only — jdc CLI does NOT support 'es')
+# See SDK Fallback section below for Elasticsearch audit code
 ```
 
 #### Execution (SDK Fallback)
@@ -337,6 +363,69 @@ def audit_rds_postgresql_tags(region, required_tags):
                 "missingTags": missing_tags
             })
     return results
+
+# Audit function for MongoDB
+def audit_mongodb_tags(region, required_tags):
+    from jdcloud_sdk.services.mongodb.client.MongodbClient import MongodbClient
+    from jdcloud_sdk.services.mongodb.apis.DescribeInstancesRequest import DescribeInstancesRequest, DescribeInstancesParameters
+    
+    client = MongodbClient(credential)
+    params = DescribeInstancesParameters(regionId=region)
+    req = DescribeInstancesRequest(parameters=params)
+    resp = client.send(req)
+    
+    results = []
+    for instance in resp.result.get("instances", []):
+        existing_tags = [tag["key"] for tag in instance.get("tags", [])]
+        missing_tags = [tag for tag in required_tags if tag not in existing_tags]
+        if missing_tags:
+            results.append({
+                "product": "mongodb",
+                "region": region,
+                "id": instance["instanceId"],
+                "name": instance["instanceName"],
+                "engine": instance.get("engine", "MongoDB"),
+                "engineVersion": instance.get("engineVersion", ""),
+                "missingTags": missing_tags
+            })
+    return results
+
+# Audit function for Elasticsearch (SDK-only — jdc CLI does NOT support 'es')
+def audit_elasticsearch_tags(region, required_tags):
+    """Note: jdc CLI does NOT support 'es' product. Must use SDK only.
+    Key field names from actual API: instanceVersion, instanceStatus (NOT version/status).
+    Response instances may be null when empty — use .get("instances") or [].
+    Valid ES regions: cn-north-1, cn-east-1, cn-east-2, cn-south-1 (cn-south-2 is invalid).
+    """
+    from jdcloud_sdk.services.es.client.EsClient import EsClient
+    from jdcloud_sdk.services.es.apis.DescribeInstancesRequest import DescribeInstancesRequest, DescribeInstancesParameters
+    
+    # IMPORTANT: EsClient(credential) — NO region as second arg
+    client = EsClient(credential)
+    params = DescribeInstancesParameters(regionId=region)
+    params.setPageNumber(1)
+    params.setPageSize(100)
+    req = DescribeInstancesRequest(parameters=params)
+    resp = client.send(req)
+    
+    # IMPORTANT: instances may be null when empty
+    instances = resp.result.get("instances") or []
+    
+    results = []
+    for instance in instances:
+        existing_tags = [tag["key"] for tag in instance.get("tags", []) or []]
+        missing_tags = [tag for tag in required_tags if tag not in existing_tags]
+        if missing_tags:
+            results.append({
+                "product": "elasticsearch",
+                "region": region,
+                "id": instance["instanceId"],
+                "name": instance["instanceName"],
+                "version": instance.get("instanceVersion", ""),  # NOT "version"
+                "status": instance.get("instanceStatus", ""),    # NOT "status"
+                "missingTags": missing_tags
+            })
+    return results
 ```
 
 ### Operation: Generate Audit Report
@@ -356,6 +445,8 @@ echo "| Redis | $redis_count |"
 echo "| VM | $vm_count |"
 echo "| RDS MySQL | $rds_mysql_count |"
 echo "| RDS PostgreSQL | $rds_postgresql_count |"
+echo "| MongoDB | $mongodb_count |"
+echo "| Elasticsearch | $es_count |"
 echo "| CLB | $clb_count |"
 echo "| EIP | $eip_count |"
 ```
@@ -404,6 +495,8 @@ uv pip install jdcloud_cli jdcloud_sdk
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-06-03 | Added Elasticsearch tag audit support |
+| 1.3.0 | 2026-06-03 | Added MongoDB tag audit support |
 | 1.2.0 | 2026-06-03 | Added RDS MySQL and PostgreSQL tag audit support |
 | 1.1.0 | 2026-06-03 | Added CLB and EIP support |
 | 1.0.0 | 2026-06-03 | Initial version with Redis, VM, RDS support |

@@ -1,0 +1,60 @@
+# Example MongoDB Instance Configuration
+# This file demonstrates the configuration for creating a MongoDB instance
+
+# Instance metadata
+instance:
+  name: "my-mongodb-production"
+  class: "mongodb.s1.medium"
+  engine: "MongoDB"
+  engineVersion: "4.4"
+  
+# Network configuration
+network:
+  regionId: "cn-north-1"
+  vpcId: "vpc-abc123def"
+  subnetId: "subnet-ghi456jkl"
+  azId: "cn-north-1a"
+  
+# Storage configuration
+storage:
+  type: "local_ssd"  # Options: local_ssd, cloud_ssd
+  size: 50  # GB
+  
+# Authentication
+credentials:
+  username: "admin"
+  password: "<secure-password>"  # Replace with actual password
+  
+# Backup configuration
+backup:
+  enabled: true
+  backupPeriod: "0 2 * * *"  # Daily at 2 AM
+  retentionDays: 7
+  
+# High availability
+ha:
+  enabled: true
+  replicationFactor: 3  # Minimum for production
+  
+# Monitoring
+monitoring:
+  enabled: true
+  alarms:
+    cpu:
+      threshold: 80
+      period: 300
+    memory:
+      threshold: 85
+      period: 300
+    disk:
+      threshold: 90
+      period: 300
+      
+# Tags
+tags:
+  - key: "Environment"
+    value: "Production"
+  - key: "Project"
+    value: "MyApplication"
+  - key: "Owner"
+    value: "DevOps Team"

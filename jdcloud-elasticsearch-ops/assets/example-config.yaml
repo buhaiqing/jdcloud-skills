@@ -1,0 +1,149 @@
+# Example Configuration for JD Cloud Elasticsearch
+# Copy this file and update with your actual values
+
+# JD Cloud Credentials (loaded from environment variables)
+credentials:
+  access_key: "${JDC_ACCESS_KEY}"
+  secret_key: "${JDC_SECRET_KEY}"
+  region: "${JDC_REGION:-cn-north-1}"
+
+# Elasticsearch Instance Configuration
+elasticsearch:
+  # Instance naming convention: {project}-{environment}-{purpose}
+  instance_name: "myapp-production-search"
+  
+  # Instance class determines compute and memory resources
+  # Options: es.n1.small, es.n1.medium, es.n1.large, es.n1.xlarge
+  instance_class: "es.n1.medium"
+  
+  # Elasticsearch version
+  # Supported: 6.8.x, 7.10.x, 7.17.x, 8.x
+  version: "7.10.0"
+  
+  # Network configuration
+  vpc_id: "vpc-xxx"
+  subnet_id: "subnet-xxx"
+  az_id: "cn-north-1a"
+  
+  # Data node configuration
+  data_node:
+    amount: 3
+    class: "es.n1.medium"
+    disk_type: "cloud_ssd"
+    disk_size: 200
+  
+  # Master node configuration (recommended for production)
+  master_node:
+    amount: 3
+    class: "es.n1.small"
+  
+  # Kibana node configuration
+  kibana_node:
+    class: "es.n1.small"
+  
+  # Resource tags for management and billing
+  tags:
+    - key: "环境"
+      value: "production"
+    - key: "客户"
+      value: "internal"
+    - key: "项目"
+      value: "myapp"
+    - key: "负责人"
+      value: "ops-team"
+    - key: "成本中心"
+      value: "cc-001"
+
+# Backup configuration
+backup:
+  enabled: true
+  # Snapshot name prefix
+  prefix: "auto-snapshot"
+  # Retention in days
+  retention_days: 30
+  # Schedule (cron expression)
+  schedule: "0 2 * * *"  # Daily at 2 AM
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  # CloudMonitor alarm rules
+  alarms:
+    cpu_high:
+      metric: "CPUUtilization"
+      threshold: 80
+      comparison: "GreaterThanOrEqualToThreshold"
+      period: 300
+      evaluation_periods: 2
+    
+    memory_high:
+      metric: "MemoryUtilization"
+      threshold: 85
+      comparison: "GreaterThanOrEqualToThreshold"
+      period: 300
+      evaluation_periods: 2
+    
+    disk_full:
+      metric: "DiskUsage"
+      threshold: 90
+      comparison: "GreaterThanOrEqualToThreshold"
+      period: 300
+      evaluation_periods: 1
+    
+    cluster_health:
+      metric: "ClusterHealthStatus"
+      threshold: 1  # 0=green, 1=yellow, 2=red
+      comparison: "GreaterThanOrEqualToThreshold"
+      period: 60
+      evaluation_periods: 1
+
+# Security configuration
+security:
+  # IP whitelist for public access (if enabled)
+  ip_whitelist:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+  
+  # Enable SSL/TLS
+  ssl_enabled: true
+  
+  # Authentication settings
+  auth:
+    enabled: true
+    # Password should be managed via secrets manager
+    password: "${ES_PASSWORD}"
+
+# Index management
+index_management:
+  # Default index template
+  default_template:
+    number_of_shards: 3
+    number_of_replicas: 1
+    refresh_interval: "30s"
+  
+  # ILM (Index Lifecycle Management) policy
+  ilm_policy:
+    enabled: true
+    hot_phase:
+      min_age: "0d"
+      max_size: "50gb"
+      max_age: "7d"
+    warm_phase:
+      min_age: "7d"
+    cold_phase:
+      min_age: "30d"
+    delete_phase:
+      min_age: "90d"
+
+# Multi-region configuration
+multi_region:
+  # Primary region
+  primary: "cn-north-1"
+  
+  # DR regions
+  replicas:
+    - region: "cn-east-2"
+      sync_mode: "async"
+    - region: "cn-south-1"
+      sync_mode: "async"
