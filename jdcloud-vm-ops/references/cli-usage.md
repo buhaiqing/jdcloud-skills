@@ -686,3 +686,68 @@ jdc --output json disk resize-disk --region-id cn-north-1 --disk-id vol-xxxxx --
 | Integration tests | SDK | Easier to mock/assert responses |
 
 > **Default preference for agent execution**: Prefer **SDK** for complex workflows; prefer **CLI** for simple queries.
+
+## Tag Management Best Practices
+
+### Check for Missing Tags
+
+```bash
+# Check instances missing "环境" tag (robust handling for null tags)
+jdc --output json vm describe-instances \
+  --region-id "{{user.region}}" \
+  --page-number 1 \
+  --page-size 100 | \
+jq '.result.instances[] | 
+    select((.tags // []) | map(.key) | contains(["环境"]) | not) | 
+    {id: .instanceId, name: .name}'
+```
+
+### List All Tags for Audit
+
+```bash
+# List all instances with their tags
+jdc --output json vm describe-instances \
+  --region-id "{{user.region}}" \
+  --page-number 1 \
+  --page-size 100 | \
+jq '.result.instances[] | {
+    id: .instanceId, 
+    name: .name, 
+    tags: [(.tags // [])[] | "\(.key)=\(.value)"] | join(", ")
+}'
+```
+
+### Check Multiple Tags
+
+```bash
+# Check instances missing any of required tags
+REQUIRED_TAGS='["环境", "客户", "项目"]'
+jdc --output json vm describe-instances \
+  --region-id "{{user.region}}" | \
+jq --argjson required "$REQUIRED_TAGS" '.result.instances[] | 
+    . as $instance |
+    ($instance.tags // []) | map(.key) | . as $existing |
+    [($required[] | select(. as $tag | $existing | contains([$tag]) | not))] |
+    select(length > 0) |
+    {
+        id: $instance.instanceId,
+        name: $instance.name,
+        missingTags: .
+    }'
+```
+
+### Cross-Region Tag Audit
+
+```bash
+# Check tags across multiple regions
+for region in cn-north-1 cn-east-2 cn-south-1; do
+    echo "=== Checking $region ==="
+    jdc --output json vm describe-instances \
+      --region-id "$region" \
+      --page-number 1 \
+      --page-size 100 | \
+    jq '.result.instances[] | 
+        select((.tags // []) | map(.key) | contains(["环境"]) | not) | 
+        {region: "'"$region"'", id: .instanceId, name: .name}'
+done
+```

@@ -473,3 +473,52 @@ jdc --debug --output json redis describe-cache-instance \
   --region-id "cn-north-1" \
   --cache-instance-id "redis-abc123"
 ```
+
+## Tag Management Best Practices
+
+### Check for Missing Tags
+
+```bash
+# Check instances missing "环境" tag (robust handling for null tags)
+jdc --output json redis describe-cache-instances \
+  --region-id "{{user.region}}" \
+  --page-number 1 \
+  --page-size 100 | \
+jq '.result.cacheInstances[] | 
+    select((.tags // []) | map(.key) | contains(["环境"]) | not) | 
+    {id: .cacheInstanceId, name: .cacheInstanceName}'
+```
+
+### List All Tags for Audit
+
+```bash
+# List all instances with their tags
+jdc --output json redis describe-cache-instances \
+  --region-id "{{user.region}}" \
+  --page-number 1 \
+  --page-size 100 | \
+jq '.result.cacheInstances[] | {
+    id: .cacheInstanceId, 
+    name: .cacheInstanceName, 
+    tags: [(.tags // [])[] | "\(.key)=\(.value)"] | join(", ")
+}'
+```
+
+### Check Multiple Tags
+
+```bash
+# Check instances missing any of required tags
+REQUIRED_TAGS='["环境", "客户", "项目"]'
+jdc --output json redis describe-cache-instances \
+  --region-id "{{user.region}}" | \
+jq --argjson required "$REQUIRED_TAGS" '.result.cacheInstances[] | 
+    . as $instance |
+    ($instance.tags // []) | map(.key) | . as $existing |
+    [($required[] | select(. as $tag | $existing | contains([$tag]) | not))] |
+    select(length > 0) |
+    {
+        id: $instance.cacheInstanceId,
+        name: $instance.cacheInstanceName,
+        missingTags: .
+    }'
+```
