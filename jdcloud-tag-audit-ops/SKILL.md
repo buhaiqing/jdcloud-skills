@@ -10,7 +10,7 @@ compatibility: >-
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
 metadata:
   author: jdcloud
-  version: "1.1.0"
+  version: "1.2.0"
   last_updated: "2026-06-03"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Multi-Product API"
@@ -37,13 +37,14 @@ JD Cloud Tag Audit (`jdcloud-tag-audit-ops`) is a unified skill for auditing res
 
 ## Supported Products
 
-| Product | CLI Command | JSON Path | Instance ID Field | Name Field |
-|---------|-------------|-----------|------------------|------------|
-| Redis | `redis describe-cache-instances` | `$.result.cacheInstances[]` | `cacheInstanceId` | `cacheInstanceName` |
-| VM | `vm describe-instances` | `$.result.instances[]` | `instanceId` | `name` |
-| RDS | `rds describe-instances` | `$.result.dbInstances[]` | `instanceId` | `instanceName` |
-| CLB | `clb describe-load-balancers` | `$.result.loadBalancers[]` | `loadBalancerId` | `loadBalancerName` |
-| EIP | `eip describe-addresses` | `$.result.addresses[]` | `addressId` | `name` |
+| Product | CLI Command | JSON Path | Instance ID Field | Name Field | Engine Field |
+|---------|-------------|-----------|------------------|------------|--------------|
+| Redis | `redis describe-cache-instances` | `$.result.cacheInstances[]` | `cacheInstanceId` | `cacheInstanceName` | N/A |
+| VM | `vm describe-instances` | `$.result.instances[]` | `instanceId` | `name` | N/A |
+| RDS MySQL | `rds describe-instances` | `$.result.dbInstances[]` | `instanceId` | `instanceName` | `engine` |
+| RDS PostgreSQL | `rds describe-instances` | `$.result.dbInstances[]` | `instanceId` | `instanceName` | `engine` |
+| CLB | `clb describe-load-balancers` | `$.result.loadBalancers[]` | `loadBalancerId` | `loadBalancerName` | N/A |
+| EIP | `eip describe-addresses` | `$.result.addresses[]` | `addressId` | `name` | N/A |
 
 ## Supported Regions
 
@@ -159,6 +160,48 @@ for region in cn-north-1 cn-east-2 cn-south-1; do
             missingTags: .
         }'
 done
+
+# Audit RDS MySQL tags across regions
+for region in cn-north-1 cn-east-2 cn-south-1; do
+    echo "=== RDS MySQL - $region ==="
+    jdc --output json rds describe-instances \
+      --region-id $region --page-number 1 --page-size 100 | \
+    jq '.result.dbInstances[] | 
+        select(.engine == "MySQL") |
+        . as $instance |
+        ($instance.tags // []) | map(.key) | . as $existing |
+        [($required_tags[] | select(. as $tag | $existing | contains([$tag]) | not))] |
+        select(length > 0) |
+        {
+            product: "rds-mysql",
+            region: "'"$region"'",
+            id: $instance.instanceId,
+            name: $instance.instanceName,
+            engine: $instance.engine,
+            missingTags: .
+        }'
+done
+
+# Audit RDS PostgreSQL tags across regions
+for region in cn-north-1 cn-east-2 cn-south-1; do
+    echo "=== RDS PostgreSQL - $region ==="
+    jdc --output json rds describe-instances \
+      --region-id $region --page-number 1 --page-size 100 | \
+    jq '.result.dbInstances[] | 
+        select(.engine == "PostgreSQL") |
+        . as $instance |
+        ($instance.tags // []) | map(.key) | . as $existing |
+        [($required_tags[] | select(. as $tag | $existing | contains([$tag]) | not))] |
+        select(length > 0) |
+        {
+            product: "rds-postgresql",
+            region: "'"$region"'",
+            id: $instance.instanceId,
+            name: $instance.instanceName,
+            engine: $instance.engine,
+            missingTags: .
+        }'
+done
 ```
 
 #### Execution (SDK Fallback)
@@ -240,6 +283,60 @@ def audit_eip_tags(region, required_tags):
                 "missingTags": missing_tags
             })
     return results
+
+# Audit function for RDS MySQL
+def audit_rds_mysql_tags(region, required_tags):
+    from jdcloud_sdk.services.rds.client.RdsClient import RdsClient
+    from jdcloud_sdk.services.rds.apis.DescribeInstancesRequest import DescribeInstancesRequest, DescribeInstancesParameters
+    
+    client = RdsClient(credential)
+    params = DescribeInstancesParameters(regionId=region)
+    req = DescribeInstancesRequest(parameters=params)
+    resp = client.send(req)
+    
+    results = []
+    for instance in resp.result.get("dbInstances", []):
+        if instance.get("engine") != "MySQL":
+            continue
+        existing_tags = [tag["key"] for tag in instance.get("tags", [])]
+        missing_tags = [tag for tag in required_tags if tag not in existing_tags]
+        if missing_tags:
+            results.append({
+                "product": "rds-mysql",
+                "region": region,
+                "id": instance["instanceId"],
+                "name": instance["instanceName"],
+                "engine": instance["engine"],
+                "missingTags": missing_tags
+            })
+    return results
+
+# Audit function for RDS PostgreSQL
+def audit_rds_postgresql_tags(region, required_tags):
+    from jdcloud_sdk.services.rds.client.RdsClient import RdsClient
+    from jdcloud_sdk.services.rds.apis.DescribeInstancesRequest import DescribeInstancesRequest, DescribeInstancesParameters
+    
+    client = RdsClient(credential)
+    params = DescribeInstancesParameters(regionId=region)
+    req = DescribeInstancesRequest(parameters=params)
+    resp = client.send(req)
+    
+    results = []
+    for instance in resp.result.get("dbInstances", []):
+        if instance.get("engine") != "PostgreSQL":
+            continue
+        existing_tags = [tag["key"] for tag in instance.get("tags", [])]
+        missing_tags = [tag for tag in required_tags if tag not in existing_tags]
+        if missing_tags:
+            results.append({
+                "product": "rds-postgresql",
+                "region": region,
+                "id": instance["instanceId"],
+                "name": instance["instanceName"],
+                "engine": instance["engine"],
+                "missingTags": missing_tags
+            })
+    return results
 ```
 
 ### Operation: Generate Audit Report
@@ -257,7 +354,8 @@ echo "| Product | Count |"
 echo "|---------|-------|"
 echo "| Redis | $redis_count |"
 echo "| VM | $vm_count |"
-echo "| RDS | $rds_count |"
+echo "| RDS MySQL | $rds_mysql_count |"
+echo "| RDS PostgreSQL | $rds_postgresql_count |"
 echo "| CLB | $clb_count |"
 echo "| EIP | $eip_count |"
 ```
@@ -286,6 +384,8 @@ result = run_mcp(
 
 ## Prerequisites
 
+> **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
+
 ```bash
 # Install dependencies
 uv venv --python 3.10
@@ -304,6 +404,7 @@ uv pip install jdcloud_cli jdcloud_sdk
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-06-03 | Added RDS MySQL and PostgreSQL tag audit support |
 | 1.1.0 | 2026-06-03 | Added CLB and EIP support |
 | 1.0.0 | 2026-06-03 | Initial version with Redis, VM, RDS support |
 

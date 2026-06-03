@@ -1,11 +1,11 @@
 ---
-name: jdcloud-kms-ops
+name: jdcloud-mysql-ops
 description: >-
-  Use this skill for JD Cloud key management and encryption — create and manage
-  encryption keys; encrypt/decrypt sensitive data; store and retrieve secrets;
-  rotate keys; schedule key deletion. Apply when the user mentions KMS, 密钥管理,
-  加密, 解密, 密钥, or asks about data encryption, key management, secrets storage,
-  or protecting sensitive data on JD Cloud, even without explicit "KMS" mentions.
+  Use this skill for JD Cloud RDS MySQL database management — create, configure, and
+  manage MySQL instances; backup and restore data; analyze performance;
+  troubleshoot connection or latency issues. Apply when the user mentions MySQL,
+  RDS, 关系型数据库, 云数据库, 数据库, or asks about database, MySQL instances on JD Cloud,
+  even without explicit "MySQL" mentions.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network
@@ -14,20 +14,15 @@ compatibility: >-
 metadata:
   author: jdcloud
   version: "1.0.0"
-  last_updated: "2026-05-08"
+  last_updated: "2026-06-03"
   runtime: Harness AI Agent
-  api_profile: "JD Cloud KMS API v1 - https://kms.jdcloud-api.com/v1"
+  api_profile: "JD Cloud RDS MySQL API v1 - https://rds.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
   cli_version_locked: "1.2.12"
   sdk_version_locked: ">=1.6.26"
   cli_support_evidence: >-
-    Confirmed via `jdc --help` output showing 'kms' in product list:
-    `kms                 密钥管理服务`.
-    Full CLI subcommand list verified:
-    create-key, describe-key, describe-key-list, enable-key, disable-key,
-    encrypt, decrypt, generate-data-key, key-rotation, schedule-key-deletion,
-    cancel-key-deletion, create-secret, delete-secret, describe-secret-list,
-    enable-secret, disable-secret, create-secret-version, etc.
+    Confirmed via `jdc` help output showing 'rds' in product list:
+    `{mps,cps,rds,jke,vpc,xdata,mongodb,configure,streambus,ipanti,baseanti,datastar,redis,nc,monitor,iam,disk,cr,streamcomputer,sop,clouddnsservice,vm,oss}`.
     Official CLI documentation: https://docs.jdcloud.com/cn/cli/introduction
   environment:
     - JDC_ACCESS_KEY
@@ -37,11 +32,11 @@ metadata:
 
 > This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
 
-# JD Cloud Key Management Service (KMS) Operations Skill
+# JD Cloud RDS MySQL Operations Skill
 
 ## Overview
 
-JD Cloud Key Management Service (密钥管理服务 / KMS) is a security management product that uses Hardware Security Modules (HSM) to protect key security. Users can safely, controllably, and conveniently use managed keys, focusing on developing scenarios that require encryption and decryption functionality. KMS provides centralized control of encryption keys, secrets management, and cryptographic operations (encrypt, decrypt, sign, verify). This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **jdc-first execution with SDK/API fallback**, response validation, and failure recovery. **Do not use the web console as the primary agent execution path** in `SKILL.md`.
+JD Cloud RDS MySQL (云数据库 RDS MySQL) is a fully managed relational database service compatible with MySQL protocol. It provides high availability, automatic backup, read replicas, and flexible scaling. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **jdc-first execution with SDK/API fallback**, response validation, and failure recovery. **Do not use the web console as the primary agent execution path** in `SKILL.md`.
 
 ### CLI applicability (repository policy)
 
@@ -64,10 +59,10 @@ The `--output json` argument is defined in the base controller (`base_controller
 
 ```
 # CORRECT (works):
-jdc --output json kms describe-key-list --page-number 1 --page-size 100
+jdc --output json rds describe-instances --region-id cn-north-1 --page-number 1 --page-size 100
 
 # WRONG (fails with "unrecognized arguments: --output json"):
-jdc kms describe-key-list --page-number 1 --page-size 100 --output json
+jdc rds describe-instances --region-id cn-north-1 --page-number 1 --page-size 100 --output json
 ```
 
 **Failure 2: jdc CLI does NOT support `--no-interactive`**
@@ -80,7 +75,7 @@ The CLI's `ProfileManager` class reads credentials exclusively from `~/.jdc/conf
 access_key = YOUR_ACCESS_KEY
 secret_key = YOUR_SECRET_KEY
 region_id = cn-north-1
-endpoint = kms.jdcloud-api.com
+endpoint = rds.jdcloud-api.com
 scheme = https
 timeout = 20
 ```
@@ -96,12 +91,11 @@ The CLI's `ProfileManager.__init__()` calls `__make_config_dir()` which does `os
 
 ### SHOULD Use This Skill When
 
-- User mentions "JD Cloud KMS" OR "密钥管理服务" OR "密钥管理" OR "Key Management Service" OR "KMS密钥"
-- Task involves CRUD operations on cryptographic keys: create, describe, modify, delete, list, encrypt, decrypt, rotate
-- Task involves secrets management: create secret, delete secret, list secrets, enable/disable secret, secret versions
-- Task keywords: createKey, describeKey, encrypt, decrypt, generateDataKey, keyRotation, scheduleKeyDeletion, createSecret, describeSecretList
-- User asks to deploy, configure, troubleshoot, or monitor KMS **via API, SDK, CLI, or automation**
-- Task involves cryptographic operations (encrypt/decrypt data, generate data keys, sign/verify)
+- User mentions "JD Cloud MySQL" OR "RDS MySQL" OR "云数据库 MySQL" OR "关系型数据库" OR "MySQL实例"
+- Task involves CRUD operations on MySQL instances: create, describe, modify, delete, list, backup, restore, config
+- Task keywords: createInstance, describeInstances, modifyInstance, backup, restore, slowlog, database
+- User asks to deploy, configure, troubleshoot, or monitor MySQL instances **via API, SDK, CLI, or automation**
+- Task involves MySQL performance analysis (slow query log, connection pool)
 
 ### SHOULD NOT Use This Skill When
 
@@ -109,12 +103,13 @@ The CLI's `ProfileManager.__init__()` calls `__make_config_dir()` which does `os
 - Task is IAM / permission model only → delegate to: `jdcloud-iam-ops` (when present)
 - Task is about VPC / subnet / security group → delegate to: `jdcloud-vpc-ops`
 - Task is about monitoring metrics / alarms → delegate to: `jdcloud-cloudmonitor-ops`
+- Task is about PostgreSQL → delegate to: `jdcloud-postgresql-ops`
 - User insists on **console-only** flows with no API → state limitation; do not invent undocumented HTTP steps
 
 ### Delegation Rules
 
-- If encryption key is needed for storage service (OSS, disk), verify or create KMS key first via this skill.
-- If user asks about KMS monitoring metrics or alarm rules, delegate metric query to `jdcloud-cloudmonitor-ops`.
+- If MySQL instance requires VPC/subnet, verify or create network resources via `jdcloud-vpc-ops` first.
+- If user asks about MySQL monitoring metrics or alarm rules, delegate metric query to `jdcloud-cloudmonitor-ops`.
 - Multi-product requests: handle each product with its skill; do not merge unrelated APIs into one ambiguous flow.
 
 ## Variable Convention (Agent-Readable)
@@ -127,10 +122,9 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | `{{env.JDC_SECRET_KEY}}` | From runtime environment | NEVER ask the user; fail if unset |
 | `{{env.JDC_REGION}}` | From runtime environment | Use `cn-north-1` as default if unset |
 | `{{user.region}}` | User-supplied region | Ask once; reuse |
-| `{{user.key_id}}` | User-supplied KMS key ID | Ask once; reuse |
-| `{{user.key_name}}` | User-supplied key name | Ask once; reuse |
-| `{{user.secret_name}}` | User-supplied secret name | Ask once; reuse |
-| `{{output.key_id}}` | From last API or CLI JSON response | Parse from `$.result.keyId` |
+| `{{user.instance_id}}` | User-supplied MySQL instance ID | Ask once; reuse |
+| `{{user.instance_name}}` | User-supplied instance name | Ask once; reuse |
+| `{{output.instance_id}}` | From last API or CLI JSON response | Parse from `$.result.instanceId` |
 
 > **`{{env.*}}` MUST NOT** be collected from the user. **`{{user.*}}`** MUST be collected interactively when missing.
 
@@ -138,38 +132,34 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 ## API and Response Conventions (Agent-Readable)
 
-- **OpenAPI is canonical** for path, query, body fields, enums, and response shapes. Base path: `https://kms.jdcloud-api.com/v1`
+- **OpenAPI is canonical** for path, query, body fields, enums, and response shapes. Base path: `https://rds.jdcloud-api.com/v1/regions/{regionId}/...`
 - **Errors:** Map SDK/HTTP errors to `code` / `status` / message fields per spec.
-- **Timestamps:** ISO 8601 with timezone when the API returns strings (e.g. `2026-05-08T10:00:00+08:00`).
-- **Idempotency:** Document duplicate key name behavior and retry safety per API.
+- **Timestamps:** ISO 8601 with timezone when the API returns strings (e.g. `2026-06-03T10:00:00+08:00`).
+- **Idempotency:** Document duplicate instance name behavior and retry safety per API.
 
 ### Example Response Field Table
 
 | Operation | JSON Path (API) | Type | Description |
 |-----------|----------------|------|-------------|
-| Create Key | `$.result.keyId` | string | New KMS key ID |
-| Describe Key | `$.result.key.status` | string | Key state (Enabled, Disabled, PendingDeletion) |
-| List Keys | `$.result.keys[*].keyId` | array | All key IDs |
-| Encrypt | `$.result.ciphertextBlob` | string | Encrypted data (Base64) |
-| Decrypt | `$.result.plaintext` | string | Decrypted data (Base64) |
-| Generate Data Key | `$.result.dataKeyCiphertextBlob` | string | Encrypted data key |
+| Create Instance | `$.result.instanceId` | string | New MySQL instance ID |
+| Describe Instance | `$.result.instance.status` | string | Instance state (running, creating, etc.) |
+| List Instances | `$.result.instances[*].instanceId` | array | All instance IDs |
 | Modify/Delete | `$.requestId` or `$.error` | string / object | Per spec |
 
 ### Expected State Transitions
 
 | Operation | Initial State | Target State | Poll Interval | Max Wait |
 |-----------|---------------|--------------|---------------|----------|
-| Create Key | — | `Enabled` | 5s | 60s |
-| Enable Key | `Disabled` | `Enabled` | 5s | 30s |
-| Disable Key | `Enabled` | `Disabled` | 5s | 30s |
-| Schedule Deletion | `Enabled`/`Disabled` | `PendingDeletion` | 5s | 30s |
-| Delete | `PendingDeletion` | (404 on describe) | 5s | varies (7-30 days per API) |
+| Create | — | `running` | 10s | 600s |
+| Modify Config | `running` | `running` | 10s | 300s |
+| Delete | `running`/`stopped` | (404 on describe) | 10s | 600s |
+| Backup | `running` | backup available | 10s | 300s |
 
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0.0 | 2026-05-08 | Initial version with API/SDK and `jdc` CLI dual-path support for JD Cloud KMS (密钥管理服务) |
+| 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
 
 ## Execution Flows (Agent-Readable)
 
@@ -177,27 +167,38 @@ Every operation: **Pre-flight → Execute (jdc primary / SDK fallback) → Valid
 
 **jdc-first strategy:** The Agent MUST attempt `jdc` CLI first (primary path). If `jdc` fails after **3 retries** with exponential backoff, fall back to SDK/API. Documentation below lists `jdc` before SDK to reflect execution priority.
 
-### Operation: Create KMS Key
+### Operation: Create MySQL Instance
 
 #### Pre-flight Checks
 
 | Check | Method | Expected | On Failure |
 |-------|--------|----------|------------|
 | CLI / deps | `jdc --version` | Exit code 0 | Retry up to 3 times; then fall back to SDK |
-| SDK / deps | `import jdcloud_sdk.services.kms.client.KmsClient` | No import error | Document install pin (fallback path) |
+| SDK / deps | `import jdcloud_sdk.services.rds.client.RdsClient` | No import error | Document install pin (fallback path) |
 | Credentials | Construct credential from env or CLI config | Non-empty keys | HALT; user configures env |
-| Region | Check KMS endpoint availability | `{{user.region}}` supported | Suggest valid region |
+| Region | Call `describeAvailableRegion` API | `{{user.region}}` supported | Suggest valid region |
+| VPC/Subnet | Verify subnet via `jdcloud-vpc-ops` | Subnet exists and has IP | HALT; create subnet first |
+| Instance Class | Call `describeInstanceClass` or `describeSpecConfig` | Valid spec code | Suggest available specs |
 
 #### Execution — CLI (`jdc`) [Primary Path]
 
 **Required** when `cli_applicability: jdc-first-with-fallback`. Use `--output json` at the **top level** (before the subcommand). Do NOT use `--no-interactive` — it is not supported by jdc CLI.
 
 ```bash
-jdc --output json kms create-key \
-  --key-cfg '{"keyName":"{{user.key_name}}","keyUsage":"ENCRYPT_DECRYPT","keySpec":"AES_256"}'
+jdc --output json rds create-instance \
+  --region-id "{{user.region}}" \
+  --instance-name "{{user.instance_name}}" \
+  --instance-class "{{user.instance_class}}" \
+  --engine "MySQL" \
+  --engine-version "{{user.engine_version}}" \
+  --vpc-id "{{user.vpc_id}}" \
+  --subnet-id "{{user.subnet_id}}" \
+  --az-id "{{user.az_id}}" \
+  --storage-type "{{user.storage_type}}" \
+  --storage-size "{{user.storage_size}}" \
+  --username "{{user.username}}" \
+  --password "{{user.password}}"
 ```
-
-> **Note:** `key-cfg` expects a JSON string. Use proper JSON escaping. Key specs include: AES_256, AES_128, RSA_2048, RSA_4096, etc.
 
 #### Pre-flight: Configure jdc Config File for Sandbox
 
@@ -212,7 +213,7 @@ cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
 access_key = {{env.JDC_ACCESS_KEY}}
 secret_key = {{env.JDC_SECRET_KEY}}
 region_id = {{user.region}}
-endpoint = kms.jdcloud-api.com
+endpoint = rds.jdcloud-api.com
 scheme = https
 timeout = 20
 CONFIGEOF
@@ -224,57 +225,65 @@ printf "%s" "default" > /tmp/jdc-home/.jdc/current
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.kms.client.KmsClient import KmsClient
-from jdcloud_sdk.services.kms.apis.CreateKeyRequest import CreateKeyRequest, CreateKeyParameters
+from jdcloud_sdk.services.rds.client.RdsClient import RdsClient
+from jdcloud_sdk.services.rds.apis.CreateInstanceRequest import CreateInstanceRequest, CreateInstanceParameters
 
 credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
-client = KmsClient(credential)
+client = RdsClient(credential)
 
-# Build key configuration
-key_cfg = {
-    "keyName": "{{user.key_name}}",
-    "keyUsage": "ENCRYPT_DECRYPT",
-    "keySpec": "AES_256"
+instance_spec = {
+    "instanceName": "{{user.instance_name}}",
+    "instanceClass": "{{user.instance_class}}",
+    "engine": "MySQL",
+    "engineVersion": "{{user.engine_version}}",
+    "vpcId": "{{user.vpc_id}}",
+    "subnetId": "{{user.subnet_id}}",
+    "azId": "{{user.az_id}}",
+    "storageType": "{{user.storage_type}}",
+    "storageSize": "{{user.storage_size}}",
+    "username": "{{user.username}}",
+    "password": "{{user.password}}"
 }
 
-params = CreateKeyParameters(regionId="{{user.region}}", keyCfg=key_cfg)
-req = CreateKeyRequest(parameters=params)
+params = CreateInstanceParameters(regionId="{{user.region}}", instance=instance_spec)
+req = CreateInstanceRequest(parameters=params)
 resp = client.send(req)
-key_id = resp.result["keyId"]
+instance_id = resp.result["instanceId"]
 ```
 
 #### Post-execution Validation
 
-1. Capture `{{output.key_id}}` from `$.result.keyId`.
-2. Poll `describeKey` until `status` == `Enabled` or timeout.
+1. Capture `{{output.instance_id}}` from `$.result.instanceId`.
+2. Poll `describeInstance` until `status` == `running` or timeout.
 
 ```bash
 # CLI poll loop (primary path) — --output json at TOP level
-for i in $(seq 1 12); do
-  STATUS=$(jdc --output json kms describe-key \
-    --key-id "{{output.key_id}}" | jq -r '.result.key.status')
-  [ "$STATUS" = "Enabled" ] && break
-  sleep 5
+for i in $(seq 1 60); do
+  STATUS=$(jdc --output json rds describe-instance \
+    --region-id "{{user.region}}" \
+    --instance-id "{{output.instance_id}}" | jq -r '.result.instance.status')
+  [ "$STATUS" = "running" ] && break
+  sleep 10
 done
 ```
 
 ```python
 # SDK poll loop (fallback, after 3 jdc failures)
-from jdcloud_sdk.services.kms.apis.DescribeKeyRequest import DescribeKeyRequest, DescribeKeyParameters
+from jdcloud_sdk.services.rds.apis.DescribeInstanceRequest import DescribeInstanceRequest, DescribeInstanceParameters
 
-for _ in range(12):
-    dparams = DescribeKeyParameters(regionId="{{user.region}}", keyId="{{output.key_id}}")
-    dreq = DescribeKeyRequest(parameters=dparams)
+for _ in range(60):
+    dparams = DescribeInstanceParameters(regionId="{{user.region}}", instanceId="{{output.instance_id}}")
+    dreq = DescribeInstanceRequest(parameters=dparams)
     dresp = client.send(dreq)
-    status = dresp.result["key"]["status"]
-    if status == "Enabled":
+    status = dresp.result["instance"]["status"]
+    if status == "running":
         break
-    if status in ["Disabled", "PendingDeletion", "Error"]:
-        raise RuntimeError(f"Key creation failed: {status}")
-    sleep(5)
+    if status in ["error", "deleted"]:
+        raise RuntimeError(f"Instance creation failed: {status}")
+    sleep(10)
 ```
 
-3. On success, report key ID and key metadata to user.
+3. On success, report instance ID, connection address, and port to user.
 4. On terminal failure, go to **Failure Recovery**.
 
 #### Failure Recovery
@@ -283,48 +292,52 @@ for _ in range(12):
 |---------------|-------------|---------|--------------|
 | `InvalidParameter` / 400 | 0–1 | — | Fix args per OpenAPI; retry once |
 | `QuotaExceeded` | 0 | — | HALT; user requests quota increase |
-| `KeyAlreadyExists` | 0 | — | Ask reuse vs new name |
 | `InsufficientBalance` | 0 | — | HALT; user tops up account |
+| `ResourceAlreadyExists` | 0 | — | Ask reuse vs new name |
+| `SubnetIpInsufficient` | 0 | — | HALT; user expands subnet |
 | Throttling / 429 | 3 | exponential | Back off; respect Retry-After |
 | `InternalError` / 5xx | 3 | 2s, 4s, 8s | Retry; HALT with requestId if persists |
 
-### Operation: Describe KMS Key
+### Operation: Describe MySQL Instance
 
 #### Execution (CLI) [Primary Path]
 
 ```bash
-jdc --output json kms describe-key \
-  --key-id "{{user.key_id}}"
+jdc --output json rds describe-instance \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}"
 ```
 
 #### Execution (SDK Fallback — after 3 jdc failures)
 
 ```python
-from jdcloud_sdk.services.kms.apis.DescribeKeyRequest import DescribeKeyRequest, DescribeKeyParameters
+from jdcloud_sdk.services.rds.apis.DescribeInstanceRequest import DescribeInstanceRequest, DescribeInstanceParameters
 
-params = DescribeKeyParameters(regionId="{{user.region}}", keyId="{{user.key_id}}")
-req = DescribeKeyRequest(parameters=params)
+params = DescribeInstanceParameters(regionId="{{user.region}}", instanceId="{{user.instance_id}}")
+req = DescribeInstanceRequest(parameters=params)
 resp = client.send(req)
-# Access: resp.result["key"]
+# Access: resp.result["instance"]
 ```
 
 #### Present to User
 
 | Field | JSON Path | Notes |
 |-------|-----------|-------|
-| Key ID | `$.result.key.keyId` | Plain text |
-| Key Name | `$.result.key.keyName` | Plain text |
-| Status | `$.result.key.status` | Enabled, Disabled, PendingDeletion |
-| Key Usage | `$.result.key.keyUsage` | ENCRYPT_DECRYPT, SIGN_VERIFY |
-| Key Spec | `$.result.key.keySpec` | AES_256, RSA_2048, etc. |
-| Creation Time | `$.result.key.createTime` | Format ISO per API |
+| Instance ID | `$.result.instance.instanceId` | Plain text |
+| Name | `$.result.instance.instanceName` | Plain text |
+| Status | `$.result.instance.status` | running, creating, error, etc. |
+| Engine Version | `$.result.instance.engineVersion` | 5.7, 8.0 |
+| Instance Type | `$.result.instance.instanceClass` | e.g., rds.mysql.s1.small |
+| Connection Address | `$.result.instance.connectionDomain` | MySQL connection string |
+| Port | `$.result.instance.port` | Default 3306 |
 
-### Operation: List KMS Keys
+### Operation: List MySQL Instances
 
 #### Execution (CLI) [Primary Path]
 
 ```bash
-jdc --output json kms describe-key-list \
+jdc --output json rds describe-instances \
+  --region-id "{{user.region}}" \
   --page-number 1 \
   --page-size 100
 ```
@@ -332,128 +345,59 @@ jdc --output json kms describe-key-list \
 #### Execution (SDK Fallback — after 3 jdc failures)
 
 ```python
-from jdcloud_sdk.services.kms.apis.DescribeKeyListRequest import DescribeKeyListRequest, DescribeKeyListParameters
+from jdcloud_sdk.services.rds.apis.DescribeInstancesRequest import DescribeInstancesRequest, DescribeInstancesParameters
 
-params = DescribeKeyListParameters(regionId="{{user.region}}")
+params = DescribeInstancesParameters(regionId="{{user.region}}")
 params.setPageNumber(1)
 params.setPageSize(100)
-req = DescribeKeyListRequest(parameters=params)
+req = DescribeInstancesRequest(parameters=params)
 resp = client.send(req)
-keys = resp.result["keys"]
+instances = resp.result["instances"]
 ```
 
-### Operation: Encrypt Data
+### Operation: Modify MySQL Instance
 
 #### Pre-flight Checks
 
 | Check | Method | Expected | On Failure |
 |-------|--------|----------|------------|
-| Key exists | `describeKey` | Key found and `Enabled` | HALT; verify key ID and status |
-| Plaintext ready | User provides data | Base64-encoded data | Encode if needed |
+| Instance exists | `describeInstance` | Instance found | HALT; verify instance ID |
+| Instance state | `describeInstance` | `running` | Wait or suggest appropriate action |
+
+**⚠️ For `modifyInstanceClass` (scaling)**: Confirm with user as it may cause brief service interruption.
 
 #### Execution (CLI) [Primary Path]
 
 ```bash
-# Plaintext must be Base64-encoded
-jdc --output json kms encrypt \
-  --key-id "{{user.key_id}}" \
-  --plaintext "{{user.base64_plaintext}}"
+jdc --output json rds modify-instance-attribute \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}" \
+  --instance-name "{{user.new_name}}"
 ```
 
 #### Execution (SDK Fallback — after 3 jdc failures)
 
 ```python
-import base64
-from jdcloud_sdk.services.kms.apis.EncryptRequest import EncryptRequest, EncryptParameters
+from jdcloud_sdk.services.rds.apis.ModifyInstanceAttributeRequest import ModifyInstanceAttributeRequest, ModifyInstanceAttributeParameters
 
-# Encode plaintext to Base64
-plaintext_b64 = base64.b64encode("{{user.plaintext_data}}".encode()).decode()
-
-params = EncryptParameters(
+params = ModifyInstanceAttributeParameters(
     regionId="{{user.region}}",
-    keyId="{{user.key_id}}",
-    plaintext=plaintext_b64
+    instanceId="{{user.instance_id}}"
 )
-req = EncryptRequest(parameters=params)
+params.setInstanceName("{{user.new_name}}")
+req = ModifyInstanceAttributeRequest(parameters=params)
 resp = client.send(req)
-ciphertext = resp.result["ciphertextBlob"]
 ```
 
-### Operation: Decrypt Data
+#### Post-execution Validation
 
-#### Execution (CLI) [Primary Path]
+Poll describe until modification reflects (depends on modification type).
 
-```bash
-jdc --output json kms decrypt \
-  --key-id "{{user.key_id}}" \
-  --ciphertext-blob "{{user.ciphertext_blob}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
-
-```python
-from jdcloud_sdk.services.kms.apis.DecryptRequest import DecryptRequest, DecryptParameters
-
-params = DecryptParameters(
-    regionId="{{user.region}}",
-    keyId="{{user.key_id}}",
-    ciphertextBlob="{{user.ciphertext_blob}}"
-)
-req = DecryptRequest(parameters=params)
-resp = client.send(req)
-plaintext_b64 = resp.result["plaintext"]
-# Decode from Base64
-plaintext = base64.b64decode(plaintext_b64).decode()
-```
-
-### Operation: Generate Data Key
-
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json kms generate-data-key \
-  --key-id "{{user.key_id}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
-
-```python
-from jdcloud_sdk.services.kms.apis.GenerateDataKeyRequest import GenerateDataKeyRequest, GenerateDataKeyParameters
-
-params = GenerateDataKeyParameters(
-    regionId="{{user.region}}",
-    keyId="{{user.key_id}}"
-)
-req = GenerateDataKeyRequest(parameters=params)
-resp = client.send(req)
-data_key_ciphertext = resp.result["dataKeyCiphertextBlob"]
-plaintext_data_key = resp.result.get("plaintextDataKey")  # Optional, may not be returned
-```
-
-### Operation: Enable Key
-
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json kms enable-key \
-  --key-id "{{user.key_id}}"
-```
-
-### Operation: Disable Key
-
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json kms disable-key \
-  --key-id "{{user.key_id}}"
-```
-
-### Operation: Schedule Key Deletion
+### Operation: Delete MySQL Instance
 
 #### Pre-flight (Safety Gate)
 
-- **MUST** obtain explicit confirmation: irreversible schedule deletion of `{{user.key_name}}` (`{{user.key_id}}`).
-- **MUST** warn user: Key will be deleted after pending window (7-30 days per API).
+- **MUST** obtain explicit confirmation: irreversible delete of `{{user.instance_name}}` (`{{user.instance_id}}`).
 - **MUST NOT** proceed without clear user assent.
 
 #### Execution (CLI) [Primary Path]
@@ -461,36 +405,93 @@ jdc --output json kms disable-key \
 **⚠️ Safety Gate**: MUST obtain explicit user confirmation before executing CLI command.
 
 ```bash
-jdc --output json kms schedule-key-deletion \
-  --key-id "{{user.key_id}}"
+# Confirm deletion with user first
+jdc --output json rds delete-instance \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}"
 ```
 
-### Operation: Cancel Key Deletion
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+**⚠️ Safety Gate**: MUST obtain explicit user confirmation before calling SDK delete method.
+
+```python
+from jdcloud_sdk.services.rds.apis.DeleteInstanceRequest import DeleteInstanceRequest, DeleteInstanceParameters
+
+# Confirm deletion with user: "Are you sure you want to delete {{user.instance_name}} ({{user.instance_id}})? This is IRREVERSIBLE."
+# Proceed only after explicit "yes" / "confirm" response
+
+params = DeleteInstanceParameters(regionId="{{user.region}}", instanceId="{{user.instance_id}}")
+req = DeleteInstanceRequest(parameters=params)
+resp = client.send(req)
+```
+
+#### Post-execution Validation
+
+Poll `describeInstance` until HTTP 404 / `status` indicates deleted (max 600s).
+
+### Operation: Backup MySQL Instance
 
 #### Execution (CLI) [Primary Path]
 
 ```bash
-jdc --output json kms cancel-key-deletion \
-  --key-id "{{user.key_id}}"
+jdc --output json rds create-backup \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}"
 ```
 
-### Operation: Create Secret
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.rds.apis.CreateBackupRequest import CreateBackupRequest, CreateBackupParameters
+
+params = CreateBackupParameters(
+    regionId="{{user.region}}",
+    instanceId="{{user.instance_id}}",
+    fileName="manual-backup-{{user.instance_id}}",
+    backupType=1
+)
+req = CreateBackupRequest(parameters=params)
+resp = client.send(req)
+backup_id = resp.result["backupId"]
+```
+
+### Operation: Restore MySQL Instance
+
+#### Pre-flight (Safety Gate)
+
+- **MUST** warn user: Restore will overwrite current data in `{{user.instance_name}}` (`{{user.instance_id}}`) with backup `{{user.backup_id}}`.
+- **MUST** obtain explicit confirmation before proceeding.
 
 #### Execution (CLI) [Primary Path]
 
+**⚠️ Safety Gate**: MUST obtain explicit user confirmation before executing CLI command.
+
 ```bash
-jdc --output json kms create-secret \
-  --secret-cfg '{"secretName":"{{user.secret_name}}","secretData":"{{user.secret_data}}"}'
+# Confirm restore with user first
+jdc --output json rds restore-instance \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}" \
+  --backup-id "{{user.backup_id}}"
 ```
 
-### Operation: List Secrets
+#### Execution (SDK Fallback — after 3 jdc failures)
 
-#### Execution (CLI) [Primary Path]
+**⚠️ Safety Gate**: MUST obtain explicit user confirmation before calling SDK restore method.
 
-```bash
-jdc --output json kms describe-secret-list \
-  --page-number 1 \
-  --page-size 100
+```python
+from jdcloud_sdk.services.rds.apis.RestoreInstanceRequest import RestoreInstanceRequest, RestoreInstanceParameters
+
+# Confirm restore with user: "Restoring backup {{user.backup_id}} will overwrite current data. Are you sure?"
+# Proceed only after explicit "yes" / "confirm" response
+
+params = RestoreInstanceParameters(
+    regionId="{{user.region}}",
+    instanceId="{{user.instance_id}}",
+    backupId="{{user.backup_id}}"
+)
+req = RestoreInstanceRequest(parameters=params)
+resp = client.send(req)
 ```
 
 ## Prerequisites
@@ -579,7 +580,7 @@ cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
 access_key = {{env.JDC_ACCESS_KEY}}
 secret_key = {{env.JDC_SECRET_KEY}}
 region_id = {{user.region}}
-endpoint = kms.jdcloud-api.com
+endpoint = rds.jdcloud-api.com
 scheme = https
 timeout = 20
 CONFIGEOF
@@ -588,7 +589,7 @@ CONFIGEOF
 printf "%s" "default" > /tmp/jdc-home/.jdc/current
 
 # 4. Run jdc with --output json at TOP level
-jdc --output json kms describe-key-list --page-number 1 --page-size 100
+jdc --output json rds describe-instances --region-id "{{user.region}}" --page-number 1 --page-size 100
 ```
 
 ### Configure Credentials for SDK (Environment Variables)
@@ -614,9 +615,8 @@ export JDC_REGION="cn-north-1"
 
 ## Operational Best Practices
 
-- **Key rotation:** Enable automatic key rotation for frequently-used encryption keys.
-- **Least privilege:** IAM policies scoped to required KMS APIs only (encrypt/decrypt vs full key management).
-- **Secrets management:** Use KMS secrets for storing sensitive configuration data (passwords, API keys, certificates).
-- **Backup:** Export and backup critical keys and secrets; test restore procedures.
-- **Audit:** Enable KMS audit logging; review key usage logs regularly.
-- **Security:** Use hardware-protected keys (HSM) for high-security scenarios; never store plaintext keys in code or logs.
+- **Architecture selection:** Choose appropriate instance class based on workload; consider read replicas for high read traffic.
+- **High availability:** Multi-AZ deployment for production; enable automatic failover.
+- **Security:** Enable IP whitelist, use VPC isolation, rotate passwords regularly, enable SSL/TLS.
+- **Performance:** Analyze slow query logs regularly; optimize indexes; monitor connection pool.
+- **Backup:** Configure automatic backup policy; test restore procedures; set appropriate retention period.

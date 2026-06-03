@@ -38,7 +38,15 @@ jdcloud-[product]-ops/
 
 ## Development Environment
 
-**Python 3.10+** | **`uv`** (package manager) | **`jdc`** (JD Cloud CLI)
+**Python 3.10** | **`uv`** (package manager) | **`jdc`** (JD Cloud CLI)
+
+> **IMPORTANT: Python version must be 3.10, NOT 3.12.**
+> `jdcloud_cli==1.2.12` imports `SafeConfigParser` from `configparser`, which was **removed in Python 3.12**. Using Python 3.12+ will cause an `ImportError` and make the CLI unusable.
+>
+> Always use `uv venv --python 3.10` to create the virtual environment. If Python 3.10 is not installed on your system, install it first:
+> - macOS: `brew install python@3.10`
+> - Linux: `apt install python3.10 python3.10-dev` or `uv python install 3.10`
+> - Windows: Download from https://www.python.org/downloads/release/python-3100/
 
 ### Setup
 
@@ -147,3 +155,29 @@ SemVer in `SKILL.md` frontmatter. Update `version` field + Changelog table when 
 - Delete/stop/restore operations require explicit user confirmation ("safety gate")
 - `jdcloud-alert-intelligence` is read-only — no resource mutations
 - Credential status checks: `test -n "$VAR"` only, print `<masked>` if logging status
+
+## Self-Review Policy
+
+Every skill update MUST follow a **2-round self-review process** to ensure quality and correctness:
+
+### Round 1: Initial Review
+After creating or modifying a skill:
+1. Review the skill against the template and existing reference skills
+2. Verify all required sections are present (frontmatter, Trigger & Scope, Variable Convention, Execution Flows, etc.)
+3. Check for consistency with jdc-first with SDK fallback strategy
+4. Validate safety gates are in place for destructive operations
+
+### Round 2: Deep Review
+After Round 1 fixes are applied:
+1. Verify API accuracy against official OpenAPI specifications
+2. Validate CLI command syntax and JSON output paths
+3. Check cross-skill delegation rules are correctly defined
+4. Confirm versioning follows SemVer and changelog is updated
+
+### Auto-Fix Requirement
+All issues discovered during both review rounds MUST be proactively fixed before the skill is considered complete. This includes:
+- Correcting API parameters and response paths
+- Fixing CLI command syntax
+- Adding missing safety gates
+- Updating documentation inconsistencies
+- Ensuring alignment with repository-wide conventions

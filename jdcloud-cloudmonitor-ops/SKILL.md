@@ -349,6 +349,8 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 ### 阶段 1：jdc CLI 安装（主路径）
 
+> **Python 3.10 是必需的，不能使用 3.12。** `jdcloud_cli==1.2.12` 使用了在 Python 3.12 中已移除的 `SafeConfigParser`。请始终使用 `uv venv --python 3.10`。
+
 ```bash
 uv venv --python 3.10
 source .venv/bin/activate
@@ -380,6 +382,8 @@ jdc --version && echo "OK" || echo "FAIL"
 若全部 **3 次重试**均失败，进入**阶段 2：SDK 降级**。
 
 ### 阶段 2：SDK 降级（3 次 jdc 失败后）
+
+> **Python 3.10 是必需的，不能使用 3.12。** `jdcloud_cli==1.2.12` 使用了在 Python 3.12 中已移除的 `SafeConfigParser`。
 
 ```bash
 uv venv --python 3.10
