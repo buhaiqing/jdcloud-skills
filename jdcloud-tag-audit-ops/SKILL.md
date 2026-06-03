@@ -10,8 +10,8 @@ compatibility: >-
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
 metadata:
   author: jdcloud
-  version: "1.2.0"
-  last_updated: "2026-06-03"
+  version: "1.5.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Multi-Product API"
   cli_applicability: jdc-first-with-fallback
@@ -473,6 +473,73 @@ result = run_mcp(
 )
 ```
 
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this skill (per `AGENTS.md` §8) —
+> audit / report are read-only; DOPS ticket creation is the single
+> mutating op.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-tag-audit-ops` (optional) |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `create DOPS ticket` | only mutating op |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc <product> (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<5 & not all pass → RETRY (inject suggestions)
+   └─ iter=5 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK /
+DOPS access. The Orchestrator (O) owns the loop and persists the GCL
+trace.
+
+### Operation-specific behavior
+
+- **`audit tag compliance`** (read-only) — Product + region + required
+  tag + required value MUST be explicit. Each product/region MUST be in
+  the `Supported Products` / `Supported Regions` list. For each
+  resource, classify pass/fail deterministically.
+- **`generate audit report`** (read-only) — Output: pass count, fail
+  count, fail list with resource id + missing tag + actual value.
+- **`create DOPS ticket for non-compliant resources`** (mutating) —
+  **MUST check for duplicate open tickets** on the same resource first.
+  Each ticket payload MUST include: resource id, missing tag, actual
+  value, suggested remediation, urgency level. Safety = 0 without
+  `confirm=CREATE_DOPS_TICKET` in trace → ABORT. Duplicate ticket
+  without opt-in → Idempotency = 0 → ABORT.
+
 ## Prerequisites
 
 > **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
@@ -495,6 +562,7 @@ uv pip install jdcloud_cli jdcloud_sdk
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.0 | 2026-06-04 | **GCL rollout (optional)**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, audit + report + DOPS ticket creation with duplicate-ticket idempotency check) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=5`. `safety_confirm_required=true` for `create DOPS ticket` (the only mutating op). |
 | 1.4.0 | 2026-06-03 | Added Elasticsearch tag audit support |
 | 1.3.0 | 2026-06-03 | Added MongoDB tag audit support |
 | 1.2.0 | 2026-06-03 | Added RDS MySQL and PostgreSQL tag audit support |

@@ -12,8 +12,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-03"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud EIP API v1 - https://eip.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -117,6 +117,7 @@ See [CLI Usage](references/cli-usage.md) for critical jdc behavioral notes.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, EIP-specific rules for irreversible `release EIP`, prod-tagged `dissociate` / `release` confirm, `associate` force-rebind guard) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for `dissociate EIP`, `release EIP`, `associate EIP` (force-rebind). |
 | 1.0.0 | 2026-06-03 | Initial version with jdc-first execution and SDK fallback |
 
 ## Execution Flows (Agent-Readable)
@@ -265,6 +266,69 @@ jdc --output json eip release-address \
 #### Validation
 
 Poll until 404 (max 24 attempts, 5s interval)
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | `release EIP` is irreversible; `dissociate EIP` can break production traffic; do not retry repeatedly |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `dissociate EIP`, `release EIP`, `associate EIP` (force-rebind) | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
+access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`allocate EIP`** — Bandwidth + ISP must be explicit. Check quota first.
+- **`associate EIP`** — Target instance MUST be in `running` state. EIP MUST
+  be in `Available` state. Refuse to force-rebind an EIP in `InUse` state
+  without explicit opt-in.
+- **`dissociate EIP`** — Can break production traffic. Always `describe-eip`
+  first. Safety = 0 without `confirm=DISSOCIATE` → ABORT. For prod-tagged
+  EIPs, additional `confirm=DISSOCIATE_PROD` required.
+- **`release EIP`** — **IRREVERSIBLE** (public IP returns to pool, may be
+  allocated to another tenant). EIP MUST be in `Available` state (not
+  `InUse`); refuse if still attached. Safety = 0 without `confirm=RELEASE`
+  → ABORT. For prod-tagged EIPs, additional `confirm=RELEASE_PROD` required.
 
 ## Prerequisites
 

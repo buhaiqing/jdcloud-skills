@@ -330,6 +330,17 @@ Meta Skill，从产品文档自动生成运维 Agent Skill。
 
 1. Fork 2. 创建 Skill 目录 3. 按指南编写 4. 提交 PR
 
+### Commit 与 PR 规范
+
+- **Commit message** 使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式
+  （`feat` / `fix` / `docs` / `refactor` / `test` / `chore` / `security`）。
+  仓库根的 [`.gitmessage.txt`](.gitmessage.txt) 提供了详细模板。
+  启用方式：`git config commit.template .gitmessage.txt`。
+- **PR 描述** 走 GitHub PR 模板（[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)）。
+  如果修改了某个 skill 的 `SKILL.md`，**必须**完成模板中的 GCL checklist。
+- **新 skill 落地 GCL** 走 issue 模板
+  （[`.github/ISSUE_TEMPLATE/gcl-rollout.md`](.github/ISSUE_TEMPLATE/gcl-rollout.md)）。
+
 ---
 
 参考 [jdcloud-vm-ops](jdcloud-vm-ops/) 作为示例。

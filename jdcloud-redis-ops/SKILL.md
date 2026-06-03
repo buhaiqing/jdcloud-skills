@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.2.0"
-  last_updated: "2026-05-06"
+  version: "1.3.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Redis API v1 - https://redis.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -158,6 +158,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, op-specific overrides including spec-shrink and cross-instance restore) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, spec shrink, flush. |
 | 1.2.0 | 2026-05-06 | **Empirical CLI fixes**: Fixed `--output json` placement (must be top-level, before subcommand); removed `--no-interactive` (unsupported); fixed jdc credential config (must use `~/.jdc/config` INI file, env vars unsupported); fixed PermissionError via `HOME=/tmp/jdc-home`; fixed all SDK import paths (PascalCase module names) and API call patterns (Parameters objects + `client.send()`); fixed Backup parameters (requires `fileName`/`backupType`); fixed Restore parameter name (`baseId` not `backupId`) |
 | 1.1.0 | 2026-05-06 | **jdc-first with fallback strategy**: execution flows now prioritize `jdc` CLI (primary) with SDK/API fallback after 3 retries; Prerequisites updated to `uv`-based bootstrap with Phase 1 (jdc) / Phase 2 (SDK fallback); Path Preference flipped to jdc-first; pre-flight checks reordered |
 | 1.0.1 | 2026-05-03 | Added safety gates for Delete/Restore/Modify operations; added Path Preference section |
@@ -494,6 +495,70 @@ params = RestoreInstanceParameters(
 req = RestoreInstanceRequest(parameters=params)
 resp = client.send(req)
 ```
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | `delete` / `restore` / `flush` are destructive; do not retry repeatedly on production caches |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete`, `restore`, spec shrink, `flushdb` | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK access.
+The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`create-cache-instance`** — Critic verifies `--client-token` was set
+  (Idempotency = 1 required). Missing → Idempotency = 0.
+- **`delete-cache-instance`** — Critic checks the trace contains both a
+  pre-delete `describe-cache-instance` snapshot and a post-delete 404.
+  Missing either → Correctness = 0.
+- **`restore-cache-instance`** — `baseId` (backup id) must belong to the same
+  `cacheInstanceId`; cross-instance restore requires explicit user confirm in
+  trace or Safety = 0.
+- **`modify-cache-instance` (spec)** — Spec shrink is **forbidden** without
+  user opt-in. Safety = 0 otherwise.
+- **`flushall` / `flushdb`** — Always Safety = 0 without `confirm=FLUSHALL` in
+  trace → ABORT.
 
 ## Prerequisites
 

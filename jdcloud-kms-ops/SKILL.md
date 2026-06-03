@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-05-08"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud KMS API v1 - https://kms.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -169,6 +169,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, KMS-specific rules for irreversible `schedule key deletion`, `pending-window-in-days` min-7 guard, prod `disable` / `decrypt` confirm) and `references/prompt-templates.md` (G/C/O prompt skeletons; **plaintext / secret value never logged**, SHA-256 + length only). `max_iterations=2`. `safety_confirm_required=true` for `schedule key deletion`, `disable key` (prod), `decrypt` (prod). |
 | 1.0.0 | 2026-05-08 | Initial version with API/SDK and `jdc` CLI dual-path support for JD Cloud KMS (密钥管理服务) |
 
 ## Execution Flows (Agent-Readable)
@@ -492,6 +493,74 @@ jdc --output json kms describe-secret-list \
   --page-number 1 \
   --page-size 100
 ```
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | `schedule key deletion` is irreversible after waiting period; do not retry repeatedly on production keys |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `schedule key deletion`, `disable key` (prod), `decrypt` (prod) | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
+access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`create key`** — Key spec and key usage must be explicit. Default to
+  `SYMMETRIC_DEFAULT` + `ENCRYPT_DECRYPT`.
+- **`disable key`** — Safety = 0 without `confirm=DISABLE` for keys used
+  by production services. For prod-tagged keys, additional
+  `confirm=DISABLE_PROD` required.
+- **`schedule key deletion`** — **IRREVERSIBLE** after waiting period.
+  - Safety = 0 without `confirm=SCHEDULE_DELETE` → ABORT.
+  - Default `pending-window-in-days` ≥ 7. Setting < 7 requires
+    `confirm=SHORT_WINDOW`.
+  - Refuse if key is still referenced by active cloud resources (EBS, RDS,
+    etc.) without explicit opt-in.
+- **`encrypt` / `decrypt` / `generate data key`** — **NEVER log plaintext**.
+  Use SHA-256 + length only. Decrypt on prod key requires
+  `confirm=DECRYPT_PROD`.
+- **`create secret` / `list secrets`** — Secret value MUST NOT be logged;
+  only metadata + SHA-256 of value.
 
 ## Prerequisites
 

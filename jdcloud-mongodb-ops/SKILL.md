@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-03"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud MongoDB API v1 - https://mongodb.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -167,6 +167,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DB-level paths, MongoDB-specific rules for `dropDatabase` cascade, `updateMany` filter check, `$out`/`$merge` in aggregate) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, `dropCollection`, `dropDatabase`, `shutdown`, `fsyncLock`, `repairDatabase`, `replSetReconfig`, `updateOne`/`updateMany`/`deleteOne`/`deleteMany` without filter. |
 | 1.1.0 | 2026-06-03 | Added resource audit operations: tag compliance audit, resource inventory, compliance report generation, and DOPS ticket creation for non-compliant resources |
 | 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
 
@@ -1035,6 +1036,93 @@ print(f"按区域分布: {inventory['summary']['byRegion']}")
 print(f"按状态分布: {inventory['summary']['byStatus']}")
 print(f"按版本分布: {inventory['summary']['byVersion']}")
 ```
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | `delete` / `restore` / `dropDatabase` / `dropCollection` / `updateMany`/`deleteMany` without filter are all destructive; do not retry repeatedly on production data |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete`, `restore`, storage shrink, `dropCollection`, `dropDatabase`, `shutdown`, `fsyncLock`, `repairDatabase`, `replSetReconfig`, `updateOne`/`updateMany`/`deleteOne`/`deleteMany` without filter | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK / pymongo (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK /
+MongoDB driver access. The Orchestrator (O) owns the loop and persists the
+GCL trace.
+
+### Operation-specific behavior
+
+- **`create-instance`** — Critic verifies `--client-token` was set
+  (Idempotency = 1 required). Missing → Idempotency = 0.
+- **`delete-instance`** — Critic checks the trace contains both a pre-delete
+  `describe-instance` snapshot and a post-delete 404. Missing either →
+  Correctness = 0.
+- **`restore-instance`** — `backupId` must belong to the same `instanceId`;
+  cross-instance restore requires explicit user confirm in trace or Safety = 0.
+- **`modify-instance` (storage)** — Storage shrink is **forbidden** without
+  user opt-in. Safety = 0 otherwise.
+- **`createCollection`** — Full command must appear in trace; prefer explicit
+  name.
+- **`dropCollection` / `dropDatabase`** — Always Safety = 0 without
+  `confirm=DROP` in trace → ABORT. `dropDatabase` cascades to ALL collections.
+- **`insertOne` / `insertMany`** — Capture `inserted_count`; `insertMany`
+  with `ordered: false` preferred for batch.
+- **`updateOne` / `updateMany`** — Filter MUST NOT be `{}` / empty / missing.
+  Missing filter → Safety = 0 → ABORT. Capture `matched_count` and
+  `modified_count`.
+- **`deleteOne` / `deleteMany` / `remove`** — Filter MUST NOT be `{}` / empty
+  / missing. Missing filter → Safety = 0 → ABORT. Capture `deleted_count`.
+- **`find`** — Read-only; Safety = 1.0 by default. **EXCEPTION**: if body
+  contains `$out`, `$merge`, or `$lookup` to a write target → re-score Safety.
+- **`aggregate`** — If pipeline includes `$out` or `$merge` → re-score Safety.
+  `allowDiskUse: true` requires user opt-in.
+- **`createIndex`** — Idempotent by default; pre-check via `getIndexes()`.
+- **Admin `shutdown` / `fsyncLock` / `repairDatabase` / `replSetReconfig`** —
+  All block clients or affect HA. Safety = 0 without `confirm=*` in trace →
+  ABORT.
+- **All DB ops** — Always pre-check via `list_database_names` /
+  `list_collection_names` and include result in trace; full command must
+  appear verbatim.
+- **Read-only audit / report / inventory / DOPS-ticket operations** — All
+  read-only. Safety = 1.0 by default. Traceability and Correctness still
+  scored normally.
 
 ## Prerequisites
 

@@ -15,8 +15,8 @@ compatibility: >-
   to JD Cloud endpoints, and official JD Cloud CLI (jdc) for this product.
 metadata:
   author: jdcloud
-  version: "1.3.0"
-  last_updated: "2026-05-06"
+  version: "1.4.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
@@ -48,6 +48,7 @@ metadata:
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| 1.4.0 | 2026-06-04 | **GCL 推广（recommended）**：新增 `## Quality Gate (GCL)` 章节，将本 skill 接入仓库级 Generator-Critic-Loop。新增 `references/rubric.md`（5 维 rubric，云监控特有的静默故障保护：删/禁告警规则的 `confirm=DELETE` / `confirm=DISABLE` 门、规则 7 天内曾触发需 `confirm=DELETE_AFTER_FIRING`、prod 标签双重确认、告警通道不能为空）和 `references/prompt-templates.md`（G/C/O prompt 模板）。`max_iterations=3`（按 `AGENTS.md` §8 recommended）。`safety_confirm_required=true` for `delete-alarm-rule`, `disable-alarm-rule`。 |
 | 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: 修复 `--output json` 定位（必须放在子命令之前）、删除不存在的 `--no-interactive` 标志、修正凭证文档说明（CLI 仅从 `~/.jdc/config` INI 读取，不支持环境变量）、增加了沙箱配置工作区 |
 | 1.2.0 | 2026-05-06 | **jdc-first 降级策略**：执行流程改为 `jdc` CLI 优先（主路径）+ SDK/API 降级（3次重试后）；前提条件更新为 `uv` 引导的 Phase 1 (jdc) / Phase 2 (SDK 降级)；路径偏好翻转；前置检查顺序调整 |
 | 1.1.0 | 2026-05-03 | 添加 SDK/API 双路径执行流程、完善 frontmatter、新增 api-sdk-usage.md |
@@ -325,6 +326,75 @@ print(f"Delete request accepted: {response.requestId}")
            print("Alarm deleted successfully")
    ```
 2. 期望返回 `AlarmNotFound` 错误 → 删除成功
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **recommended** for all operations exposed by this
+> skill (per `AGENTS.md` §8).
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-cloudmonitor-ops` (recommended); `delete-alarm-rule` / `disable-alarm-rule` are impactful but recoverable by re-creation |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete-alarm-rule`, `disable-alarm-rule` | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<3 & not all pass → RETRY (inject suggestions)
+   └─ iter=3 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## 执行流程（Agent 可读）` above. The Generator (G) IS the existing
+jdc-or-SDK executor. The Critic (C) is a new, read-only role with no
+`jdc` / SDK access. The Orchestrator (O) owns the loop and persists the
+GCL trace.
+
+### Operation-specific behavior
+
+- **`create alarm rule`** — Product + metric + resourceId + threshold +
+  comparison + notification channel all must be explicit. `notificationChannel`
+  MUST be a valid id (not empty / "0" / "null"). Check for duplicate
+  `(product, metric, resourceId)` first.
+- **`query metric data`** / **`query latest metric data`** — Read-only;
+  Safety = 1.0 by default. Traceability and Correctness scored normally.
+- **`modify alarm rule`** — Lowering threshold by > 50% can cause alarm
+  spam; require explicit opt-in.
+- **`disable alarm rule`** — **Means silent failure**. `confirm=DISABLE`
+  required. For prod-tagged resources, additional `confirm=DISABLE_PROD`.
+- **`delete alarm rule`** — **Means permanent loss of monitoring**.
+  `confirm=DELETE` required. If the rule has fired in the last 7 days,
+  additional `confirm=DELETE_AFTER_FIRING`. For prod-tagged resources,
+  additional `confirm=DELETE_PROD`. Must include pre-delete snapshot of
+  rule definition + recent alert history.
 
 ## 前提条件
 

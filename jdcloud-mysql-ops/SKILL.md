@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-03"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud RDS MySQL API v1 - https://rds.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -159,6 +159,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DDL/DML paths, op-specific overrides including storage shrink and SQL `WHERE` check) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, DDL `DROP`/`TRUNCATE`, DML `UPDATE`/`DELETE` without WHERE. |
 | 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
 
 ## Execution Flows (Agent-Readable)
@@ -493,6 +494,79 @@ params = RestoreInstanceParameters(
 req = RestoreInstanceRequest(parameters=params)
 resp = client.send(req)
 ```
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | `delete` / `restore` / DDL `DROP` / DML `DELETE`/`UPDATE` without WHERE are all destructive; do not retry repeatedly on production data |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete`, `restore`, storage shrink, `DROP`, `TRUNCATE`, `DELETE`/`UPDATE` without WHERE | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK / pymysql (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK / SQL
+access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`create-instance`** — Critic verifies `--client-token` was set
+  (Idempotency = 1 required). Missing → Idempotency = 0.
+- **`delete-instance`** — Critic checks the trace contains both a pre-delete
+  `describe-instance` snapshot and a post-delete 404. Missing either →
+  Correctness = 0.
+- **`restore-instance`** — `backupId` must belong to the same `instanceId`;
+  cross-instance restore requires explicit user confirm in trace or Safety = 0.
+- **`modify-instance` (storage)** — Storage shrink is **forbidden** without
+  user opt-in. Safety = 0 otherwise.
+- **DDL `CREATE TABLE`** — Prefer `IF NOT EXISTS`. Full DDL must appear in
+  trace or Traceability = 0.
+- **DDL `DROP TABLE` / `DROP DATABASE` / `TRUNCATE`** — Always Safety = 0
+  without `confirm=DROP` / `confirm=TRUNCATE` in trace → ABORT.
+- **DDL `ALTER TABLE`** — Full ALTER must appear in trace; online DDL
+  preferred for production.
+- **DML `UPDATE` / `DELETE`** — SQL text MUST have a `WHERE` clause. Missing
+  WHERE → Safety = 0 → ABORT. Pre-check: `SELECT COUNT(*)` with the same
+  WHERE to predict `affected_rows`.
+- **DML `SELECT`** — Read-only; Safety = 1.0 by default.
+- **All DDL/DML** — Always pre-check via `SHOW DATABASES` / `SHOW TABLES` /
+  `DESCRIBE` and include result in trace; full SQL text must appear verbatim.
 
 ## Prerequisites
 

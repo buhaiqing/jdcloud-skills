@@ -1,0 +1,78 @@
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+#
+# ─────────────────────────────────────────────────────────────────────
+# TYPE (required, one of):
+#   feat        A new feature for the user / skill
+#   fix         A bug fix
+#   docs        Documentation only changes
+#   style       Formatting, missing semicolons, etc; no code change
+#   refactor    A code change that neither fixes a bug nor adds a feature
+#   perf        A code change that improves performance
+#   test        Adding missing tests or correcting existing tests
+#   chore       Changes to the build process, auxiliary tools, libraries
+#   revert      Reverts a previous commit
+#   security    Security fix or hardening (e.g., secret-leak guard)
+#
+# SCOPE (optional, in parentheses):
+#   Skill name for skill changes:    feat(vm-ops): add EIP support
+#   Component for repo-wide changes: docs(AGENTS): clarify GCL §3
+#                                    refactor(scripts): extract trace loader
+#                                    test(gcl-dashboard): add 5 new cases
+#   Omit for global changes.
+#
+# SUBJECT (required, ≤ 72 chars, imperative mood, no period):
+#   "add X", NOT "added" or "adds"
+#   "fix Y", NOT "fixed" or "fixes"
+#
+# BODY (optional, wrap at 72 chars):
+#   Explain WHAT and WHY, not HOW. Reference issues / PRs with
+#   "Closes #N" or "Refs #N" or "See .prs/PR-N-*.md".
+#
+# FOOTER (optional):
+#   BREAKING CHANGE: <description>
+#   Co-authored-by: Name <email>
+#   Refs: <URL or path>
+#
+# ─────────────────────────────────────────────────────────────────────
+# Examples:
+#
+#   feat(vm-ops): add EIP associate / dissociate to GCL rubric
+#
+#   Adds the EIP lifecycle (allocate / associate / dissociate / release)
+#   to the vm-ops rubric. The new safety auto-fail is
+#   "release EIP on InUse without confirm=RELEASE" → ABORT.
+#
+#   Refs: AGENTS.md §3 (Rubric), .prs/PR-2-Skill-Rollouts.md
+#
+# ─────────────────────────────────────────────────────────────────────
+#   docs(AGENTS): lock GCL section numbering
+#
+#   The GCL section previously had §10 "Rollout Roadmap" and
+#   §11 "Changelog"; this commit adds §12 "See also" pointing
+#   to docs/GCL_RETROSPECTIVE.md.
+#
+#   Refs: .prs/PR-3-Docs.md
+#
+# ─────────────────────────────────────────────────────────────────────
+#   fix(scripts): gcl_dashboard Q2 rate was per-event, not per-iter
+#
+#   The dimension_score_zero_rate[skill][dim] formula was
+#   `events / events_across_dimensions` which conflated
+#   dimensions. The correct formula is `events / total_iters`.
+#   Fixed by re-deriving from per-iter score_zero_events.
+#
+#   Tests: tests/gcl_dashboard_test.py catches the regression
+#   when this is reverted.
+#
+# ─────────────────────────────────────────────────────────────────────
+# When using this template:
+#
+#   git config commit.template .gitmessage.txt
+#
+# After that, `git commit` will open your editor with this
+# template pre-filled. Delete the comment block above the
+# "─" line before saving.

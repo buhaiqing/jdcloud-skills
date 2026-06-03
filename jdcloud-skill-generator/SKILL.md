@@ -17,8 +17,8 @@ compatibility: >-
   frontmatter conventions.
 metadata:
   author: jdcloud
-  version: "1.5.0"
-  last_updated: "2026-05-06"
+  version: "1.6.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: meta-skill
 ---
@@ -393,6 +393,81 @@ Optional later improvements (not required to start): PR template checkbox linkin
 > Add a JD Cloud skill for Cloud Monitor in this repo: alarms, metric query, dashboards. Docs: `https://docs.jdcloud.com/cn/cloudmonitor`. OpenAPI: [URL]. Python SDK.
 
 **Expected output:** `jdcloud-cloudmonitor-ops` tree (or extend if present) with **real** operationIds, SDK types, response paths, **and** matching `jdc` commands (primary path), plus SDK fallback documentation.
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this meta-skill (per `AGENTS.md` §8).
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-skill-generator` (optional, meta); generation is iterative and benefits from up to 3 retries |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **false** | output is the generated `*.md` content; the human user decides whether to commit |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify generation step
+   │
+   ▼
+[1] Generator (G)            ──► jdc <product> --help (for verification)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<3 & not all pass → RETRY (inject suggestions)
+   └─ iter=3 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the `## Generation Process` (Step 0 + 5 steps) defined
+above. The Generator (G) IS the existing generation agent. The Critic (C)
+audits the generated `*.md` content for OpenSpec compliance, secret
+leakage, and 2-round self-review completion. The Orchestrator (O) owns
+the loop and persists the GCL trace.
+
+### Generation-step-specific behavior
+
+- **Step 0. Environment Setup** — Verifies Python 3.10 (not 3.12) and
+  `uv` available. Never logs credentials.
+- **Step 1. Source Analysis** — OpenAPI URL + jdc help output + SDK
+  module list ALL captured in trace.
+- **Step 2. Operation Mapping** — Every operationId mapped to a real
+  jdc command + SDK method. Cross-checked against both sources.
+- **Step 3. SKILL.md Generation** — Generated SKILL.md passes Agent
+  Skill OpenSpec; **NEVER includes any `.env` value, secret key,
+  access-key id/secret, password, or PII** (hard rule per
+  `references/critical-jdc-cli-notes.md`).
+- **Step 4. References Generation** — Generated `cli-usage.md` /
+  `api-sdk-usage.md` / `core-concepts.md` / `troubleshooting.md` (at
+  minimum) with verified commands and imports.
+- **Step 5. Post-Generation Self-Check** — 2-round self-review per repo
+  policy. Score 0 if fewer than 2 rounds were performed.
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.6.0 | 2026-06-04 | **GCL rollout (optional)**: Added `## Quality Gate (GCL)` chapter wiring this meta-skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, secret-leak guard, OpenSpec + 2-round self-review enforcement) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=3`. `safety_confirm_required=false` (output is generated `*.md` content; the human user decides whether to commit). |
+| 1.5.0 | 2026-05-06 | (pre-existing; details in repo history) |
 
 ## See Also
 

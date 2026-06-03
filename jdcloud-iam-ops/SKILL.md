@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-05-08"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud IAM API v1 - https://iam.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -163,6 +163,7 @@ IAM resources are typically **immediate** in state changes:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, IAM-specific rules for `attach AdministratorAccess`, `create main-account key`, `delete sub-user` with attached policies, STS session duration, `Principal: *` trust policy) and `references/prompt-templates.md` (G/C/O prompt skeletons; **secret value never logged**). `max_iterations=2`. `safety_confirm_required=true` for create-access-key (main account), attach-policy (admin/wildcard), assume-role (>1h), delete sub-user (with attached policies). |
 | 1.0.0 | 2026-05-08 | Initial version with comprehensive IAM support: sub-users, groups, roles, policies, AKSK, STS, MFA; jdc-first with SDK fallback |
 
 ## Execution Flows (Agent-Readable)
@@ -443,6 +444,75 @@ req = AssumeRoleRequest(parameters=params)
 resp = sts_client.send(req)
 # Returns temporary credentials: accessKeyId, secretKey, sessionToken
 ```
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | IAM privilege changes (attach admin policy, create main-account key, delete sub-user) are immediately impactful; do not retry repeatedly |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `create-access-key` (main account), `attach-policy` (admin/wildcard), `assume-role` (>1h), `delete sub-user` (with attached policies) | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
+access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`create sub-user` / `create group` / `create role`** — Check duplicates
+  first via `list-*`. Refuse to re-create same name without explicit opt-in.
+- **`create role`** — Trust policy JSON must appear in trace. Refuse
+  `"Principal": "*"` without opt-in.
+- **`create policy`** — Policy document JSON must appear in trace. Refuse
+  `Effect: Allow, Action: *, Resource: *` without opt-in.
+- **`attach policy`** — Refuse `AdministratorAccess` or `*:*` without
+  `confirm=ATTACH_ADMIN` → ABORT.
+- **`create access-key` (main account)** — Check existing key count first
+  (max 2). Refuse without `confirm=CREATE_KEY` and without a rotation plan
+  in trace. **NEVER log secret value**.
+- **`delete sub-user`** — MUST detach all policies + remove from all groups
+  before deletion. Missing either → Safety = 0 → ABORT. Must include
+  pre-delete snapshot of attached policies + group memberships.
+- **`assume role` (STS)** — Default session duration ≤ 1 hour. Longer
+  requires `confirm=EXTEND_SESSION`. Verify role's trust policy allows the
+  assumed principal.
 
 ## Prerequisites
 

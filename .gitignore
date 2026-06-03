@@ -222,3 +222,22 @@ __marimo__/
 .omc/
 .omo/
 .trae
+.github/
+
+# Project-specific ignores
+
+# GCL (Generator-Critic-Loop) runtime output
+# Trace files are produced by `scripts/gcl_runner.py` and are
+# never part of source code. See `AGENTS.md` §6 and
+# `scripts/gcl_dashboard.py` for the trace schema.
+audit-results/
+#   Exception: keep the directory itself in git if a future
+#   release needs to ship baseline traces. For now, the dir
+#   is created on first run by gcl_runner.py / gcl_dashboard.py.
+#   To re-create: `mkdir -p audit-results` (no files needed).
+
+# GCL PR-prep scaffolding
+# `.prs/` contains per-PR description markdown used to draft
+# GitHub PRs. It is **not** source code and should not be
+# pushed to the repo. See `.prs/README.md` for the workflow.
+.prs/

@@ -12,8 +12,8 @@ compatibility: >-
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
 metadata:
   author: jdcloud
-  version: "1.6.0"
-  last_updated: "2026-05-15"
+  version: "1.7.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "VM API v1.0 - https://docs.jdcloud.com/cn/virtual-machines/api"
   cli_applicability: jdc-first-with-fallback
@@ -106,6 +106,7 @@ This Skill uses structured placeholders to avoid prompt injection and parsing am
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.7.0 | 2026-06-04 | **GCL pilot**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, op-specific overrides) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for destructive ops. |
 | 1.4.0 | 2026-05-07 | **Cloud Assistant support**: Added cloud assistant (云助手) operations — createCommand, invokeCommand, describeCommands, deleteCommands, describeInvocations. Added new reference `cloud-assistant.md`. Cloud assistant uses SDK/API only (`jdc` CLI not supported). |
 | 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: Fixed `--output json` positioning (must be BEFORE subcommand), removed non-existent `--no-interactive` flag, corrected credential docs (CLI uses `~/.jdc/config` INI, NOT env vars), added sandbox config workaround |
 | 1.2.0 | 2026-05-06 | **jdc-first with fallback strategy**: execution flows now prioritize `jdc` CLI (primary) with SDK/API fallback after 3 retries; Prerequisites updated to `uv`-based bootstrap with Phase 1 (jdc) / Phase 2 (SDK fallback); Path Preference flipped to jdc-first; pre-flight checks reordered |
@@ -313,6 +314,67 @@ else:
 
 #### Post-execution Validation
 1. Poll `describe-instances` until HTTP 404 (max 300s)
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | `delete` / `stop` are destructive; do not retry repeatedly on production VMs |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete`, `stop`, `reboot`, `resize` on running, `detach-disk` | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK access.
+The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`delete-instance`** — Critic checks the trace contains both a pre-delete
+  `describe-instances` snapshot and a post-delete `describe-instances` 404.
+  Missing either → Correctness = 0.
+- **`create-instance`** — Critic verifies `--client-token` was set
+  (Idempotency = 1 required). Missing → Idempotency = 0.
+- **`stop-instance` / `reboot-instance`** — Safety = 0 if the pre-state was
+  not `running` and the user did not explicitly opt in.
+- **Cloud assistant `run-command`** — All command output MUST appear in the
+  trace; Traceability = 0 otherwise.
 
 ## Cloud Assistant Operations
 

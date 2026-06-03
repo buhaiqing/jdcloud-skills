@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-05-06"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud CLB API v1 - https://lb.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -171,6 +171,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-04 | **GCL rollout (recommended)**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, CLB-specific rules for `delete-lb` traffic cut, `deregister-targets` >50% DRAIN guard, `register-targets` non-running backend refusal) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=3` (per `AGENTS.md` §8 recommended). `safety_confirm_required=true` for `delete-lb`, `deregister-targets` (>50%). |
 | 1.0.0 | 2026-05-06 | Initial version with jdc-first execution and SDK fallback for CLB operations |
 
 ## Execution Flows (Agent-Readable)
@@ -574,6 +575,75 @@ params = UpdateHealthCheckParameters(
 req = UpdateHealthCheckRequest(parameters=params)
 resp = client.send(req)
 ```
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **recommended** for all operations exposed by this
+> skill (per `AGENTS.md` §8).
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-clb-ops` (recommended); `delete-lb` / `deregister-targets` are impactful but recoverable |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete-lb`, `deregister-targets` (>50%) | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<3 & not all pass → RETRY (inject suggestions)
+   └─ iter=3 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
+access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`create load balancer`** — LB type + bandwidth / LCU + AZ must be
+  explicit. Check quota first.
+- **`create listener`** — Protocol + port + default action must be valid.
+- **`register targets`** — Each backend must be in `running` state. Refuse
+  `stopped` / `error` backends without explicit opt-in.
+- **`deregister targets`** — Calculate % of total backends being removed:
+  - > 50% → `confirm=DRAIN` required
+  - > 80% → `confirm=DRAIN_ALL` required
+  - Missing appropriate confirm → ABORT.
+- **`modify load balancer`** — Bandwidth shrink is **forbidden** without
+  explicit opt-in.
+- **`delete load balancer`** — **Cuts ALL traffic** served by the LB.
+  `confirm=DELETE` required; for prod-tagged LBs, `confirm=DELETE_PROD`
+  also required. Must include pre-delete snapshot of listeners + backends.
+- **`health check management`** — Disabling health check can route traffic
+  to dead backends; refuse without explicit opt-in.
 
 ## Prerequisites
 

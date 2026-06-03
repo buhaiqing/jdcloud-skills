@@ -181,3 +181,219 @@ All issues discovered during both review rounds MUST be proactively fixed before
 - Adding missing safety gates
 - Updating documentation inconsistencies
 - Ensuring alignment with repository-wide conventions
+
+---
+
+## Generator-Critic-Loop (GCL) — Adversarial Quality Gate
+
+> Inspired by GAN's Generator/Discriminator idea, but deliberately **not** a real GAN.
+> Naming: **GCL (Generator-Critic-Loop)** to avoid misleading reviewers and LLM trainees.
+
+### 1. Purpose
+
+Apply an adversarial **Generator ↔ Critic** loop with a quantitative rubric to every skill execution.
+Most valuable in **high-side-effect cloud operations** (delete, stop, restore, IAM/KMS/DDL) where a single
+mistake is unrecoverable.
+
+| GAN (real) | GCL (this spec) |
+|---|---|
+| Discriminator learns sample distribution | Critic scores an **explicit rubric** |
+| No termination condition | Must terminate: **PASS / MAX_ITER / SAFETY_FAIL** |
+| G and D train in parallel | G and C run **sequentially** |
+| Goal: "fool the D" | Goal: "pass the rubric threshold" |
+
+### 2. Roles
+
+| Role | Job | Input | Output | Forbidden |
+|---|---|---|---|---|
+| **Generator (G)** | Execute the cloud operation | user request + previous Critic feedback | result + execution trace | modifying the rubric; self-scoring |
+| **Critic (C)** | Independently audit G's output | G's result + trace + rubric | scores + suggestions | calling jdc / SDK / mutating anything |
+| **Orchestrator (O)** | Loop control, termination, final return | context + C scores + budget | continue / final result | executing or scoring on its own |
+
+**Hard constraint:** G and C MUST live in **isolated prompt contexts** (preferably isolated sessions
+or sub-agents). A shared context is a "pseudo-GCL" and is explicitly banned — see §9.
+
+### 3. Rubric (mandatory per skill)
+
+Each `SKILL.md` MUST declare its skill-specific rubric. Minimum 5 dimensions:
+
+| Dimension | Meaning | Scale | Default threshold |
+|---|---|---|---|
+| **Correctness** | Resource id / state / config actually matches the request | 0 / 0.5 / 1 | ≥ 0.5 (1.0 required for `delete` / `stop` / IAM / KMS / DDL) |
+| **Safety** | Destructive op (`delete` / `stop` / `restore` / IAM / KMS / DDL) was confirmed or guarded | 0 / 1 | = 1 |
+| **Idempotency** | Retrying the same call will not cause duplicate side-effects | 0 / 0.5 / 1 | ≥ 0.5 |
+| **Traceability** | Output is auditable: command, params, raw response, errors all captured | 0 / 0.5 / 1 | ≥ 0.5 |
+| **Spec Compliance** | Conforms to the skill's `core-concepts.md` constraints | 0 / 0.5 / 1 | ≥ 0.5 |
+
+**Safety = 0 → ABORT immediately, regardless of total score.**
+
+### 4. Loop Flow
+
+```
+User Request
+     │
+     ▼
+[0] Pre-flight (Orchestrator)
+    - resolve env.* and user.* variables
+    - pick skill, load its rubric
+     │
+     ▼
+[1] Generate (G) ───────────────────────┐
+    - run jdc / SDK                     │
+    - capture trace                     │
+     │                                  │
+     ▼                                  │
+[2] Critique (C)                       │
+    - isolated prompt context           │
+    - score every rubric dimension      │
+    - emit actionable suggestions       │
+     │                                  │
+     ▼                                  │
+[3] Decide (Orchestrator)              │
+    - Safety=0  → ABORT (no partial)   │
+    - all pass  → RETURN                │
+    - else & iter<max → inject         │
+       suggestions into G               │
+    - else → RETURN best + unresolved   │
+       rubric items                     │
+     └──────────────────────────────────┘
+```
+
+### 5. Termination (first match wins)
+
+| Condition | Behavior |
+|---|---|
+| **PASS** | Every rubric dimension meets its threshold → return G's result |
+| **MAX_ITER** | Reached `max_iterations` (default 3) → return **best-so-far** + unresolved rubric items |
+| **SAFETY_FAIL** | Safety = 0 → **ABORT**; never return partial or "best-effort" output |
+
+`max_iterations` defaults per skill class — see §8.
+
+### 6. Trace & Audit (mandatory)
+
+Every GCL run MUST persist a JSON trace:
+
+```json
+{
+  "skill": "jdcloud-vm-ops",
+  "request": "<sanitized user request>",
+  "rubric_version": "v1",
+  "iterations": [
+    {
+      "iter": 1,
+      "generator": { "command": "...", "args": {...}, "exit_code": 0, "result_excerpt": "..." },
+      "critic": {
+        "scores": {
+          "correctness": 1, "safety": 1, "idempotency": 0.5,
+          "traceability": 1, "spec_compliance": 1
+        },
+        "suggestions": ["..."],
+        "blocking": false
+      },
+      "decision": "RETRY"
+    }
+  ],
+  "final": { "status": "PASS", "iter": 2, "output": "..." }
+}
+```
+
+Path: `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` — unified with the existing
+`audit-results/` directory used by `jdcloud-audit-ops` and `jdcloud-tag-audit-ops`.
+
+### 7. Prompt Templates (mandatory per skill)
+
+Each skill's `references/prompt-templates.md` MUST contain:
+
+1. **Generator Prompt Template** — placeholders: `{{user.request}}`, `{{output.critic_feedback}}`, `{{output.rubric}}`
+2. **Critic Prompt Template** — placeholders: `{{output.generator_output}}`, `{{output.trace}}`, `{{output.rubric}}`
+
+> **Placeholder syntax** MUST follow the repository-wide convention
+> (see top-level **Variable Convention**): `{{env.*}}` / `{{user.*}}` / `{{output.*}}`.
+> Bare `{...}` placeholders are NOT allowed in skill prompt templates.
+
+**Critic prompt must hide the raw user request** to prevent "answer-aligned" rubber-stamping.
+Recommended skeleton:
+
+```text
+You are an independent cloud-operation auditor.
+You will see one execution result and its trace. Score it STRICTLY against the rubric below.
+Do NOT consider the original user request — judge only what was actually done.
+
+rubric: {{output.rubric}}
+generator_output: {{output.generator_output}}
+trace: {{output.trace}}
+
+Return strict JSON:
+{
+  "scores": { "correctness": 0|0.5|1, "safety": 0|0.5|1, "idempotency": 0|0.5|1,
+              "traceability": 0|0.5|1, "spec_compliance": 0|0.5|1 },
+  "suggestions": ["≤ 3 concrete, executable improvements"],
+  "blocking": true|false
+}
+```
+
+### 8. Per-Skill Defaults
+
+| Skill | GCL | Default max_iter | Notes |
+|---|---|---|---|
+| `jdcloud-vm-ops` | **required** | 2 | delete/stop are destructive |
+| `jdcloud-redis-ops` | **required** | 2 | flushall / instance delete |
+| `jdcloud-mysql-ops` | **required** | 2 | DROP / DELETE / TRUNCATE |
+| `jdcloud-postgresql-ops` | **required** | 2 | DROP / DELETE / TRUNCATE |
+| `jdcloud-mongodb-ops` | **required** | 2 | dropDatabase / delete |
+| `jdcloud-elasticsearch-ops` | **required** | 2 | delete index / cluster |
+| `jdcloud-iam-ops` | **required** | 2 | detach policy / delete role / rotate keys |
+| `jdcloud-kms-ops` | **required** | 2 | schedule key deletion is irreversible |
+| `jdcloud-eip-ops` | **required** | 2 | release EIP can break production |
+| `jdcloud-clb-ops` | recommended | 3 | listener / backend delete |
+| `jdcloud-cloudmonitor-ops` | recommended | 3 | alarm rule delete |
+| `jdcloud-alert-intelligence` | optional | 5 | read-only |
+| `jdcloud-audit-ops` | optional | 5 | read-only |
+| `jdcloud-tag-audit-ops` | optional | 5 | read-only |
+| `jdcloud-skill-generator` | optional | 3 | meta operation |
+
+Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate`).
+
+### 9. Anti-Patterns (banned)
+
+- ❌ **Shared context G+C** — defeats independence → banned
+- ❌ **Subjective scoring** — Critic must use the rubric, not "vibes" → banned
+- ❌ **Unbounded loop** — always hard-cap iterations → banned
+- ❌ **Critic sees the user request** — encourages rubber-stamping → banned
+- ❌ **Silently downgrade on Safety fail** — must ABORT visibly → banned
+- ❌ **Trace not persisted** — no post-mortem possible → banned
+- ❌ **Critic mutates resources** — Critic is read-only by definition → banned
+
+### 10. Rollout Roadmap
+
+- **Phase 1 (this commit)** — add this section to `AGENTS.md`; pilot on **`jdcloud-vm-ops` only** (most representative
+  destructive workload) with its `prompt-templates.md` and `rubric.md`. `jdcloud-redis-ops` follows in the next PR.
+- **Phase 2** — add `scripts/gcl_runner.py` as a reusable Orchestrator
+- **Phase 3** — feed `gcl-trace-*.json` into `jdcloud-audit-ops` for quality dashboards
+- **Phase 4** — wire rubric pass-rate to Cloud Monitor alarms (real incidents refine thresholds)
+
+### 11. Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-04 | Initial GCL specification added to AGENTS.md (Correctness threshold relaxed to ≥0.5; pilot scoped to `jdcloud-vm-ops`) |
+| 1.1.0 | 2026-06-04 | `jdcloud-redis-ops` rollout: added `references/rubric.md` and `references/prompt-templates.md`; `## Quality Gate (GCL)` chapter inserted; per-op Safety rules for spec-shrink and cross-instance restore |
+| 1.2.0 | 2026-06-04 | `jdcloud-mysql-ops` rollout: rubric expanded to cover DDL/DML paths (instance-level + SQL-level); WHERE-clause check and DDL confirm gates added; prompt templates include pre-check + transaction + affected_rows rules |
+| 1.3.0 | 2026-06-04 | `jdcloud-postgresql-ops` rollout: rubric + prompts cover instance + DDL/DML/maintenance paths; PG-specific rules for `VACUUM FULL`, `DROP SCHEMA` cascade, `SELECT FOR UPDATE` re-score |
+| 1.3.1 | 2026-06-04 | `jdcloud-mongodb-ops` rollout: rubric + prompts cover instance + DB-level paths; MongoDB-specific rules for `dropDatabase` cascade, `updateMany` empty-filter check, `$out`/`$merge` in aggregate |
+| 1.3.2 | 2026-06-04 | `jdcloud-elasticsearch-ops` rollout: rubric + prompts cover instance + ES REST paths; ES-specific rules for wildcard `DELETE /<index>`, `match_all` in `_update_by_query`/`_delete_by_query`, `_forcemerge max_num_segments=1` |
+| 1.4.0 | 2026-06-04 | `jdcloud-iam-ops` rollout: rubric + prompts cover sub-user, group, role, policy, access-key, STS; IAM-specific rules for `attach AdministratorAccess` / `*:*`, `create main-account key`, `delete sub-user` with attached policies, `Principal: *` trust policy; **secret value never logged** |
+| 1.4.1 | 2026-06-04 | `jdcloud-kms-ops` rollout: rubric + prompts cover key lifecycle, encrypt/decrypt, secret; KMS-specific rules for irreversible `schedule key deletion`, `pending-window-in-days` min-7 guard, prod `disable` / `decrypt` confirm; **plaintext / secret value never logged** (SHA-256 + length only) |
+| 1.4.2 | 2026-06-04 | `jdcloud-eip-ops` rollout: rubric + prompts cover allocate, associate, dissociate, release; EIP-specific rules for irreversible `release EIP` (InUse refusal), prod `dissociate` / `release` confirm, `associate` force-rebind guard |
+| 1.5.0 | 2026-06-04 | `jdcloud-clb-ops` rollout (recommended, max_iter=3): rubric + prompts cover LB, listener, target register/deregister, health check; CLB-specific rules for `delete-lb` traffic cut, `deregister-targets` >50% DRAIN guard, `register-targets` non-running backend refusal |
+| 1.5.1 | 2026-06-04 | `jdcloud-cloudmonitor-ops` rollout (recommended, max_iter=3): rubric + prompts cover alarm rule CRUD + metric query; silent-failure guards for `delete-alarm-rule` / `disable-alarm-rule`, `DELETE_AFTER_FIRING` rule, prod tag double-confirm, empty notification channel refusal |
+| 1.6.0 | 2026-06-04 | `jdcloud-alert-intelligence` rollout (optional, max_iter=5, read-only): rubric enforces "report must NOT recommend delete/disable/modify on alert rule" + 4-tuple citation + next-hop suggestion; PII / secret mask |
+| 1.6.1 | 2026-06-04 | `jdcloud-audit-ops` rollout (optional, max_iter=5, read-only): rubric + prompts cover `describe-events` / `describe-event-detail` / `describe-trails`; PII masking guard for `requestParameters` (password / secret / accessKey) |
+| 1.6.2 | 2026-06-04 | `jdcloud-tag-audit-ops` rollout (optional, max_iter=5): rubric + prompts cover audit + report + DOPS ticket creation; DOPS ticket payload completeness + duplicate-ticket idempotency check |
+| 1.6.3 | 2026-06-04 | `jdcloud-skill-generator` rollout (optional, max_iter=3, meta): rubric + prompts cover generation steps; secret-leak guard, OpenSpec + 2-round self-review enforcement, jdc CLI / SDK cross-validation |
+
+### 12. See also
+
+- [`docs/GCL_RETROSPECTIVE.md`](docs/GCL_RETROSPECTIVE.md) — post-rollout retrospective and Phase 3 dashboard design contract (2026-06-04)
+- Each skill's `references/rubric.md` — the rubric instance
+- Each skill's `references/prompt-templates.md` — the G/C/O prompt skeletons

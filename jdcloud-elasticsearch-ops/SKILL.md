@@ -13,8 +13,8 @@ compatibility: >-
   SDK/API is the only execution path.
 metadata:
   author: jdcloud
-  version: "2.1.0"
-  last_updated: "2026-06-03"
+  version: "2.2.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Elasticsearch API v1 - https://es.jdcloud-api.com/v1"
   cli_applicability: sdk-only
@@ -137,6 +137,7 @@ from jdcloud_sdk.services.es.apis.ModifyInstanceSpecRequest import ModifyInstanc
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + ES REST paths, ES-specific rules for wildcard `DELETE /<index>`, `match_all` queries in `_update_by_query` / `_delete_by_query`, `_forcemerge max_num_segments=1`) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, node count / storage shrink, `DELETE /<index>`, `_close`, `_delete_by_query`, `_forcemerge max_num_segments=1`, snapshot deletion. |
 | 2.1.0 | 2026-06-03 | **Refactored**: Moved quick inspection snippets, operational best practices to `references/`. SKILL.md is now concise (<300 lines). |
 | 2.0.0 | 2026-06-03 | **Breaking**: Corrected `cli_applicability` to `sdk-only`. Added verified API field names. |
 | 1.0.0 | 2026-06-03 | Initial version (incorrectly assumed CLI support) |
@@ -250,6 +251,95 @@ resp = client.send(DeleteInstanceRequest(parameters=DeleteInstanceParameters(
 ```
 
 **Validate:** Poll `describeInstance` until 404 / deleted (max 600s, 10s interval).
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **mandatory** for all operations exposed by this skill.
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **2** | `delete-instance` / `delete-index` (especially wildcard) / `_delete_by_query` / `_forcemerge max_num_segments=1` are destructive; do not retry repeatedly on production data |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete`, `restore`, node count / storage shrink, `DELETE /<index>`, `_close`, `_delete_by_query`, `_forcemerge max_num_segments=1`, snapshot deletion | matches repository safety gate policy |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK / elasticsearch-py (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<2 & not all pass → RETRY (inject suggestions)
+   └─ iter=2 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK /
+ES HTTP access. The Orchestrator (O) owns the loop and persists the GCL
+trace.
+
+### Operation-specific behavior
+
+- **`create-instance`** — Critic verifies `--client-token` was set
+  (Idempotency = 1 required). Missing → Idempotency = 0.
+- **`delete-instance`** — Critic checks the trace contains both a pre-delete
+  `describe-instance` snapshot and a post-delete 404. Missing either →
+  Correctness = 0.
+- **`restore-instance`** — `snapshotId` must belong to the same `instanceId`;
+  cross-instance restore requires explicit user confirm in trace or Safety = 0.
+- **`modify-instance` (node count / storage)** — Node count shrink and
+  storage shrink are **forbidden** without user opt-in. Safety = 0 otherwise.
+- **`PUT /<index>` (create index)** — Full settings + mappings must appear
+  in trace. Idempotency check: re-creating with same name + same settings is
+  idempotent.
+- **`DELETE /<index>` (delete index)** — Always Safety = 0 without
+  `confirm=DELETE_INDEX` in trace → ABORT. **Wildcard delete (e.g.,
+  `logs-*`) requires additional `confirm=DELETE_WILDCARD_INDEX`**.
+- **`POST /<index>/_close`** — Closes index (blocks reads/writes); Safety = 0
+  without `confirm=CLOSE` → ABORT.
+- **`POST /<index>/_update_by_query`** — Query MUST be non-empty (not `{}`,
+  not `match_all` only). Missing query → Safety = 0 → ABORT. Prefer
+  `?conflicts=proceed&wait_for_completion=false&scroll_size=1000` for large
+  ops; capture task id in trace.
+- **`POST /<index>/_delete_by_query`** — Query MUST be non-empty. Missing
+  query → Safety = 0 → ABORT. ALWAYS snapshot the index first
+  (`PUT /_snapshot/...`); capture task id in trace.
+- **`POST /<index>/_forcemerge`** — `max_num_segments=1` is destructive
+  (large IO); Safety = 0 without `confirm=FORCEMERGE` → ABORT.
+- **`POST /_reindex`** — `source` and `dest` must be echoed. Safety = 0 if
+  `dest` is wildcard (`logs-*`) or production index without opt-in.
+- **`POST /<index>/_search`** — Read-only; Safety = 1.0 by default.
+- **`DELETE /_snapshot/<repo>/<snap>`** — Safety = 0 without
+  `confirm=DELETE_SNAPSHOT` → ABORT.
+- **`PUT /_ilm/policy/<name>` (ILM policy)** — Affects index lifecycle;
+  Safety = 0 if `delete` action included without opt-in.
+- **All ES ops** — Always pre-check via `GET _cat/indices?v` /
+  `GET _cluster/health` / `GET /<index>/_count` and include result in trace;
+  full HTTP method + URL + body must appear verbatim.
 
 ## Prerequisites
 

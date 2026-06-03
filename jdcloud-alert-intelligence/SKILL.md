@@ -14,8 +14,8 @@ compatibility: >-
   已配置 JDC_ACCESS_KEY / JDC_SECRET_KEY / JDC_REGION。
 metadata:
   author: jdcloud
-  version: "0.1.0"
-  last_updated: "2026-06-03"
+  version: "0.2.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
@@ -57,6 +57,7 @@ metadata:
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.2.0 | 2026-06-04 | **GCL 推广（optional）**：新增 `## Quality Gate (GCL)` 章节接入仓库级 GCL。新增 `references/rubric.md`（5 维 rubric，静默故障保护：报告不得建议删/禁/改告警规则、4-tuple 引用、P0/P1 需下一跳建议）和 `references/prompt-templates.md`（G/C/O prompt 模板）。`max_iterations=5`。`safety_confirm_required=false`（read-only by mandate）。 |
 | 0.1.0 | 2026-06-03 | 初版：聚合 / 分级 / 抑制 / 报告四件套；规则引擎实现，ML 留 v0.3 |
 
 ## 触发范围
@@ -260,3 +261,69 @@ jdc --output json monitor describe-alarm-history \
 - 不消费告警回调 Webhook（v0.2 再加）
 - 不做跨云聚合（仅京东云内部）
 - 不依赖 ML / 异常检测算法（v0.3 再加）
+
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this read-only skill (per
+> `AGENTS.md` §8).
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-alert-intelligence` (optional, read-only) |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **false** | read-only by mandate |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify workflow step
+   │
+   ▼
+[1] Generator (G)            ──► jdc monitor (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<5 & not all pass → RETRY (inject suggestions)
+   └─ iter=5 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the 5-step **工作流** defined above. The Generator (G) IS
+the existing jdc-or-SDK executor that fetches alert data. The Critic (C)
+audits the produced report's citations and completeness. The Orchestrator
+(O) owns the loop and persists the GCL trace.
+
+### Workflow-step-specific behavior
+
+- **Step 1. 加载时间窗告警** — Time window MUST be explicit; default 24h;
+  max 15d. Time window > 15d → ABORT.
+- **Step 2. 聚合** — Aggregation key `(service, resource, metric)` MUST be
+  complete for every cluster. Dropped clusters MUST cite a suppression
+  rule.
+- **Step 3. 分级** — Each cluster gets P0-P3 per `severity-matrix.md` with
+  the 4-tuple citation `(metric_value, threshold, time_window, jdc_query)`.
+- **Step 4. 抑制** — Every suppression MUST cite the matching rule in
+  `suppression-rules.md`.
+- **Step 5. 报告输出** — Every P0/P1 cluster MUST have a 下一跳建议 pointing
+  to a specific `jdcloud-*-ops` operation. The report MUST NOT recommend
+  `delete` / `disable` / `modify` on an alert rule (this skill is
+  read-only by mandate).

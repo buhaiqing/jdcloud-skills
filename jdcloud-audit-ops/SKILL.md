@@ -4,7 +4,7 @@ description: >-
   Use when managing JD Cloud Audit Log resources — query operation events,
   describe event details, list operation trails, analyze user activity history,
   and manage event tracking. Works with "审计日志", "操作审计", "云审计",
-  "Audit Log", or "操作记录" without saying "audit". NOT for CloudTrail
+  "Audit Log", or "操作记录" without saying "audit". Not for CloudTrail
   configurations from other clouds, VPC flow logs, or general monitoring.
 license: MIT
 compatibility: >-
@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-03"
+  version: "1.2.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Audit Log API v1 - https://docs.jdcloud.com/cn/audit-log"
   cli_applicability: jdc-first-with-fallback
@@ -36,34 +36,28 @@ metadata:
 
 ## Overview
 
-JD Cloud Audit Log (操作审计/云审计) provides comprehensive tracking and recording of user operations and API calls on JD Cloud resources. It enables security auditing, compliance monitoring, operational troubleshooting, and accountability by capturing who did what, when, and from where. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **jdc-first execution with SDK/API fallback**, response validation, and failure recovery. **Do not use the web console as the primary agent execution path** in `SKILL.md`.
+JD Cloud Audit Log (操作审计/云审计) provides comprehensive tracking and recording of user operations and API calls on JD Cloud resources. It enables security auditing, compliance monitoring, operational troubleshooting, and accountability by capturing who did what, when, and from where. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **jdc-first execution with SDK/API fallback**, response validation, and failure recovery.
+
+**Quick Reference**: [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - For commonly used commands and quick lookup.
 
 ### CLI applicability (repository policy)
 
-- **`cli_applicability: jdc-first-with-fallback`:** Official `jdc` supports this product with audit log subcommands. The Agent MUST attempt to use `jdc` as the **primary execution path**. If `jdc` installation or command execution fails, the Agent MUST retry up to **3 times** (with exponential backoff). Only after **3 consecutive failures** should the Agent fall back to **SDK/API**. Both paths MUST be documented. You **MUST** ship **`references/cli-usage.md`** and, in **each** execution flow below, document **both** the `jdc` step **and** the SDK fallback step for every operation the CLI exposes.
+- **`cli_applicability: jdc-first-with-fallback`:** Official `jdc` supports this product with audit log subcommands. The Agent MUST attempt to use `jdc` as the **primary execution path**. If `jdc` installation or command execution fails, the Agent MUST retry up to **3 times** (with exponential backoff). Only after **3 consecutive failures** should the Agent fall back to **SDK/API**. Both paths are documented in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
 
 ### Path Preference (jdc-first with SDK Fallback)
 
 The Agent MUST follow this execution priority:
 
-1. **`jdc` CLI (primary path)** — Attempt `jdc` first for every operation. Quick ad-hoc queries and single-operation tasks benefit most from CLI.
-2. **Retry up to 3 times** if `jdc` fails (with exponential backoff: 0s → 2s → 4s).
-3. **SDK/API (fallback path, after 3 jdc failures)** — Use only when `jdc` is persistently unavailable. Complex filtering, pagination handling, and programmatic analysis may require SDK.
+1. **`jdc` CLI (primary path)** — Attempt `jdc` first for every operation
+2. **Retry up to 3 times** if `jdc` fails (with exponential backoff: 0s → 2s → 4s)
+3. **SDK/API (fallback path, after 3 jdc failures)** — Use only when `jdc` is persistently unavailable
 
-When both paths succeed, prefer `jdc` output for consistency with the primary path.
+When both paths succeed, prefer `jdc` output for consistency.
 
 ### Critical jdc CLI Behavioral Notes (from empirical testing)
 
 **Failure 1: `--output json` must be TOP-LEVEL, not subcommand-level**
 The `--output json` argument is defined in the base controller, not in individual subcommands. It MUST be placed **before** the subcommand.
-
-```bash
-# CORRECT (works):
-jdc --output json audit describe-events
-
-# WRONG (fails with "unrecognized arguments: --output json"):
-jdc audit describe-events --output json
-```
 
 **Failure 2: jdc CLI does NOT support `--no-interactive`**
 The `--no-interactive` flag does not exist in the jdc CLI. Using it will cause an `unrecognized arguments` error. Omit this flag entirely.
@@ -72,7 +66,7 @@ The `--no-interactive` flag does not exist in the jdc CLI. Using it will cause a
 The CLI reads credentials exclusively from `~/.jdc/config` (INI format). Setting environment variables alone is insufficient.
 
 **Failure 4: `PermissionError` on `~/.jdc/` directory creation**
-In sandboxed environments where home is not writable, set `HOME` to a writable path and pre-create config files before running `jdc`.
+In sandboxed environments where home is not writable, set `HOME` to a writable path and pre-create config files before running `jdc`. See [CLI Usage](references/cli-usage.md) for details.
 
 ## Trigger & Scope (Agent-Readable)
 
@@ -89,9 +83,9 @@ In sandboxed environments where home is not writable, set `HOME` to a writable p
 ### SHOULD NOT Use This Skill When
 
 - Task is about CloudTrail from AWS or other clouds → state this is JD Cloud only
-- Task is about VPC flow logs → delegate to: `jdcloud-vpc-ops`
-- Task is about Cloud Monitor metrics → delegate to: `jdcloud-cloudmonitor-ops`
-- Task is purely billing / account management → delegate to: `jdcloud-billing-ops`
+- Task is about VPC flow logs → delegate to appropriate VPC skill
+- Task is about Cloud Monitor metrics / alarms → delegate to: `jdcloud-cloudmonitor-ops`
+- Task is purely billing / account management → delegate to appropriate skill
 - Task is IAM permission analysis only → delegate to: `jdcloud-iam-ops`
 - User insists on **console-only** flows with no API → state limitation; do not invent undocumented HTTP steps
 
@@ -115,16 +109,19 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | `{{user.resource_type}}` | Resource type filter | Ask once; reuse (e.g., `vm`, `vpc`) |
 | `{{user.event_name}}` | Event/operation name filter | Ask once; reuse |
 | `{{user.username}}` | Username filter | Ask once; reuse |
+| `{{user.event_id}}` | Event ID for detail query | Ask once; reuse |
 | `{{output.event_id}}` | From last API or CLI JSON response | Parse from response per operation |
 
 > **`{{env.*}}` MUST NOT** be collected from the user. **`{{user.*}}`** MUST be collected interactively when missing.
 
-> **Security Warning:** **NEVER** log, print, or expose `JDC_SECRET_KEY` (or any secret) in console output, debug messages, or logs. When verification is needed, check existence only (e.g., `if os.environ.get('JDC_SECRET_KEY')`) without printing the actual value. If logging credential status is required, use masked placeholders like `JDC_SECRET_KEY=<masked>` or `JDC_SECRET_KEY=***`. This applies to all execution flows (SDK, CLI, and debugging scripts).
+> **Security Warning**: **NEVER** log, print, or expose `JDC_SECRET_KEY` (or any secret) in console output, debug messages, or logs. When verification is needed, check existence only (e.g., `if os.environ.get('JDC_SECRET_KEY')`) without printing the actual value. If logging credential status is required, use masked placeholders like `JDC_SECRET_KEY=<masked>` or `JDC_SECRET_KEY=***`. This applies to all execution flows (SDK, CLI, and debugging scripts).
 
-## API and Response Conventions (Agent-Readable)
+## Output Parsing Rules (Agent-Readable)
+
+### API and Response Conventions
 
 - **OpenAPI is canonical** for path, query, body fields, enums, and response shapes. Base path: `https://audit.jdcloud-api.com/v1/...`
-- **Errors:** Map SDK/HTTP errors to `code` / `status` / message fields per spec.
+- **Errors:** Map SDK/HTTP errors to `code` / `status` / message fields per spec. See [API & SDK Usage](references/api-sdk-usage.md) for error codes.
 - **Timestamps:** ISO 8601 with timezone when the API returns strings (e.g. `2026-06-03T10:00:00+08:00`).
 - **Time Range:** Most audit queries require `startTime` and `endTime` parameters. Maximum query window typically 90 days.
 
@@ -137,6 +134,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | Describe Events | `$.result.events[*].eventName` | array | Operation names |
 | Describe Events | `$.result.events[*].username` | array | User who performed action |
 | Describe Events | `$.result.events[*].resourceType` | array | Type of resource affected |
+| Describe Events | `$.result.totalCount` | integer | Total matching events |
 | Describe Event Detail | `$.result.eventDetail.eventId` | string | Event ID |
 | Describe Event Detail | `$.result.eventDetail.requestParameters` | object | Request parameters |
 | Describe Event Detail | `$.result.eventDetail.responseElements` | object | Response data |
@@ -154,13 +152,15 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-06-04 | **GCL rollout (optional)**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, read-only audit log query, PII masking guard for `requestParameters`) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=5`. `safety_confirm_required=false` (read-only by definition). |
+| 1.1.0 | 2026-06-04 | Optimized SKILL.md structure, created QUICK_REFERENCE.md, split detailed content to references/ directory |
 | 1.0.0 | 2026-06-03 | Initial version with audit log query support: describe-events, describe-event-detail, describe-trails; jdc-first with SDK fallback |
 
 ## Execution Flows (Agent-Readable)
 
 Every operation: **Pre-flight → Execute (jdc primary / SDK fallback) → Validate → Recover**. Do not skip phases.
 
-**jdc-first strategy:** The Agent MUST attempt `jdc` CLI first (primary path). If `jdc` fails after **3 retries** with exponential backoff, fall back to SDK/API. Documentation below lists `jdc` before SDK to reflect execution priority.
+**jdc-first strategy:** The Agent MUST attempt `jdc` CLI first (primary path). If `jdc` fails after **3 retries** with exponential backoff, fall back to SDK/API. Complete examples for both paths are in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
 
 ### Operation: Describe Events (List Operation Events)
 
@@ -200,26 +200,6 @@ jdc --output json audit describe-events \
   --page-size 50
 ```
 
-#### Pre-flight: Configure jdc Config File for Sandbox
-
-Before running any `jdc` command in sandboxed environments, ensure the config file exists:
-
-```bash
-# Setup jdc config in a writable location (sandbox-safe)
-export HOME=/tmp/jdc-home
-mkdir -p /tmp/jdc-home/.jdc
-cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
-[{{user.profile_name|default:"default"}}]
-access_key = {{env.JDC_ACCESS_KEY}}
-secret_key = {{env.JDC_SECRET_KEY}}
-region_id = {{user.region}}
-endpoint = audit.jdcloud-api.com
-scheme = https
-timeout = 20
-CONFIGEOF
-printf "%s" "default" > /tmp/jdc-home/.jdc/current
-```
-
 #### Execution (SDK Fallback — after 3 jdc failures)
 
 ```python
@@ -228,7 +208,7 @@ from jdcloud_sdk.core.credential import Credential
 from jdcloud_sdk.services.audit.client.AuditClient import AuditClient
 from jdcloud_sdk.services.audit.apis.DescribeEventsRequest import DescribeEventsRequest, DescribeEventsParameters
 
-credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
+credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
 client = AuditClient(credential)
 
 params = DescribeEventsParameters(
@@ -284,7 +264,7 @@ else:
 | `InvalidParameter` / 400 | 0–1 | — | Fix args per OpenAPI; retry once |
 | `InvalidTimeRange` | 0 | — | Inform user of valid time range limits |
 | Throttling / 429 | 3 | exponential | Back off; respect Retry-After |
-| `InternalError` / 5xx | 3 | 2s, 4s, 8s | Retry; HALT with requestId if persists |
+| `InternalError` / 500 | 3 | 2s, 4s, 8s | Retry; HALT with requestId if persists |
 
 ### Operation: Describe Event Detail (Get Single Event Details)
 
@@ -382,19 +362,83 @@ else:
 | Create Time | `$.result.trails[*].createTime` | ISO 8601 formatted |
 | Update Time | `$.result.trails[*].updateTime` | ISO 8601 formatted |
 
+## Quality Gate (GCL)
+
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this read-only skill (per
+> `AGENTS.md` §8).
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-audit-ops` (optional, read-only) |
+| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` (self) |
+| `safety_confirm_required` | **false** | read-only by definition |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │
+   ▼
+[1] Generator (G)            ──► jdc audit (primary) → SDK (after 3 fails)
+   │
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │
+   ▼
+[3] Orchestrator decider
+   ├─ Safety=0 / blocking   → ABORT
+   ├─ all pass              → RETURN
+   ├─ iter<5 & not all pass → RETRY (inject suggestions)
+   └─ iter=5 & not all pass → RETURN_BEST
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
+access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`describe-events`** (list operation events) — Time range + region +
+  filter MUST be explicit. Default time range = last 24h. Trace MUST
+  include page token if paginated.
+- **`describe-event-detail`** (get single event details) — Event id MUST
+  be explicit. **Sensitive fields in `requestParameters` MUST be
+  masked** (password, secret, accessKey, accessKeySecret, privateKey →
+  `***` or SHA-256 prefix). Unmasked sensitive data → Safety = 0 → ABORT.
+- **`describe-trails`** (list audit trails) — All trails visible to the
+  principal.
+
 ## Prerequisites
 
 > **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
 
-Environment setup follows a **jdc-first with fallback** strategy:
+Environment setup follows a **jdc-first with fallback** strategy. Complete setup guide is in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
+
+### Quick Setup Summary
 
 1. **Attempt `jdc` CLI setup** via `uv` (primary path)
-2. On failure, **retry up to 3 times** with exponential backoff (0s → 2s → 4s)
+2. On failure, **retry up to 3 times** with exponential backoff
 3. After **3 consecutive failures**, fall back to **SDK-only** setup
 
 ### Python Runtime (uv)
 
-Both `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management:
+Both `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
 
 **Install uv (system-wide, one-time per machine):**
 ```bash
@@ -406,100 +450,19 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### Phase 1: jdc CLI Setup (Primary Path)
+### Configure Credentials
 
-```bash
-# Create and activate virtual environment (idempotent)
-uv venv --python 3.10
-source .venv/bin/activate
-
-# Install jdc CLI and SDK
-uv pip install jdcloud_cli jdcloud_sdk
-
-# Verify
-jdc --version
-python -c "import jdcloud_sdk; print('SDK OK')"
-```
-
-#### Retry Logic (Up to 3 Attempts)
-
-If `jdc --version` or any `jdc` command fails:
-
-```bash
-# Retry 1: re-run pip install
-uv pip install jdcloud_cli jdcloud_sdk
-jdc --version && echo "OK" || echo "FAIL"
-
-# Retry 2 (wait 2s)
-sleep 2
-uv pip install --force-reinstall jdcloud_cli
-jdc --version && echo "OK" || echo "FAIL"
-
-# Retry 3 (wait 4s)
-sleep 4
-uv pip install --force-reinstall jdcloud_cli jdcloud_sdk
-jdc --version && echo "OK" || echo "FAIL"
-```
-
-If all **3 retries** fail, proceed to **Phase 2: SDK Fallback**.
-
-### Phase 2: SDK Fallback (After 3 jdc Failures)
-
-```bash
-uv venv --python 3.10
-source .venv/bin/activate
-uv pip install jdcloud_sdk
-python -c "import jdcloud_sdk; print('SDK OK')"
-```
-
-### Configure jdc Credentials (Sandbox-Safe)
-
-**CRITICAL**: The `jdc` CLI does NOT read `JDC_ACCESS_KEY` / `JDC_SECRET_KEY` environment variables. It reads credentials exclusively from `~/.jdc/config` (INI format). In sandboxed environments where `~` is not writable, follow these steps:
-
-```bash
-# 1. Set HOME to a writable location
-export HOME=/tmp/jdc-home
-
-# 2. Pre-create the config directory and files
-mkdir -p /tmp/jdc-home/.jdc
-
-cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
-[default]
-access_key = {{env.JDC_ACCESS_KEY}}
-secret_key = {{env.JDC_SECRET_KEY}}
-region_id = {{user.region}}
-endpoint = audit.jdcloud-api.com
-scheme = https
-timeout = 20
-CONFIGEOF
-
-# 3. Write current profile WITHOUT trailing newline
-printf "%s" "default" > /tmp/jdc-home/.jdc/current
-
-# 4. Run jdc with --output json at TOP level
-jdc --output json audit describe-events --region-id {{user.region}} --start-time ...
-```
-
-### Configure Credentials for SDK (Environment Variables)
-
-SDK reads credentials from environment variables — no config file needed:
-
-```bash
-export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-export JDC_REGION="cn-north-1"
-```
-
-> Security: Never commit `.env` files to version control.
+**CRITICAL**: The `jdc` CLI reads credentials exclusively from `~/.jdc/config` (INI format). The SDK reads from environment variables. Complete credential setup guide is in [CLI Usage](references/cli-usage.md).
 
 ## Reference Directory
 
-- [Core Concepts](references/core-concepts.md)
-- [API & SDK Usage](references/api-sdk-usage.md)
-- [CLI Usage](references/cli-usage.md)
-- [Troubleshooting Guide](references/troubleshooting.md)
-- [Monitoring & Alerts](references/monitoring.md)
-- [Integration](references/integration.md)
+- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Quick reference for users
+- [Core Concepts](references/core-concepts.md) - Detailed audit log concepts
+- [API & SDK Usage](references/api-sdk-usage.md) - Complete API/SDK documentation
+- [CLI Usage](references/cli-usage.md) - Complete CLI command reference
+- [Troubleshooting Guide](references/troubleshooting.md) - Detailed troubleshooting
+- [Monitoring & Alerts](references/monitoring.md) - Monitoring setup
+- [Integration](references/integration.md) - Integration guide
 
 ## Operational Best Practices
 

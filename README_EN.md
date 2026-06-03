@@ -345,6 +345,19 @@ If you're new to this project, refer to [QUICK_START_EN.md](QUICK_START_EN.md) f
 
 1. Fork 2. Create Skill directory 3. Follow guide to write 4. Submit PR
 
+### Commit & PR conventions
+
+- **Commit messages** follow [Conventional Commits](https://www.conventionalcommits.org/)
+  (`feat` / `fix` / `docs` / `refactor` / `test` / `chore` / `security`).
+  A full template lives in [`.gitmessage.txt`](.gitmessage.txt).
+  Enable it: `git config commit.template .gitmessage.txt`.
+- **PR descriptions** use the GitHub PR template
+  ([`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)).
+  If your PR modifies a `SKILL.md`, you MUST complete the
+  GCL checklist in the template.
+- **New-skill GCL onboarding** uses the issue template
+  ([`.github/ISSUE_TEMPLATE/gcl-rollout.md`](.github/ISSUE_TEMPLATE/gcl-rollout.md)).
+
 ---
 
 See [jdcloud-vm-ops](jdcloud-vm-ops/) as example.
