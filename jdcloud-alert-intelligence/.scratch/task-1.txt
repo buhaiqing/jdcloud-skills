@@ -1,0 +1,100 @@
+# Task 1: 规则层统一（v0.1 三条核心规则 R1/R2/R3）
+
+## 范围
+
+修改 5 个文件,把 v0.1 三条核心规则 (R1 抑制降档 / R2 频次 / R3 业务 tag) 统一到
+core-concepts.md §1.4 作为唯一权威源。
+
+## 决策摘要
+
+| 规则 | 决策 |
+|---|---|
+| R1 抑制降档 | **两段式**: 维护窗/周期性 降一档 (P0→P1→P2→P3); 已知误报清单 (5 类) 跨级豁免为 P3 |
+| R2 频次 | **次/小时口径**: low<3, mid 3-10, high>10; 时间窗默认 24h |
+| R3 业务 tag | **`business=core/important/general/peripheral`**, 缺省 general |
+
+## 改动摘要
+
+### 1. core-concepts.md
+- 在 §1.3 "服务代码" 之后**新增 §1.4 "核心约定 (Authority Source)"** (45 行)
+  - 业务影响等级 (R3): 4 个固定取值 + 缺省 general
+  - 频次维度 (R2): 计算公式 + 三档阈值
+  - 抑制降档 (R1): 两段式 + 约束
+  - 5 类已知误报清单: 全部 P3
+  - 包含"历史版本已废弃"提示,说明旧版"滚动重启/CD 流量回切降 P2"被取代
+- 修复了 §1.3 编号重复 (插入新章节后产生 `### 2.1` 重复标题,已修正)
+
+### 2. severity-matrix.md
+- §1.1 三维判定: 频次 F1=1次/F2=2-5次 改为 `low/mid/high` 次/小时; 加权威源引用
+- §2 业务影响等级: `business_criticality` → `business`, `normal/edge` → `general/peripheral`
+- §1.3 完整判定矩阵: F4 高频抖动 → `high` 频次; F1-F3 → `low`/`mid` 频次
+- §8 抑制降档规则: 旧"逐级降"表 + "部分降 P3" 全部替换为 R1 两段式 + 权威源引用
+- §8.1 升档规则: F4 → `high` 频次
+- §3-§7 边界 case: 残留的 F4 / business_criticality 全部改完
+- §7.1 §7.2 边界 case 表: F4 改为 `high` 频次
+
+### 3. suppression-rules.md
+- §1 总览表: 维护窗"过滤" → "降一档"; 已知误报"部分降 P2" → "跨级豁免到 P3"
+- §1 降档规则: 重写为 R1 两段式; 标注权威源
+- §2.2 Tag 格式: 把 `recurring:weekly:...` 风格**统一为 `maintenance_recurring` + cron**
+  - 简化: cron 范围 `M H * * *` (仅小时+分钟), 持续 2h
+  - 移除 ISO8601 duration 后缀 (`/PT2H`)
+- §3 周期性: 频次口径已统一 (未发现旧 F1-F4 残留)
+- §4.3 §4.4 滚动重启/CD 流量回切: "→ P2" 改为 "→ P3" (v0.1 统一跨级豁免)
+- §4.6 汇总表: 3/4 行的 "P2" 改为 "P3" (1/2/5 原本就是 P3)
+- §5 决策流程图 mermaid: "滚动重启/CD回切 → P2" 分支删除, 统一到 "命中 → P3 跨级豁免"
+- §9 一句话总结: 更新为 R1 两段式
+
+### 4. playbook-suppress.md
+- §1 抑制总流程: 维护窗/周期性"`severity = P3`" → "`severity = _demote_one()`"; 已知误报保留 P3
+- §1 降档规则表: 替换为 R1 两段式 (维护窗 -1 档, 已知误报 → P3 跨级豁免)
+- §3.1 jdc 命令: `--alarm-ids '["..."]'` → `--alarm-id alarm-xxx` (单数); 加 v0.1 限制注释
+  - (注: 之前的并行任务 task-2 已先于本任务完成了此修改, 我做了**复核确认**)
+- §5 `suppress_cluster()` 主函数: 三个分支的 `severity = "P3"` 改为分别处理
+  - 维护窗: `_demote_one(severity)`
+  - 周期性: `_demote_one(severity)`
+  - 已知误报: `"P3"` (跨级豁免)
+- §5 新增 `_demote_one()` 辅助函数 + 权威源注释
+- §5 函数 docstring: 标注 R1 权威源
+- §6 审计要求: 更新 `original_p0_to_p3_count` 的语义 (现在仅误报命中时发生)
+
+### 5. playbook-classify.md
+- §2.2 / §2.3 业务 tag: 已经是 R3 格式 (复核确认, 无改动)
+- §5 `classify_cluster()` docstring: 新增权威源注释 (§1.4 R2/R3)
+- §7 协同顺序表: P0 命中已知误报 "降 P2" → "降 P3 跨级豁免"; P2 命中已知误报 "过滤" → "降 P3"
+- §7 关键约束: "P0 永不被过滤" 改为 "P0 不会跳到 P3 (除已知误报豁免)"; 加权威源引用
+- §6 边界 case 决策表: 复核, 无 F1/F2 残留 (无改动)
+
+## 验证清单 (14 项全部通过)
+
+| # | 项 | 结果 |
+|---|---|:--:|
+| 1 | core-concepts.md 新增 §1.4 "核心约定" | ✅ |
+| 2 | severity-matrix.md 中 `business_criticality` 计数 = 0 | ✅ |
+| 3 | severity-matrix.md §1.1 频次改为次/小时 | ✅ |
+| 4 | suppression-rules.md §4.6 5 类误报全部 P3 | ✅ |
+| 5 | suppression-rules.md §2.2 `maintenance_recurring` + cron | ✅ |
+| 6 | playbook-suppress.md §1 表格正确 (维护窗-1档, 误报→P3) | ✅ |
+| 7 | playbook-suppress.md §4 5 类误报 P3 (无 P2 残留) | ✅ |
+| 8 | playbook-suppress.md `--alarm-id` 单数 (0 个 `--alarm-ids`) | ✅ |
+| 9 | playbook-classify.md §2 业务 tag R3 格式 | ✅ |
+| 10 | playbook-classify.md §5 权威源注释 | ✅ |
+| 11 | 全局 `business_criticality` = 0 | ✅ |
+| 12 | 全局 `alarm-ids` (复数) = 0 | ✅ |
+| 13 | 全局 `F1=1次/F2=2-5` = 0 | ✅ |
+| 14 | 全局"误报清单 → P2" = 0 (历史废弃提示除外) | ✅ |
+
+## 已知遗留 (供下游参考, 不在本任务范围)
+
+- `examples.md` (其他并行任务产物) 第 581 行引用 `core-concepts.md §1.3`, 应改为 `§1.4`
+  - §1.3 现在是 "服务代码", §1.4 才是 "核心约定"
+  - 不在本任务范围 (task-2 负责 examples.md)
+- SKILL.md § 委派规则 / 触发范围 与本任务不冲突, 未改动
+
+## 未触动的 (按 §5 范围外)
+
+- SKILL.md: 未改
+- examples.md: 未改 (其他 agent 负责)
+- cli-usage.md: 未改 (I1 瘦身留给 v0.1.1)
+- I3/I5/I6/I7 (sha1/sha256, P0 永不被过滤, 降级一词两义, 查表实现): 未改, 留给 v0.1.1
+- 文件位置/章节顺序: 未改

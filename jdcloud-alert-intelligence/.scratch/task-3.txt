@@ -1,0 +1,35 @@
+Task 3 完成报告
+================
+
+✅ examples.md 创建完成 (499 行) + SKILL.md B4 修复完成
+
+## 交付物
+- 新建: /Users/bohaiqing/opensource/jdcloud-skills/jdcloud-alert-intelligence/references/examples.md (499 行)
+- 修改: /Users/bohaiqing/opensource/jdcloud-skills/jdcloud-alert-intelligence/SKILL.md
+  - 在 references 索引表下方新增一行: `> ✅ v0.1.0 起 examples.md 已就绪，含 5 个端到端场景。` (line 253)
+  - SKILL.md 总行数: 260 → 262 行（仍 ≤300）
+
+## examples.md 结构
+- 5 个端到端场景: ①24h 压测 ②周报生成 ③告警风暴 ④周期性诊断 ⑤跨服务故障
+- 每个示例 6 段: ①用户问题 ②入参 ③Step 1 拉取 ④Step 2-4 处理 ⑤Step 5 报告 ⑥下一跳
+- 末尾: 5 示例对照表 + 引用映射 + 使用建议
+
+## 规则口径验证（任务 §3 R1/R2/R3）
+- R1 抑制两段式: 7 处"降一档"（维护窗/周期性） + 2 处"统一降 P3"/"一律降 P3"（已知误报）
+- R2 频次: 4 次"次/h" 频次计算
+- R3 业务 tag: 7 处 `business=core|important|general|peripheral`，0 处旧 `business_criticality`
+- R4 聚合键: 5 个示例均使用 `(service_code, resource_id, metric_name)` 三元组
+- R5 jdc 命令: `--output json` 前置 ✅，0 处 `--no-interactive` ✅
+
+## 行数压缩过程
+- 初版 621 行（超 38%）
+- 精简 "目录" "附录对照表" "使用建议" 三块 → 585 行（仍超 17%）
+- 精简每示例的"入参"表格与 JSON 片段 → 499 行（达标）
+
+## 已知遗留冲突（不在本任务范围，下游批次 1 其他子任务处理）
+- severity-matrix.md §2 仍用旧 `business_criticality=core`（R3 未同步）
+- playbook-suppress.md §3.4 仍按"周期性一律 P3"（R1 未同步）
+- examples.md 按 R1/R2/R3 目标态编写，批次 1 完成后将自动一致
+
+## 失败项
+无

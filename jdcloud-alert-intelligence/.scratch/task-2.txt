@@ -1,0 +1,39 @@
+Task: 分散冲突 surgical 修复 (6 项)
+执行 agent: worker (forked context)
+完成时间: 2026-06-03
+
+## 修复摘要
+
+| # | 编号 | 范围 | 文件:行 | 修复内容 |
+|---|---|---|---|---|
+| 1 | I3 | core-concepts.md:197 | fingerprint 描述 sha256 → sha1(...).hexdigest()[:12] |
+| 2 | I4 | suppression-rules.md §2.1 | `recurring:weekly:` → `maintenance_recurring=0 2 * * 6/PT2H` cron 格式 |
+| 3 | I6 | SKILL.md:51, 230 | "SDK/API 降级" → "fallback"；"可降级" → "可 fallback" |
+| 4 | I6 | core-concepts.md:187-189 | 新增术语约定小节：降级 (Demote) vs fallback |
+| 5 | B5 | playbook-suppress.md:138-139 | `--alarm-ids '["..."]'` → `--alarm-id "alarm-xxx"` + v0.1 限制注释 |
+| 6 | B5 | cli-usage.md:277-296 | 新增"v0.1 限制: alarm-id 单数"小节 |
+| 7 | I5 | cli-usage.md:480 | "降级到 1d 聚合" → "fallback 到 1d 聚合" |
+| 8 | 凭证链路 | SKILL.md:127-131 | 新增凭证加载链路说明小节 |
+
+## §4 验证清单（全部通过）
+
+- [x] core-concepts.md fingerprint 算法改为 `sha1(...).hexdigest()[:12]`
+- [x] playbook-aggregate.md 哈希代码与 core-concepts.md 一致（已校对：playbook-aggregate.md:43 原本就是 `hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]`，未动）
+- [x] suppression-rules.md 循环维护窗示例改为 cron 格式
+- [x] SKILL.md 中"jdc 失败回退"上下文统一用"fallback"
+- [x] core-concepts.md 增加了"降级" vs "fallback" 的术语注释
+- [x] playbook-suppress.md `--alarm-ids` 改为 `--alarm-id`
+- [x] cli-usage.md 增加了 v0.1 限制说明小节
+- [x] SKILL.md 增加了凭证加载链路说明
+
+## 范围外（其他 agent 负责 / 已知不动）
+
+- §1.3 核心约定（任务 §6 明确不动）
+- SKILL.md 章节顺序
+- suppression-rules.md §2.3 中"维护窗内告警一律过滤"（属 §1.3 范围，需 B1=A 决策带动调整；保留原样待 §1.3 修复时联动）
+- severity-matrix.md 频次口径（属 §1.3）
+- 业务 tag 命名（属 §1.3）
+
+## 结果
+
+✅ 分散冲突修复完成，已通过 §4 全部 8 项验证（含 1 项隐藏项 #7 cli-usage.md:480）

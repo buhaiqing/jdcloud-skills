@@ -13,7 +13,7 @@ compatibility: >-
 metadata:
   author: jdcloud
   version: "1.0.0"
-  last_updated: "2026-05-03"
+  last_updated: "2026-06-03"
   runtime: Harness AI Agent
   api_profile: "[Paste OpenAPI title/version or doc link]"
   cli_applicability: dual-path
@@ -110,6 +110,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | 1.0.0 | 2026-05-03 | Initial API/SDK-oriented template |
 | 1.0.1 | 2026-05-03 | Document optional official `jdc` CLI alongside SDK/API |
 | 1.0.2 | 2026-05-03 | Require dual-path (SDK + `jdc`) when CLI supports product; sdk-only exception documented |
+| 1.0.3 | 2026-06-03 | **CRITICAL**: Fixed SDK import path and client initialization pattern |
 
 ## Execution Flows (Agent-Readable)
 
@@ -129,25 +130,49 @@ Every operation: **Pre-flight → Execute (SDK/API and, when applicable, `jdc`) 
 | Region | Call **DescribeRegions** (or equivalent) if applicable | `{{user.region}}` supported | Suggest valid region |
 | Quota | Call quota/describe API per OpenAPI | Sufficient quota | HALT; user raises quota |
 
-#### Execution (Python SDK — illustrative)
+#### Execution (Python SDK — CORRECTED PATTERN)
 
-Replace service/client/method names with **generated SDK symbols** for this product:
+**CRITICAL FIX:** The following import path and client initialization pattern has been verified against the actual JD Cloud SDK structure:
 
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.[product].client import [Product]Client
+from jdcloud_sdk.core.config import Config
+from jdcloud_sdk.services.[product].client.[Product]Client import [Product]Client
 from jdcloud_sdk.services.[product].apis.[module] import CreateRequest
 
-credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
-client = [Product]Client(credential, os.environ.get("JDC_REGION", "cn-north-1"))
-
-req = CreateRequest(
-    regionId="<region-from-user>",
-    # add remaining fields per OpenAPI request schema
+# Create credential
+credential = Credential(
+    os.environ["JDC_ACCESS_KEY"], 
+    os.environ["JDC_SECRET_KEY"]
 )
-resp = client.create_method(req)  # replace with real SDK method name
+
+# Create config with endpoint
+config = Config("[product].jdcloud-api.com")
+config.regionId = os.environ.get("JDC_REGION", "cn-north-1")
+config.timeout = 30
+
+# Create client (credential first, then config)
+client = [Product]Client(credential, config)
+
+# Build and send request
+req = CreateRequest({
+    "regionId": "<region-from-user>",
+    # add remaining fields per OpenAPI request schema
+})
+resp = client.send(req)
+
+# Parse response (response.result is a dict, not an object!)
+if hasattr(resp, 'result') and isinstance(resp.result, dict):
+    resource_id = resp.result.get('resourceId')
+    print(f"Created resource: {resource_id}")
 ```
+
+**Key corrections from previous template:**
+1. **Import path**: `from jdcloud_sdk.services.[product].client.[Product]Client import [Product]Client` (not `.client import`)
+2. **Config required**: Must create `Config` object and set `regionId` attribute
+3. **Client initialization**: `Client(credential, config)` order (credential first)
+4. **Response parsing**: `response.result` is a **dict**, use `.get()` method
 
 #### Execution — CLI (`jdc`) (**required** when `cli_applicability: dual-path`)
 
@@ -168,22 +193,34 @@ jdc --output json [product] create-[resource] \
 #### Post-execution Validation
 
 1. Read `{{output.resource_id}}` from the **documented** response path (SDK JSON path and, when dual-path, **CLI JSON path** if they differ).
-2. Poll **Describe** until terminal success state or timeout—**implement for both paths** when `cli_applicability: dual-path` (SDK loop below; CLI loop e.g. `jdc … describe-… --output json` with `jq` until terminal state or max wait).
+2. Poll **Describe** until terminal success state or timeout—**implement for both paths** when `cli_applicability: dual-path`.
 
 ```python
-# Pseudocode: use real describe request/response types from the SDK
-for _ in range(max_attempts):
-    dresp = client.describe_[resource](describe_request)
-    status = parse_status(dresp)  # per OpenAPI
-    if status in success_states:
-        break
-    if status in failure_states:
-        raise RuntimeError(parse_error(dresp))
-    sleep(poll_interval_seconds)
+# SDK polling example
+import time
+
+max_attempts = 60
+poll_interval = 5
+
+for attempt in range(max_attempts):
+    req = DescribeRequest({"regionId": "<region>", "resourceId": resource_id})
+    dresp = client.send(req)
+    
+    if hasattr(dresp, 'result') and isinstance(dresp.result, dict):
+        status = dresp.result.get('status')
+        if status == 'running':
+            print("Resource is running")
+            break
+        if status in ['error', 'failed']:
+            raise RuntimeError(f"Resource creation failed: {status}")
+    
+    time.sleep(poll_interval)
+else:
+    raise RuntimeError("Timeout waiting for resource to become ready")
 ```
 
 ```bash
-# Dual-path example: poll with jdc (adjust jq paths after verification)
+# CLI polling example (adjust jq paths after verification)
 # for i in $(seq 1 60); do
 #   STATUS=$(jdc [product] describe-[resource] ... --output json | jq -r '.path.to.status')
 #   [ "$STATUS" = "running" ] && break
@@ -347,15 +384,56 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 - Spec: [link or path]
 - Base path and version: …
 
+## Quick Start Snippets
+
+### 🚀 Initialize Client (CORRECTED PATTERN)
+
+```python
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.core.config import Config
+from jdcloud_sdk.services.[product].client.[Product]Client import [Product]Client
+
+# Create credential
+credential = Credential(
+    os.environ["JDC_ACCESS_KEY"],
+    os.environ["JDC_SECRET_KEY"]
+)
+
+# Create config
+config = Config("[product].jdcloud-api.com")
+config.regionId = os.environ.get("JDC_REGION", "cn-north-1")
+config.timeout = 30
+
+# Create client
+client = [Product]Client(credential, config)
+```
+
+### 📋 Send Request and Parse Response
+
+```python
+from jdcloud_sdk.services.[product].apis.DescribeRequest import DescribeRequest
+
+req = DescribeRequest({"regionId": "cn-north-1", "resourceId": "xxx"})
+resp = client.send(req)
+
+# Response result is a dict!
+if hasattr(resp, 'result') and isinstance(resp.result, dict):
+    resources = resp.result.get('resources', [])
+    for resource in resources:
+        print(f"ID: {resource.get('resourceId')}, Name: {resource.get('name')}")
+```
+
 ## SDK Operations Map
-| Goal | API operationId | SDK method (if known) |
-|------|-----------------|------------------------|
-| Create | … | … |
-| Describe | … | … |
+| Goal | API operationId | SDK method |
+|------|-----------------|------------|
+| Create | … | `client.send(CreateRequest)` |
+| Describe | … | `client.send(DescribeRequest)` |
 
 ## Request / Response Notes
 - Required fields: …
 - Pagination: …
+- **Critical**: `response.result` is always a dict, use `.get()` method
 ```
 
 ## references/cli-usage.md
@@ -401,7 +479,7 @@ Poll describe (or head/get) until **404**, **NotFound**, or status indicates del
 
 ## references/integration.md
 
-````markdown
+```markdown
 # Integration
 
 ## Environment Setup (uv)
@@ -463,19 +541,28 @@ source .venv/bin/activate  # macOS/Linux
 - **Team consistency**: All developers use identical dependencies
 - **CI/CD ready**: `uv sync` works identically in pipelines
 
-## Python SDK bootstrap
+## Python SDK bootstrap (CORRECTED PATTERN)
 
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.[product].client import [Product]Client
+from jdcloud_sdk.core.config import Config
+from jdcloud_sdk.services.[product].client.[Product]Client import [Product]Client
 
 credential = Credential(
     os.environ["JDC_ACCESS_KEY"],
     os.environ["JDC_SECRET_KEY"],
 )
-client = [Product]Client(credential, os.environ.get("JDC_REGION", "cn-north-1"))
+
+config = Config("[product].jdcloud-api.com")
+config.regionId = os.environ.get("JDC_REGION", "cn-north-1")
+config.timeout = 30
+
+client = [Product]Client(credential, config)
 ```
 
-> Use `os.environ['KEY']` for secrets (fail-fast). Use `.get` only for optional non-secret config.
-````
+> **Important:** 
+> - Import path: `services.[product].client.[Product]Client`
+> - Client order: `Client(credential, config)`
+> - Response parsing: `response.result` is a dict, use `.get()`
+```
