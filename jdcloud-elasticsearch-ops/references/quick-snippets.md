@@ -328,7 +328,7 @@ if non_compliant:
         "summary": summary,
         "description": report,
         "operator": "zhoulu",
-        "assignee": "zhoulu",
+        "assignee": "xuhao",
         "labels": "标签合规,主动巡检,Elasticsearch",
         "department": "产研中心-运维部"
     }

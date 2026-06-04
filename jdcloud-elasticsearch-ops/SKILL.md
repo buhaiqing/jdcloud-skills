@@ -12,7 +12,7 @@ compatibility: >-
   access to JD Cloud endpoints. This product is NOT supported by the `jdc` CLI;
   SDK/API is the only execution path.
 metadata:
-  author: jdcloud
+  author: buhaiqing
   version: "2.2.0"
   last_updated: "2026-06-04"
   runtime: Harness AI Agent

@@ -12,7 +12,7 @@ compatibility: >-
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`) when this
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
-  author: jdcloud
+  author: buhaiqing
   version: "1.2.0"
   last_updated: "2026-06-04"
   runtime: Harness AI Agent

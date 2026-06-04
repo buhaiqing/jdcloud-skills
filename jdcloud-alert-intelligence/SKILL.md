@@ -13,7 +13,7 @@ compatibility: >-
   jdc CLI 1.2.12+; 京东云账户已开通云监控;
   已配置 JDC_ACCESS_KEY / JDC_SECRET_KEY / JDC_REGION。
 metadata:
-  author: jdcloud
+  author: buhaiqing
   version: "0.2.0"
   last_updated: "2026-06-04"
   runtime: Harness AI Agent

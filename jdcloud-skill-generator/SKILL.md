@@ -16,7 +16,7 @@ compatibility: >-
   `references/governance-and-adversarial-review.md`, and agentskills.io
   frontmatter conventions.
 metadata:
-  author: jdcloud
+  author: buhaiqing
   version: "1.6.0"
   last_updated: "2026-06-04"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes

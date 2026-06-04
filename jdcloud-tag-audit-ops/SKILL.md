@@ -9,7 +9,7 @@ compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
 metadata:
-  author: jdcloud
+  author: buhaiqing
   version: "1.5.0"
   last_updated: "2026-06-04"
   runtime: Harness AI Agent
