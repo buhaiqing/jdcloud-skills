@@ -159,7 +159,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.2.0 | 2026-06-05 | **Added Describe Slow Logs operation**: New Operation block for `describeSlowLogs` — query slow query summaries by time range via jdc CLI (primary) and Python SDK (fallback). Supports pagination, filtering (account/keyword), sorting (execution metrics). Updated `references/cli-usage.md`, `references/api-sdk-usage.md`, `references/monitoring.md`, `references/rubric.md`, and `references/prompt-templates.md` with full slow log documentation. |
+| 1.2.0 | 2026-06-05 | **Added Describe Slow Logs operations**: (1) `describeSlowLogs` — query slow query summaries by time range for single instance. (2) `describeSlowLogsByTags` — two-phase composite operation: filter instances by tags (环境=生产, 客户=xxx), then parallel query slow logs across all matching instances. Both support pagination, filtering (account/keyword), sorting (execution metrics), with safety guards (max_instances limit, parallel execution control). |
 | 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DDL/DML paths, op-specific overrides including storage shrink and SQL `WHERE` check) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, DDL `DROP`/`TRUNCATE`, DML `UPDATE`/`DELETE` without WHERE. |
 | 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
 
@@ -481,15 +481,514 @@ jdc --output json rds describe-slow-logs \
   --page-size 20
 ```
 
+### Operation: Describe MySQL Slow Logs by Tags
+
+> 按标签过滤 MySQL 实例，并查询符合条件的实例在指定时段的慢日志。这是一个组合操作：先按标签查找实例，再并行查询每个实例的慢日志。
+
+#### Pre-flight Checks
+
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| CLI / deps | `jdc --version` | Exit code 0 | Retry up to 3 times; then fall back to SDK |
+| SDK / deps | `import jdcloud_sdk.services.rds.client.RdsClient` | No import error | Document install pin (fallback path) |
+| Credentials | Construct credential from env or CLI config | Non-empty keys | HALT; user configures env |
+| Tag filters | Validate user input | At least one tag filter provided | HALT; require at least one tag condition |
+| Time window validation | Parse user input | Start time ≤ End time, duration ≤ 7 days | Suggest valid time range |
+
+#### Input Variables
+
+| Variable | Required | Format | Example | Description |
+|----------|----------|--------|---------|-------------|
+| `{{user.region}}` | yes | string | `cn-north-1` | Region ID |
+| `{{user.tag_filters}}` | yes | array | `[{"name":"tag:环境","operator":"eq","values":["生产"]},{"name":"tag:客户","operator":"eq","values":["xxx"]}]` | 实例标签过滤条件 |
+| `{{user.start_time}}` | yes | `YYYY-MM-DD HH:mm:ss` | `2026-06-01 00:00:00` | 查询开始时间 |
+| `{{user.end_time}}` | yes | `YYYY-MM-DD HH:mm:ss` | `2026-06-03 23:59:59` | 查询结束时间 |
+| `{{user.page_number}}` | no | int | `1` | 页码,默认 1 |
+| `{{user.page_size}}` | no | int | `10` | 每页条数,范围[10,100],默认 10 |
+| `{{user.slowlog_filters}}` | no | array | `[{"name":"account","operator":"eq","values":["root"]}]` | 慢日志过滤条件(账号/关键词) |
+| `{{user.sorts}}` | no | array | `[{"name":"executionTimeSum","direction":"DESC"}]` | 排序字段 |
+| `{{user.max_instances}}` | no | int | `10` | 最大查询实例数(防止过多),默认 10 |
+
+> **Time window constraint:** 开始时间到当前时间不能大于 **7 天**,开始时间不能大于结束时间。
+
+> **Tag filter format:** `{"name": "tag:<tag_key>", "operator": "eq|in", "values": ["value1", "value2"]}`
+
+#### Execution Flow
+
+这是一个**两阶段组合操作**：
+
+**阶段 1: 按标签查找实例** → **阶段 2: 并行查询慢日志** → **阶段 3: 聚合结果**
+
+#### Phase 1: 按标签查找 MySQL 实例
+
+##### Execution — CLI (`jdc`) [Primary Path]
+
+```bash
+# 按标签过滤查找 MySQL 实例
+jdc --output json rds describe-instances \
+  --region-id "{{user.region}}" \
+  --filters '{{user.tag_filters}}' \
+  --page-number 1 \
+  --page-size 100
+
+# 示例: 环境=生产, 客户=xxx
+jdc --output json rds describe-instances \
+  --region-id cn-north-1 \
+  --filters '[{"name":"tag:环境","operator":"eq","values":["生产"]},{"name":"tag:客户","operator":"eq","values":["xxx"]}]' \
+  --page-number 1 \
+  --page-size 100
+```
+
+##### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.rds.apis.DescribeInstancesRequest import DescribeInstancesRequest, DescribeInstancesParameters
+
+params = DescribeInstancesParameters(regionId="{{user.region}}")
+
+# 设置标签过滤器
+filters = [
+    {"name": "tag:环境", "operator": "eq", "values": ["生产"]},
+    {"name": "tag:客户", "operator": "eq", "values": ["xxx"]}
+]
+params.setFilters(filters)
+params.setPageNumber(1)
+params.setPageSize(100)
+
+req = DescribeInstancesRequest(parameters=params)
+resp = client.send(req)
+
+# 提取 MySQL 实例列表
+instances = [
+    inst for inst in resp.result.get("instances", [])
+    if inst.get("engine") == "MySQL"
+]
+instance_ids = [inst["instanceId"] for inst in instances]
+
+print(f"Found {len(instance_ids)} MySQL instances matching tags: {instance_ids}")
+```
+
+##### Phase 1 Output JSON Paths
+
+| Field | JSON Path | Type | Description |
+|-------|-----------|------|-------------|
+| Total count | `$.result.totalCount` | int | 符合条件的实例总数 |
+| Instances array | `$.result.instances` | array | 实例列表 |
+| Instance ID | `$.result.instances[*].instanceId` | string | 实例ID |
+| Engine | `$.result.instances[*].engine` | string | 数据库引擎(MySQL) |
+| Instance Name | `$.result.instances[*].instanceName` | string | 实例名称 |
+| Tags | `$.result.instances[*].tags` | array | 实例标签列表 |
+
+#### Phase 2: 并行查询每个实例的慢日志
+
+> **Safety guard:** 如果匹配的实例数 > `{{user.max_instances}}`，必须向用户确认是否继续。
+
+##### Execution — CLI (`jdc`) [Primary Path]
+
+```bash
+# 对每个实例并行执行(使用 subshell/background)
+for instance_id in {{output.instance_ids}}; do
+  jdc --output json rds describe-slow-logs \
+    --region-id "{{user.region}}" \
+    --instance-id "$instance_id" \
+    --start-time "{{user.start_time}}" \
+    --end-time "{{user.end_time}}" \
+    --filters '{{user.slowlog_filters}}' \
+    --sorts '{{user.sorts}}' \
+    --page-number {{user.page_number|default:1}} \
+    --page-size {{user.page_size|default:10}} > "slowlog_${instance_id}.json" &
+done
+wait
+
+# 合并结果
+cat slowlog_*.json | jq -s '{aggregated: map(.result.slowLogs[]) | sort_by(.executionTimeSum) | reverse}' > aggregated_slowlogs.json
+```
+
+##### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.rds.apis.DescribeSlowLogsRequest import DescribeSlowLogsRequest, DescribeSlowLogsParameters
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+
+def query_slow_logs_for_instance(instance_id, region, start_time, end_time, 
+                                  filters=None, sorts=None, page_number=1, page_size=10):
+    """Query slow logs for a single instance"""
+    params = DescribeSlowLogsParameters(
+        regionId=region,
+        instanceId=instance_id,
+        startTime=start_time,
+        endTime=end_time
+    )
+    params.setPageNumber(page_number)
+    params.setPageSize(page_size)
+    
+    if filters:
+        params.setFilters(filters)
+    if sorts:
+        params.setSorts(sorts)
+    
+    req = DescribeSlowLogsRequest(parameters=params)
+    resp = client.send(req)
+    
+    return {
+        "instance_id": instance_id,
+        "total_count": resp.result.get("totalCount", 0),
+        "slow_logs": resp.result.get("slowLogs", [])
+    }
+
+# 并行查询所有实例的慢日志
+results = []
+with ThreadPoolExecutor(max_workers=5) as executor:
+    future_to_instance = {
+        executor.submit(
+            query_slow_logs_for_instance,
+            instance_id,
+            "{{user.region}}",
+            "{{user.start_time}}",
+            "{{user.end_time}}",
+            {{user.slowlog_filters}},
+            {{user.sorts}},
+            {{user.page_number|default:1}},
+            {{user.page_size|default:10}}
+        ): instance_id for instance_id in instance_ids
+    }
+    
+    for future in as_completed(future_to_instance):
+        instance_id = future_to_instance[future]
+        try:
+            result = future.result()
+            results.append(result)
+        except Exception as e:
+            results.append({
+                "instance_id": instance_id,
+                "error": str(e),
+                "total_count": 0,
+                "slow_logs": []
+            })
+
+# 聚合结果
+aggregated = {
+    "query_info": {
+        "region": "{{user.region}}",
+        "tag_filters": {{user.tag_filters}},
+        "time_range": {"start": "{{user.start_time}}", "end": "{{user.end_time}}"},
+        "instances_queried": len(instance_ids),
+        "instances_with_slowlogs": sum(1 for r in results if r["total_count"] > 0)
+    },
+    "results": results,
+    "aggregated_slowlogs": []
+}
+
+# 跨实例聚合慢日志(按 SQL 模式合并)
+all_slowlogs = []
+for r in results:
+    for log in r["slow_logs"]:
+        log["instance_id"] = r["instance_id"]  # 添加实例标识
+        all_slowlogs.append(log)
+
+# 按执行时间总和排序
+aggregated["aggregated_slowlogs"] = sorted(
+    all_slowlogs, 
+    key=lambda x: x.get("executionTimeSum", 0), 
+    reverse=True
+)[:{{user.page_size|default:10}} * len(instance_ids)]
+
+print(json.dumps(aggregated, indent=2, ensure_ascii=False))
+```
+
+#### Phase 3: Post-execution Validation & Result Presentation
+
+```python
+# 验证每个实例的查询结果
+for result in results:
+    if "error" in result:
+        print(f"⚠️ Instance {result['instance_id']}: Query failed - {result['error']}")
+    else:
+        print(f"✅ Instance {result['instance_id']}: {result['total_count']} slow query patterns")
+
+# 汇总统计
+total_patterns = sum(r["total_count"] for r in results)
+total_instances_with_data = sum(1 for r in results if r["total_count"] > 0)
+
+print(f"\n📊 Summary:")
+print(f"   Total instances queried: {len(instance_ids)}")
+print(f"   Instances with slow queries: {total_instances_with_data}")
+print(f"   Total unique slow query patterns: {total_patterns}")
+```
+
+#### Output JSON Structure
+
+```json
+{
+  "query_info": {
+    "region": "cn-north-1",
+    "tag_filters": [
+      {"name": "tag:环境", "operator": "eq", "values": ["生产"]},
+      {"name": "tag:客户", "operator": "eq", "values": ["xxx"]}
+    ],
+    "time_range": {
+      "start": "2026-06-01 00:00:00",
+      "end": "2026-06-03 23:59:59"
+    },
+    "instances_queried": 3,
+    "instances_with_slowlogs": 2
+  },
+  "results": [
+    {
+      "instance_id": "rds-mysql-001",
+      "total_count": 15,
+      "slow_logs": [
+        {
+          "sql": "SELECT * FROM orders WHERE created_at > ?",
+          "executionCount": 120,
+          "executionTimeAvg": 1500,
+          "executionTimeMax": 3500,
+          "executionTimeSum": 180000,
+          "rowsExaminedSum": 500000,
+          "instance_id": "rds-mysql-001"
+        }
+      ]
+    },
+    {
+      "instance_id": "rds-mysql-002",
+      "total_count": 0,
+      "slow_logs": []
+    }
+  ],
+  "aggregated_slowlogs": [
+    {
+      "sql": "SELECT * FROM orders WHERE created_at > ?",
+      "executionCount": 120,
+      "executionTimeSum": 180000,
+      "rowsExaminedSum": 500000,
+      "instance_id": "rds-mysql-001"
+    }
+  ],
+  "top_queries_by_instance": {
+    "rds-mysql-001": [
+      {
+        "sql": "SELECT * FROM orders...",
+        "executionTimeSum": 180000
+      }
+    ]
+  }
+}
+```
+
+#### Present to User
+
+```
+MySQL Slow Logs by Tags Summary
+================================
+Tags: 环境=生产, 客户=xxx
+Time: 2026-06-01 00:00:00 ~ 2026-06-03 23:59:59
+Region: cn-north-1
+
+Instances Queried: 3
+Instances with Slow Queries: 2
+
+─────────────────────────────────────
+Instance: rds-mysql-001 (15 patterns)
+─────────────────────────────────────
+1. [120x] SELECT * FROM orders WHERE created_at > ?
+   Avg: 1500ms | Max: 3500ms | Total: 180000ms
+   Rows examined: 500000 | Lock time: 120ms
+
+2. [85x] UPDATE inventory SET stock = stock - ? WHERE sku = ?
+   Avg: 800ms | Max: 2000ms | Total: 68000ms
+   Rows examined: 85000 | Lock time: 450ms
+
+─────────────────────────────────────
+Instance: rds-mysql-002 (0 patterns)
+─────────────────────────────────────
+No slow queries found.
+
+─────────────────────────────────────
+Instance: rds-mysql-003 (8 patterns)
+─────────────────────────────────────
+1. [45x] DELETE FROM logs WHERE created_at < ?
+   Avg: 2200ms | Max: 5000ms | Total: 99000ms
+   Rows examined: 2000000 | Lock time: 800ms
+
+🔥 Top 3 Slowest Queries Across All Instances:
+1. [rds-mysql-001] SELECT * FROM orders... (180000ms total)
+2. [rds-mysql-003] DELETE FROM logs... (99000ms total)
+3. [rds-mysql-001] UPDATE inventory... (68000ms total)
+```
+
+#### Common Use Cases
+
+**Case 1: 查询生产环境所有客户的慢日志**
+```bash
+# 步骤1: 查找标签为 环境=生产 的所有 MySQL 实例
+INSTANCES=$(jdc --output json rds describe-instances \
+  --region-id cn-north-1 \
+  --filters '[{"name":"tag:环境","operator":"eq","values":["生产"]}]' \
+  | jq -r '.result.instances[] | select(.engine == "MySQL") | .instanceId')
+
+# 步骤2: 对每个实例查询最近24小时慢日志
+for id in $INSTANCES; do
+  echo "=== Instance: $id ==="
+  jdc --output json rds describe-slow-logs \
+    --region-id cn-north-1 \
+    --instance-id "$id" \
+    --start-time "$(date -d '1 day ago' '+%Y-%m-%d %H:%M:%S')" \
+    --end-time "$(date '+%Y-%m-%d %H:%M:%S')" \
+    --sorts '[{"name":"executionTimeSum","direction":"DESC"}]' \
+    --page-size 10
+done
+```
+
+**Case 2: Python SDK 完整示例**
+```python
+from jdcloud_sdk.services.rds.apis.DescribeInstancesRequest import DescribeInstancesRequest, DescribeInstancesParameters
+from jdcloud_sdk.services.rds.apis.DescribeSlowLogsRequest import DescribeSlowLogsRequest, DescribeSlowLogsParameters
+from concurrent.futures import ThreadPoolExecutor
+
+def query_slowlogs_by_tags(client, region_id, tag_filters, start_time, end_time, 
+                           slowlog_filters=None, sorts=None, max_instances=10):
+    """
+    按标签查询 MySQL 实例慢日志
+    
+    Args:
+        client: RdsClient instance
+        region_id: Region ID
+        tag_filters: List of tag filter dicts, e.g. [{"name": "tag:环境", "values": ["生产"]}]
+        start_time: Slow log start time (YYYY-MM-DD HH:mm:ss)
+        end_time: Slow log end time (YYYY-MM-DD HH:mm:ss)
+        slowlog_filters: Optional slow log filters (account/keyword)
+        sorts: Optional sort conditions
+        max_instances: Max instances to query (safety guard)
+    """
+    # Phase 1: Find instances by tags
+    params = DescribeInstancesParameters(regionId=region_id)
+    params.setFilters(tag_filters)
+    params.setPageNumber(1)
+    params.setPageSize(100)
+    
+    req = DescribeInstancesRequest(parameters=params)
+    resp = client.send(req)
+    
+    # Filter MySQL instances only
+    mysql_instances = [
+        inst for inst in resp.result.get("instances", [])
+        if inst.get("engine") == "MySQL"
+    ]
+    
+    if len(mysql_instances) > max_instances:
+        raise ValueError(f"Found {len(mysql_instances)} instances, exceeds max {max_instances}. "
+                        f"Please refine tag filters or increase max_instances.")
+    
+    instance_ids = [inst["instanceId"] for inst in mysql_instances]
+    print(f"Found {len(instance_ids)} MySQL instances: {instance_ids}")
+    
+    # Phase 2: Parallel query slow logs
+    def query_one(instance_id):
+        try:
+            p = DescribeSlowLogsParameters(
+                regionId=region_id,
+                instanceId=instance_id,
+                startTime=start_time,
+                endTime=end_time
+            )
+            if slowlog_filters:
+                p.setFilters(slowlog_filters)
+            if sorts:
+                p.setSorts(sorts)
+            p.setPageNumber(1)
+            p.setPageSize(50)
+            
+            r = DescribeSlowLogsRequest(parameters=p)
+            res = client.send(r)
+            
+            return {
+                "instance_id": instance_id,
+                "instance_name": next((i["instanceName"] for i in mysql_instances 
+                                        if i["instanceId"] == instance_id), ""),
+                "total_count": res.result.get("totalCount", 0),
+                "slow_logs": res.result.get("slowLogs", [])
+            }
+        except Exception as e:
+            return {
+                "instance_id": instance_id,
+                "error": str(e),
+                "total_count": 0,
+                "slow_logs": []
+            }
+    
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(query_one, instance_ids))
+    
+    # Aggregate
+    all_logs = []
+    for r in results:
+        for log in r.get("slow_logs", []):
+            log["instance_id"] = r["instance_id"]
+            log["instance_name"] = r.get("instance_name", "")
+            all_logs.append(log)
+    
+    # Sort by total execution time
+    all_logs.sort(key=lambda x: x.get("executionTimeSum", 0), reverse=True)
+    
+    return {
+        "query_info": {
+            "region": region_id,
+            "tag_filters": tag_filters,
+            "time_range": {"start": start_time, "end": end_time},
+            "instances_queried": len(instance_ids),
+            "instances_with_slowlogs": sum(1 for r in results if r["total_count"] > 0)
+        },
+        "results": results,
+        "aggregated_slowlogs": all_logs[:50],  # Top 50 across all instances
+        "top_queries_by_instance": {
+            r["instance_id"]: r["slow_logs"][:5] for r in results  # Top 5 per instance
+        }
+    }
+
+# Usage
+result = query_slowlogs_by_tags(
+    client=client,
+    region_id="cn-north-1",
+    tag_filters=[
+        {"name": "tag:环境", "operator": "eq", "values": ["生产"]},
+        {"name": "tag:客户", "operator": "eq", "values": ["xxx"]}
+    ],
+    start_time="2026-06-01 00:00:00",
+    end_time="2026-06-03 23:59:59",
+    slowlog_filters=[{"name": "account", "operator": "eq", "values": ["app_user"]}],
+    sorts=[{"name": "executionTimeSum", "direction": "DESC"}],
+    max_instances=10
+)
+
+# Print summary
+print(f"Instances with slow queries: {result['query_info']['instances_with_slowlogs']}")
+for log in result['aggregated_slowlogs'][:10]:
+    print(f"[{log['instance_id']}] {log['sql'][:60]}... "
+          f"(Total: {log['executionTimeSum']}ms, Count: {log['executionCount']})")
+```
+
 #### Failure Recovery
 
 | Error pattern | Max retries | Backoff | Agent Action |
 |---------------|-------------|---------|--------------|
-| `InvalidTimeRange` / 400 | 0–1 | — | Fix time format (must be `YYYY-MM-DD HH:mm:ss`); ensure duration ≤ 7 days |
-| `InstanceNotFound` / 404 | 0 | — | HALT; verify instance ID via `describe-instances` |
-| `UnsupportedEngine` / 400 | 0 | — | HALT; operation only supports MySQL, not PostgreSQL or other engines |
-| Throttling / 429 | 3 | exponential | Back off; respect Retry-After |
-| `InternalError` / 5xx | 3 | 2s, 4s, 8s | Retry; HALT with requestId if persists |
+| **Phase 1: 按标签查找实例** ||||
+| `InvalidFilter` / 400 | 0–1 | — | 修正标签过滤器格式 |
+| No instances found | 0 | — | HALT; 提示用户检查标签值 |
+| Too many instances (> max_instances) | 0 | — | 提示用户细化标签或增加 max_instances |
+| **Phase 2: 查询慢日志** ||||
+| `InvalidTimeRange` / 400 | 0–1 | — | 修正时间格式；确保 ≤ 7 天 |
+| `InstanceNotFound` / 404 | 0 | — | 跳过该实例；记录警告 |
+| `UnsupportedEngine` / 400 | 0 | — | 跳过该实例（非 MySQL） |
+| Throttling / 429 | 3 | exponential | 指数退避后重试 |
+| `InternalError` / 5xx | 3 | 2s, 4s, 8s | 重试；持续失败则记录错误但继续其他实例 |
+
+#### Safety Considerations
+
+1. **实例数量限制:** 默认 `max_instances=10`，防止意外查询过多实例
+2. **并行度控制:** 使用 ThreadPoolExecutor(max_workers=5) 控制并发
+3. **部分失败处理:** 单个实例查询失败不影响其他实例
+4. **数据聚合上限:** 跨实例聚合结果限制返回数量，避免过大响应
 
 ### Operation: Describe MySQL Instance
 
