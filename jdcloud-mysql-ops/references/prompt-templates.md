@@ -17,7 +17,7 @@ the repository policy in `AGENTS.md`).
 - previous Critic feedback (empty on iter 1): {{output.critic_feedback}}
 - rubric to satisfy: {{output.rubric}}
 - operation type: {{output.operation}}
-  # instance-level: create | describe | list | modify | delete | backup | restore
+  # instance-level: create | describe | list | modify | delete | backup | restore | describe-slow-logs
   # SQL-level:      ddl-create | ddl-drop | ddl-alter | dml-insert | dml-update | dml-delete | dml-select
 
 # Required behavior
@@ -31,6 +31,9 @@ the repository policy in `AGENTS.md`).
 3. For destructive ops (`delete-instance`, `restore-instance`, `modify-instance`
    with storage shrink), the Orchestrator will inject a `{{user.safety_confirm}}`
    flag. Do NOT proceed without it being `true`.
+4. For `describe-slow-logs`, validate that `startTime` and `endTime` are within
+   a 7-day window and that `startTime <= endTime`. Include the time window
+   constraints in the trace. This is a read-only operation; Safety = 1 by default.
 4. For `create-instance`, always set `--client-token` with a fresh UUID v4
    unless the user provided one — Idempotency hard requirement.
 5. After execution, run `jdc --output json rds describe-instance --id <id>` to
@@ -175,6 +178,10 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 |---|---|---|
 | `{{user.request}}` | agent runtime | sanitized; never includes secret env values |
 | `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops; gate enforced by Orchestrator |
+| `{{user.start_time}}` | user input | for describe-slow-logs: format `YYYY-MM-DD HH:mm:ss` |
+| `{{user.end_time}}` | user input | for describe-slow-logs: format `YYYY-MM-DD HH:mm:ss` |
+| `{{user.page_number}}` | user input (optional) | default 1 |
+| `{{user.page_size}}` | user input (optional) | default 10, range [10, 100] |
 | `{{output.rubric}}` | `references/rubric.md` of the active skill | injected as a literal block |
 | `{{output.generator_output}}` | previous Generator run | empty on iter 1 |
 | `{{output.trace}}` | execution trace buffer | `command`, `args`, `exit_code`, `result`, `post_state`, `errors` |
@@ -188,3 +195,4 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `jdcloud-mysql-ops` (covers instance + DDL/DML) |
+| 1.1.0 | 2026-06-05 | Added `describe-slow-logs` operation (read-only, 7-day time window validation) |

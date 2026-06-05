@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.1.0"
-  last_updated: "2026-06-04"
+  version: "1.2.0"
+  last_updated: "2026-06-05"
   runtime: Harness AI Agent
   api_profile: "JD Cloud RDS PostgreSQL API v1 - https://rds.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -159,6 +159,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-06-05 | **Added Describe Slow Logs operation**: New Operation block for `describeSlowLogs` — query slow query summaries by time range via jdc CLI (primary) and Python SDK (fallback). Supports pagination, filtering (account/keyword), sorting (execution metrics). Updated `references/cli-usage.md`, `references/api-sdk-usage.md`, `references/monitoring.md`, `references/rubric.md`, and `references/prompt-templates.md` with full slow log documentation. |
 | 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DDL/DML paths, PG-specific rules for `VACUUM FULL`, `DROP SCHEMA`, sequence reset) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, DDL `DROP`/`TRUNCATE`, DML `UPDATE`/`DELETE` without WHERE. |
 | 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
 
@@ -287,15 +288,206 @@ for _ in range(60):
 3. On success, report instance ID, connection address, and port to user.
 4. On terminal failure, go to **Failure Recovery**.
 
+### Operation: Describe PostgreSQL Slow Logs
+
+> 查询指定时段的 PostgreSQL 慢日志概要信息 — 仅支持 PostgreSQL 实例。
+
+#### Pre-flight Checks
+
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| CLI / deps | `jdc --version` | Exit code 0 | Retry up to 3 times; then fall back to SDK |
+| SDK / deps | `import jdcloud_sdk.services.rds.client.RdsClient` | No import error | Document install pin (fallback path) |
+| Credentials | Construct credential from env or CLI config | Non-empty keys | HALT; user configures env |
+| Instance exists | `describeInstance` | Instance found | HALT; verify instance ID |
+| Instance engine | `describeInstance` | `PostgreSQL` | HALT; operation only supports PostgreSQL |
+| Time window validation | Parse user input | Start time ≤ End time, duration ≤ 7 days | Suggest valid time range |
+
+#### Input Variables
+
+| Variable | Required | Format | Example | Description |
+|----------|----------|--------|---------|-------------|
+| `{{user.region}}` | yes | string | `cn-north-1` | Region ID |
+| `{{user.instance_id}}` | yes | string | `rds-xxxx` | PostgreSQL instance ID |
+| `{{user.start_time}}` | yes | `YYYY-MM-DD HH:mm:ss` | `2026-06-01 00:00:00` | 查询开始时间 |
+| `{{user.end_time}}` | yes | `YYYY-MM-DD HH:mm:ss` | `2026-06-03 23:59:59` | 查询结束时间 |
+| `{{user.db_name}}` | no | string | `mydb` | 数据库名过滤(废弃字段) |
+| `{{user.page_number}}` | no | int | `1` | 页码,默认 1 |
+| `{{user.page_size}}` | no | int | `10` | 每页条数,范围[10,100],默认 10 |
+| `{{user.filters}}` | no | array | `[{"name":"account","operator":"eq","values":["postgres"]}]` | 过滤条件(账号/关键词) |
+| `{{user.sorts}}` | no | array | `[{"name":"executionTimeSum","direction":"DESC"}]` | 排序字段 |
+
+> **Time window constraint:** 开始时间到当前时间不能大于 **7 天**,开始时间不能大于结束时间。
+
+#### Execution — CLI (`jdc`) [Primary Path]
+
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}" \
+  --start-time "{{user.start_time}}" \
+  --end-time "{{user.end_time}}" \
+  --page-number {{user.page_number|default:1}} \
+  --page-size {{user.page_size|default:10}}
+
+# With optional filters (account or keyword)
+jdc --output json rds describe-slow-logs \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}" \
+  --start-time "{{user.start_time}}" \
+  --end-time "{{user.end_time}}" \
+  --filters '[{"name":"account","operator":"eq","values":["app_user"]}]' \
+  --page-number 1 \
+  --page-size 50
+
+# With sorting by execution time (descending)
+jdc --output json rds describe-slow-logs \
+  --region-id "{{user.region}}" \
+  --instance-id "{{user.instance_id}}" \
+  --start-time "{{user.start_time}}" \
+  --end-time "{{user.end_time}}" \
+  --sorts '[{"name":"executionTimeSum","direction":"DESC"}]' \
+  --page-number 1 \
+  --page-size 20
+```
+
+#### Execution (SDK Fallback — after 3 jdc failures)
+
+```python
+from jdcloud_sdk.services.rds.apis.DescribeSlowLogsRequest import DescribeSlowLogsRequest, DescribeSlowLogsParameters
+
+params = DescribeSlowLogsParameters(
+    regionId="{{user.region}}",
+    instanceId="{{user.instance_id}}",
+    startTime="{{user.start_time}}",
+    endTime="{{user.end_time}}"
+)
+
+# Optional: set pagination
+params.setPageNumber({{user.page_number|default:1}})
+params.setPageSize({{user.page_size|default:10}})
+
+# Optional: filter by account or SQL keyword
+filters = [
+    {
+        "name": "account",
+        "operator": "eq",  # or "in"
+        "values": ["postgres"]
+    },
+    {
+        "name": "keyword",
+        "operator": "eq",  # SQL关键词模糊查询
+        "values": ["SELECT * FROM users"]
+    }
+]
+params.setFilters(filters)
+
+# Optional: sort by execution metrics
+sorts = [
+    {
+        "name": "executionTimeSum",  # or rowsExaminedSum, rowsSentSum, lockTimeSum, executionCount
+        "direction": "DESC"  # or "ASC"
+    }
+]
+params.setSorts(sorts)
+
+req = DescribeSlowLogsRequest(parameters=params)
+resp = client.send(req)
+
+# Access slow log summaries
+slow_logs = resp.result.get("slowLogs", [])
+for log in slow_logs:
+    print(f"SQL: {log.get('sql', 'N/A')[:100]}...")
+    print(f"Execution count: {log.get('executionCount', 0)}")
+    print(f"Avg execution time: {log.get('executionTimeAvg', 0)} ms")
+    print(f"Max execution time: {log.get('executionTimeMax', 0)} ms")
+    print(f"Total execution time: {log.get('executionTimeSum', 0)} ms")
+    print(f"Rows examined sum: {log.get('rowsExaminedSum', 0)}")
+    print("---")
+```
+
+#### Post-execution Validation
+
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| Response structure | Parse JSON | `$.result.slowLogs` exists | Log error; suggest time window check |
+| Data presence | Check array length | `len(slowLogs) >= 0` | Empty result is valid (no slow queries) |
+| Pagination | Check `$.result.totalCount` | Matches expected total | Adjust pagination |
+
+#### Output JSON Paths
+
+| Field | JSON Path | Type | Description |
+|-------|-----------|------|-------------|
+| Total count | `$.result.totalCount` | int | Total slow log entries matching criteria |
+| Slow logs array | `$.result.slowLogs` | array | List of slow log summaries |
+| SQL text | `$.result.slowLogs[*].sql` | string | SQL statement (truncated for display) |
+| Execution count | `$.result.slowLogs[*].executionCount` | int | Number of times this SQL pattern executed |
+| Execution time avg | `$.result.slowLogs[*].executionTimeAvg` | int | Average execution time (ms) |
+| Execution time max | `$.result.slowLogs[*].executionTimeMax` | int | Maximum execution time (ms) |
+| Execution time sum | `$.result.slowLogs[*].executionTimeSum` | int | Total execution time (ms) |
+| Rows examined sum | `$.result.slowLogs[*].rowsExaminedSum` | int | Total rows examined |
+| Rows sent sum | `$.result.slowLogs[*].rowsSentSum` | int | Total rows returned |
+| Lock time sum | `$.result.slowLogs[*].lockTimeSum` | int | Total lock wait time (ms) |
+| First occurrence | `$.result.slowLogs[*].startTime` | string | First occurrence timestamp |
+| Last occurrence | `$.result.slowLogs[*].finishTime` | string | Last occurrence timestamp |
+
+#### Present to User
+
+**Summary format:**
+```
+PostgreSQL Slow Log Summary for {{user.instance_id}} ({{user.start_time}} ~ {{user.end_time}})
+
+Total slow query patterns: {{output.total_count}}
+
+Top slow queries (sorted by {{user.sort_field|default:"execution time"}}):
+1. [{{output.slow_logs[0].executionCount}}x] {{output.slow_logs[0].sql[:80]}}...
+   Avg: {{output.slow_logs[0].executionTimeAvg}}ms | Max: {{output.slow_logs[0].executionTimeMax}}ms | Total: {{output.slow_logs[0].executionTimeSum}}ms
+   Rows examined: {{output.slow_logs[0].rowsExaminedSum}} | Lock time: {{output.slow_logs[0].lockTimeSum}}ms
+
+2. [{{output.slow_logs[1].executionCount}}x] {{output.slow_logs[1].sql[:80]}}...
+   ...
+```
+
+#### Common Use Cases
+
+**Case 1: 查询最近 24 小时的慢日志**
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-xxx \
+  --start-time "$(date -v-1d '+%Y-%m-%d %H:%M:%S')" \
+  --end-time "$(date '+%Y-%m-%d %H:%M:%S')" \
+  --page-size 100
+```
+
+**Case 2: 查找特定用户的慢查询**
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-xxx \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59" \
+  --filters '[{"name":"account","operator":"eq","values":["app_user"]}]'
+```
+
+**Case 3: 按执行时间排序,找出最慢的 SQL**
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-xxx \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59" \
+  --sorts '[{"name":"executionTimeMax","direction":"DESC"}]' \
+  --page-size 20
+```
+
 #### Failure Recovery
 
 | Error pattern | Max retries | Backoff | Agent Action |
 |---------------|-------------|---------|--------------|
-| `InvalidParameter` / 400 | 0–1 | — | Fix args per OpenAPI; retry once |
-| `QuotaExceeded` | 0 | — | HALT; user requests quota increase |
-| `InsufficientBalance` | 0 | — | HALT; user tops up account |
-| `ResourceAlreadyExists` | 0 | — | Ask reuse vs new name |
-| `SubnetIpInsufficient` | 0 | — | HALT; user expands subnet |
+| `InvalidTimeRange` / 400 | 0–1 | — | Fix time format (must be `YYYY-MM-DD HH:mm:ss`); ensure duration ≤ 7 days |
+| `InstanceNotFound` / 404 | 0 | — | HALT; verify instance ID via `describe-instances` |
+| `UnsupportedEngine` / 400 | 0 | — | HALT; operation only supports PostgreSQL, not MySQL or other engines |
 | Throttling / 429 | 3 | exponential | Back off; respect Retry-After |
 | `InternalError` / 5xx | 3 | 2s, 4s, 8s | Retry; HALT with requestId if persists |
 

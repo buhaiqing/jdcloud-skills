@@ -23,6 +23,7 @@
 | Delete Instance | yes | `jdc rds delete-instance` |
 | Create Backup | yes | `jdc rds create-backup` |
 | Restore Instance | yes | `jdc rds restore-instance` |
+| Describe Slow Logs | yes | `jdc rds describe-slow-logs` — Query slow query summaries by time range (PostgreSQL only) |
 
 ## Command map
 
@@ -35,6 +36,7 @@
 | Delete Instance | `jdc --output json rds delete-instance --region-id cn-north-1 --instance-id rds-xxx` | Irreversible operation |
 | Create Backup | `jdc --output json rds create-backup --region-id cn-north-1 --instance-id rds-xxx` | Manual backup |
 | Restore Instance | `jdc --output json rds restore-instance --region-id cn-north-1 --instance-id rds-xxx --backup-id backup-xxx` | Overwrites data |
+| Describe Slow Logs | `jdc --output json rds describe-slow-logs --region-id cn-north-1 --instance-id rds-xxx --start-time "2026-06-01 00:00:00" --end-time "2026-06-03 23:59:59" --page-number 1 --page-size 50` | Query slow query summaries (PostgreSQL only) |
 
 ## Output JSON Paths
 
@@ -44,6 +46,88 @@
 | Instance Status | `$.result.instance.status` | `running` |
 | Connection Domain | `$.result.instance.connectionDomain` | `postgresql-xxx.jdcloud.com` |
 | Port | `$.result.instance.port` | `5432` |
+| **Slow Logs** |
+| Total Count | `$.result.totalCount` | `42` |
+| SQL Pattern | `$.result.slowLogs[*].sql` | `SELECT * FROM large_table WHERE...` |
+| Execution Count | `$.result.slowLogs[*].executionCount` | `15` |
+| Avg Exec Time | `$.result.slowLogs[*].executionTimeAvg` | `1250` (ms) |
+| Max Exec Time | `$.result.slowLogs[*].executionTimeMax` | `5234` (ms) |
+| Rows Examined | `$.result.slowLogs[*].rowsExaminedSum` | `150000` |
+
+## Describe Slow Logs Examples
+
+### Basic query (default pagination)
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-abc123 \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59"
+```
+
+### With pagination (page 2, 50 items per page)
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-abc123 \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59" \
+  --page-number 2 \
+  --page-size 50
+```
+
+### Filter by database account
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-abc123 \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59" \
+  --filters '[{"name":"account","operator":"eq","values":["postgres"]}]'
+```
+
+### Filter by SQL keyword
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-abc123 \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59" \
+  --filters '[{"name":"keyword","operator":"eq","values":["SELECT * FROM orders"]}]'
+```
+
+### Sort by execution time (descending) — find slowest queries
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-abc123 \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59" \
+  --sorts '[{"name":"executionTimeSum","direction":"DESC"}]' \
+  --page-size 20
+```
+
+### Sort by rows examined (identify full table scans)
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-abc123 \
+  --start-time "2026-06-01 00:00:00" \
+  --end-time "2026-06-03 23:59:59" \
+  --sorts '[{"name":"rowsExaminedSum","direction":"DESC"}]' \
+  --page-size 20
+```
+
+### Recent 24 hours with high execution count filter
+```bash
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-abc123 \
+  --start-time "$(date -v-1d '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -d '1 day ago' '+%Y-%m-%d %H:%M:%S')" \
+  --end-time "$(date '+%Y-%m-%d %H:%M:%S')" \
+  --sorts '[{"name":"executionCount","direction":"DESC"}]' \
+  --page-size 100
+```
 
 ## Sandbox Setup
 
