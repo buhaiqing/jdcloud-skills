@@ -17,7 +17,7 @@ the repository policy in `AGENTS.md`).
 - previous Critic feedback (empty on iter 1): {{output.critic_feedback}}
 - rubric to satisfy: {{output.rubric}}
 - operation type: {{output.operation}}
-  # instance-level: create | describe | list | modify | delete | backup | restore | describe-slow-logs
+  # instance-level: create | describe | list | modify | delete | backup | restore | describe-slow-logs | describe-slow-logs-by-tags
   # SQL-level:      ddl-create | ddl-drop | ddl-alter | dml-insert | dml-update | dml-delete | dml-select
 
 # Required behavior
@@ -34,7 +34,18 @@ the repository policy in `AGENTS.md`).
 4. For `describe-slow-logs`, validate that `startTime` and `endTime` are within
    a 7-day window and that `startTime <= endTime`. Include the time window
    constraints in the trace. This is a read-only operation; Safety = 1 by default.
-4. For `create-instance`, always set `--client-token` with a fresh UUID v4
+5. For `describe-slow-logs-by-tags` (composite operation), execute in THREE phases:
+   - Phase 1: Query instances via `describe-instances` with `tag_filters`.
+     MUST filter by engine="MySQL" and respect `max_instances` safety limit.
+     If matched instances > max_instances, HALT and ask for user confirmation.
+   - Phase 2: Parallel query slow logs for each instance using ThreadPoolExecutor
+     (max_workers=5). Capture per-instance results separately.
+   - Phase 3: Aggregate results across instances. Include aggregated_slowlogs
+     sorted by executionTimeSum DESC.
+   - Trace MUST contain: instance_ids list, per-instance slow log counts,
+     aggregated summary, and any per-instance errors.
+   - This is read-only; Safety = 1 by default.
+5. For `create-instance`, always set `--client-token` with a fresh UUID v4
    unless the user provided one — Idempotency hard requirement.
 5. After execution, run `jdc --output json rds describe-instance --id <id>` to
    capture the **post-state**, and include a 2 KB excerpt in the trace.
@@ -127,6 +138,17 @@ For each of the 5 dimensions in `rubric`, output a score per the allowed scale
   echoed from a `describe-instances` call.
 - Idempotency = 0 if `create-instance` ran without a `client-token`.
 
+## Composite operations (describe-slow-logs-by-tags)
+- Correctness = 0 if Phase 1 did NOT filter instances by engine="MySQL".
+- Correctness = 0 if Phase 1 returned non-MySQL instances in the trace.
+- Safety = 0 if matched instances > max_instances and no user confirmation
+  was captured in trace.
+- Traceability = 0 if trace lacks: (a) full list of instance_ids queried,
+  (b) per-instance slow log count, (c) aggregated results across instances.
+- Traceability = 0 if per-instance errors are missing from trace.
+- Correctness = 0 if `startTime` or `endTime` validation is missing
+  (must be within 7 days, start <= end).
+
 ## SQL-level
 - Safety = 0 for any DDL/DML without its full text appearing verbatim in the
   trace.
@@ -182,6 +204,9 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 | `{{user.end_time}}` | user input | for describe-slow-logs: format `YYYY-MM-DD HH:mm:ss` |
 | `{{user.page_number}}` | user input (optional) | default 1 |
 | `{{user.page_size}}` | user input (optional) | default 10, range [10, 100] |
+| `{{user.tag_filters}}` | user input | for describe-slow-logs-by-tags: [{"name":"tag:环境","operator":"eq","values":["生产"]}] |
+| `{{user.max_instances}}` | user input (optional) | for describe-slow-logs-by-tags: default 10, safety limit |
+| `{{user.slowlog_filters}}` | user input (optional) | for describe-slow-logs-by-tags: slow log filters (account/keyword) |
 | `{{output.rubric}}` | `references/rubric.md` of the active skill | injected as a literal block |
 | `{{output.generator_output}}` | previous Generator run | empty on iter 1 |
 | `{{output.trace}}` | execution trace buffer | `command`, `args`, `exit_code`, `result`, `post_state`, `errors` |
@@ -196,3 +221,4 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `jdcloud-mysql-ops` (covers instance + DDL/DML) |
 | 1.1.0 | 2026-06-05 | Added `describe-slow-logs` operation (read-only, 7-day time window validation) |
+| 1.2.0 | 2026-06-05 | Added `describe-slow-logs-by-tags` composite operation (three-phase: filter by tags → parallel query → aggregate; with max_instances safety guard) |

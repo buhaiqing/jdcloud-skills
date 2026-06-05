@@ -25,6 +25,18 @@
 | `create-instance` | Correctness, Safety, **Idempotency** | Must set `client-token` (UUID v4 if user did not supply one) |
 | `describe-instance` / `list` | Correctness, Traceability | Safety & Idempotency are N/A; score 1.0 by default |
 | `describe-slow-logs` | Correctness, Traceability | Read-only query; Safety = 1.0 by default. Must validate `startTime` and `endTime` are within 7-day window |
+| `describe-slow-logs-by-tags` | Correctness, Traceability, **Spec Compliance** | Composite operation; Safety = 1.0 by default. Must validate: (1) tag_filters format, (2) time window ≤ 7 days, (3) engine filter = PostgreSQL, (4) max_instances respected or user confirmed |
+
+### Composite operation specific rules (describe-slow-logs-by-tags)
+
+| Check | Rule | Score Impact |
+|-------|------|--------------|
+| Phase 1: Instance discovery | Must filter by `engine="PostgreSQL"` | Correctness = 0 if non-PG instances included |
+| Phase 1: Safety guard | If matched > max_instances, MUST have user confirm in trace | Safety = 0 without confirmation |
+| Phase 2: Parallel execution | Must use controlled concurrency (max_workers ≤ 5) | Traceability = 0.5 if not documented |
+| Phase 3: Aggregation | Must include aggregated_slowlogs sorted by executionTimeSum | Correctness = 0 if missing |
+| Trace completeness | Must contain: instance_ids, per-instance counts, errors | Traceability = 0 if incomplete |
+| Time validation | startTime/endTime must be valid and ≤ 7 days | Correctness = 0 if invalid |
 | `modify-instance` (config: name, password reset, params) | Correctness, Safety | Hot-apply may cause brief reconnect — flag in trace |
 | `modify-instance` (spec: class, storage) | Correctness, Safety, **Spec Compliance** | Storage shrink is **forbidden** — Safety = 0 if shrinking without explicit opt-in |
 | `delete-instance` | Correctness, Safety, **Traceability** | Must include pre-delete snapshot (instance id + status + WAL LSN) |
@@ -85,3 +97,4 @@ via the SDK low-level `psycopg2` / `psycopg` path. This is an
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial rubric for `jdcloud-postgresql-ops` GCL rollout (covers instance + DDL/DML paths; PG-specific rules for `VACUUM FULL`, `DROP SCHEMA`, sequence reset) |
+| 1.1.0 | 2026-06-05 | Added `describe-slow-logs` and `describe-slow-logs-by-tags` operations with composite operation scoring rules |
