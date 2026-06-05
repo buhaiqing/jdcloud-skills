@@ -40,6 +40,58 @@ Core Value: **"Give a man a fish, feed him for a day. Give an AI a Skill, empowe
 
 > **One-line Summary**: Skills Farm enables AI Agents to evolve from "answering questions" to "autonomous operations" - every JD Cloud product has an "AI-native" operations assistant.
 
+## 🚀 Core Features
+
+### Database Slow Query Log Analysis (MySQL / PostgreSQL)
+
+**Time-Range Based Slow Log Query**
+- Query slow log summaries by arbitrary time range (up to 7 days)
+- Support pagination, filtering (account/SQL keyword), sorting (execution time/rows examined)
+- Dual-path support: jdc CLI and Python SDK
+
+```bash
+# Query slow logs for the last 24 hours
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-xxx \
+  --start-time "2026-06-04 00:00:00" \
+  --end-time "2026-06-05 00:00:00" \
+  --sorts '[{"name":"executionTimeSum","direction":"DESC"}]'
+```
+
+**Batch Query by Tags** ⭐ NEW
+- Filter instances by tags (e.g., `env=production`, `customer=xxx`)
+- Automatically query slow logs in parallel for all matching instances
+- Cross-instance aggregation to identify global performance bottlenecks
+
+```python
+# Python SDK batch query example
+result = query_slowlogs_by_tags(
+    client=client,
+    region_id="cn-north-1",
+    tag_filters=[
+        {"name": "tag:env", "operator": "eq", "values": ["production"]},
+        {"name": "tag:customer", "operator": "eq", "values": ["xxx"]}
+    ],
+    start_time="2026-06-01 00:00:00",
+    end_time="2026-06-03 23:59:59",
+    max_instances=10  # Safety limit
+)
+```
+
+**Output Metrics**
+| Metric | Description | Use Case |
+|--------|-------------|----------|
+| `executionCount` | Number of executions | Identify frequently slow queries |
+| `executionTimeSum` | Total execution time | Identify highest-impact queries |
+| `rowsExaminedSum` | Rows scanned | Discover missing indexes (full table scans) |
+| `lockTimeSum` | Lock wait time | Identify lock contention issues |
+
+### More Features
+- **VM Batch Operations**: Execute commands on multiple instances in parallel via Cloud Assistant
+- **Redis Performance Analysis**: Memory usage, connection pool, slow command analysis
+- **Cloud Monitor Alarms**: Natural language alarm rule creation, metric querying
+
 ## Project Structure
 
 ```
@@ -56,6 +108,22 @@ jdcloud-skills/
 │   ├── QUICK_REFERENCE.md
 │   ├── assets/
 │   └── references/
+├── jdcloud-mysql-ops/                 # MySQL operations Skill
+│   ├── SKILL.md                       # Main skill definition (includes slow log query)
+│   └── references/
+│       ├── cli-usage.md               # CLI usage examples
+│       ├── api-sdk-usage.md           # SDK code examples
+│       ├── monitoring.md              # Monitoring and slow log analysis
+│       ├── rubric.md                  # GCL quality scoring rules
+│       └── prompt-templates.md        # Agent prompt templates
+├── jdcloud-postgresql-ops/            # PostgreSQL operations Skill
+│   ├── SKILL.md                       # Main skill definition (includes slow log query)
+│   └── references/
+│       ├── cli-usage.md               # CLI usage examples
+│       ├── api-sdk-usage.md           # SDK code examples
+│       ├── monitoring.md              # Monitoring and slow log analysis
+│       ├── rubric.md                  # GCL quality scoring rules
+│       └── prompt-templates.md        # Agent prompt templates
 ├── jdcloud-redis-ops/                 # Redis operations Skill
 │   ├── SKILL.md
 │   ├── assets/
@@ -87,6 +155,8 @@ A structured Markdown document that guides AI Agents to complete specific tasks.
 | Skill Name | Product | Description | Status |
 |------------|---------|-------------|--------|
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | VM | VM lifecycle management, monitoring, troubleshooting, **Cloud Assistant batch command execution** | ✅ Available |
+| [jdcloud-mysql-ops](jdcloud-mysql-ops/) | MySQL | MySQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
+| [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | PostgreSQL | PostgreSQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
 | [jdcloud-redis-ops](jdcloud-redis-ops/) | Redis | Redis instance management, performance analysis, backup/recovery | ✅ Available |
 | [jdcloud-cloudmonitor-ops](jdcloud-cloudmonitor-ops/) | Cloud Monitor | Alarm rule management, metric query, monitoring dashboard | ✅ Available |
 | [jdcloud-iam-ops](jdcloud-iam-ops/) | IAM | Sub-user, group, role, policy, AK/SK management | ✅ Available |

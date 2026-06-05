@@ -42,6 +42,58 @@ license: MIT
 
 > **一句话总结**：Skills Farm 让 AI Agent 从"能回答问题"进化到"能自主运维"——每个京东云产品都拥有一个"AI 原生"的运维助手。
 
+## 🚀 核心功能亮点
+
+### 数据库慢日志智能分析（MySQL / PostgreSQL）
+
+**指定时段慢日志查询**
+- 支持按任意时段（最长 7 天）查询慢日志概要
+- 支持分页、过滤（账号/SQL 关键词）、排序（执行时间/扫描行数）
+- jdc CLI 和 Python SDK 双路径支持
+
+```bash
+# 查询最近 24 小时的慢日志
+jdc --output json rds describe-slow-logs \
+  --region-id cn-north-1 \
+  --instance-id rds-xxx \
+  --start-time "2026-06-04 00:00:00" \
+  --end-time "2026-06-05 00:00:00" \
+  --sorts '[{"name":"executionTimeSum","direction":"DESC"}]'
+```
+
+**按标签批量查询慢日志** ⭐ 新增
+- 支持按实例标签（如 `环境=生产`, `客户=xxx`）批量筛选实例
+- 自动并行查询所有匹配实例的慢日志
+- 跨实例聚合分析，识别全局性能瓶颈
+
+```python
+# Python SDK 批量查询示例
+result = query_slowlogs_by_tags(
+    client=client,
+    region_id="cn-north-1",
+    tag_filters=[
+        {"name": "tag:环境", "operator": "eq", "values": ["生产"]},
+        {"name": "tag:客户", "operator": "eq", "values": ["xxx"]}
+    ],
+    start_time="2026-06-01 00:00:00",
+    end_time="2026-06-03 23:59:59",
+    max_instances=10  # 安全限制
+)
+```
+
+**输出指标**
+| 指标 | 说明 | 用途 |
+|------|------|------|
+| `executionCount` | 执行次数 | 识别高频慢查询 |
+| `executionTimeSum` | 总执行时间 | 识别影响最大的查询 |
+| `rowsExaminedSum` | 扫描行数 | 发现缺失索引（全表扫描） |
+| `lockTimeSum` | 锁等待时间 | 识别锁竞争问题 |
+
+### 更多功能
+- **云主机批量运维**：通过云助手在多台实例上并行执行命令
+- **Redis 性能分析**：内存使用、连接池、慢命令分析
+- **云监控告警**：自然语言创建告警规则、查询监控指标
+
 ## 项目结构
 
 ```
@@ -56,6 +108,22 @@ jdcloud-skills/
 │   ├── QUICK_REFERENCE.md
 │   ├── assets/
 │   └── references/
+├── jdcloud-mysql-ops/                 # MySQL 数据库运维 Skill
+│   ├── SKILL.md                       # 主技能定义（含慢日志查询）
+│   └── references/
+│       ├── cli-usage.md               # CLI 使用示例
+│       ├── api-sdk-usage.md           # SDK 代码示例
+│       ├── monitoring.md              # 监控与慢日志分析
+│       ├── rubric.md                  # GCL 质量评分规则
+│       └── prompt-templates.md        # Agent 提示词模板
+├── jdcloud-postgresql-ops/            # PostgreSQL 数据库运维 Skill
+│   ├── SKILL.md                       # 主技能定义（含慢日志查询）
+│   └── references/
+│       ├── cli-usage.md               # CLI 使用示例
+│       ├── api-sdk-usage.md           # SDK 代码示例
+│       ├── monitoring.md              # 监控与慢日志分析
+│       ├── rubric.md                  # GCL 质量评分规则
+│       └── prompt-templates.md        # Agent 提示词模板
 ├── jdcloud-redis-ops/                 # Redis 分布式缓存运维 Skill
 │   ├── SKILL.md
 │   ├── assets/
@@ -75,6 +143,8 @@ jdcloud-skills/
 | Skill 名称 | 产品 | 功能描述 | 状态 |
 |------------|------|----------|------|
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | 云主机 (VM) | 云主机生命周期管理、监控、故障排查、**云助手批量执行命令** | ✅ 可用 |
+| [jdcloud-mysql-ops](jdcloud-mysql-ops/) | 云数据库 MySQL | MySQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
+| [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | 云数据库 PostgreSQL | PostgreSQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
 | [jdcloud-redis-ops](jdcloud-redis-ops/) | 云缓存 Redis | Redis 实例管理、性能分析、备份恢复 | ✅ 可用 |
 | [jdcloud-cloudmonitor-ops](jdcloud-cloudmonitor-ops/) | 云监控 | 告警规则管理、指标查询、监控大盘 | ✅ 可用 |
 | [jdcloud-skill-generator](jdcloud-skill-generator/) | Meta Skill | 自动生成新产品 Skill | ✅ 可用 |
