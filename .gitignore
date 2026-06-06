@@ -224,6 +224,8 @@ __marimo__/
 .trae
 .github/
 
+reports/
+
 # Project-specific ignores
 
 # GCL (Generator-Critic-Loop) runtime output

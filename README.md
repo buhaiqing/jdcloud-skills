@@ -103,6 +103,17 @@ jdcloud-skills/
 ├── jdcloud-skill-generator/           # Skill 生成器（Meta Skill）
 │   ├── SKILL.md
 │   └── references/
+├── jdcloud-link-cruise/               # ⭐ 全链路巡检 Skill
+│   ├── SKILL.md
+│   ├── runbooks/                       # 4 x 巡检场景定义
+│   ├── references/
+│   ├── reports/templates/
+│   ├── scripts/
+│   │   ├── lib/                        # 统一API客户端 + 拓扑发现
+│   │   ├── analyzers/                  # 8个服务分析器
+│   │   ├── cruise_sniff.py             # Phase 1: 嗅探
+│   │   └── cruise_link.py              # Phase 2: 全链路巡检
+│   └── tests/
 ├── jdcloud-vm-ops/                    # 云主机运维 Skill
 │   ├── SKILL.md
 │   ├── QUICK_REFERENCE.md
@@ -142,6 +153,7 @@ jdcloud-skills/
 
 | Skill 名称 | 产品 | 功能描述 | 状态 |
 |------------|------|----------|------|
+| [jdcloud-link-cruise](jdcloud-link-cruise/) | ⭐ 全链路巡检 | EIP→CLB→VM→Redis→ES→NAT→K8s 全链路自动拓扑发现+深度巡检，一键出报告 | ✅ 可用 |
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | 云主机 (VM) | 云主机生命周期管理、监控、故障排查、**云助手批量执行命令** | ✅ 可用 |
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | 云数据库 MySQL | MySQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | 云数据库 PostgreSQL | PostgreSQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |

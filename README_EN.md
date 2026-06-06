@@ -103,6 +103,17 @@ jdcloud-skills/
 ├── jdcloud-skill-generator/           # Skill generator (Meta Skill)
 │   ├── SKILL.md
 │   └── references/
+├── jdcloud-link-cruise/               # ⭐ Full-link Inspection Skill
+│   ├── SKILL.md
+│   ├── runbooks/
+│   ├── references/
+│   ├── reports/templates/
+│   ├── scripts/
+│   │   ├── lib/
+│   │   ├── analyzers/
+│   │   ├── cruise_sniff.py
+│   │   └── cruise_link.py
+│   └── tests/
 ├── jdcloud-vm-ops/                    # VM operations Skill
 │   ├── SKILL.md
 │   ├── QUICK_REFERENCE.md
@@ -154,6 +165,7 @@ A structured Markdown document that guides AI Agents to complete specific tasks.
 
 | Skill Name | Product | Description | Status |
 |------------|---------|-------------|--------|
+| [jdcloud-link-cruise](jdcloud-link-cruise/) | ⭐ Full-Link Inspection | Auto-discover topology (EIP→CLB→VM→Redis→ES→K8s), deep analysis, one-command report | ✅ Available |
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | VM | VM lifecycle management, monitoring, troubleshooting, **Cloud Assistant batch command execution** | ✅ Available |
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | MySQL | MySQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | PostgreSQL | PostgreSQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
