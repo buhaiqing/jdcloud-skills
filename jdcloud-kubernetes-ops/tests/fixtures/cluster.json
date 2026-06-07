@@ -1,0 +1,17 @@
+{
+  "clusterId": "c-test-001",
+  "clusterName": "test-k8s-cluster",
+  "state": "running",
+  "masterVersion": "1.28.3",
+  "endpoint": "https://c-test-001.cn-north-1.nc.jdcloud.com:6443",
+  "vpcId": "vpc-test-001",
+  "subnetId": "subnet-test-001",
+  "nodeGroups": [
+    {
+      "nodeGroupId": "ng-test-001",
+      "name": "worker-pool",
+      "state": "running"
+    }
+  ],
+  "createdTime": "2026-06-08T10:00:00+08:00"
+}

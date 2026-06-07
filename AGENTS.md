@@ -13,6 +13,9 @@ jdcloud-skills/
 ├── jdcloud-skill-generator/       # Meta Skill — generates new product skills
 ├── jdcloud-vm-ops/                # VM lifecycle + cloud assistant
 ├── jdcloud-redis-ops/             # Redis cache management
+├── jdcloud-oss-ops/               # OSS — object storage
+├── jdcloud-nat-ops/               # NAT — NAT gateway
+├── jdcloud-kubernetes-ops/        # K8s — Kubernetes cluster management
 ├── jdcloud-cloudmonitor-ops/      # Cloud Monitor — metrics, alarms
 ├── jdcloud-iam-ops/               # IAM — users, groups, roles, policies
 ├── jdcloud-kms-ops/               # KMS — key management, encryption
@@ -135,6 +138,8 @@ When a user's request spans multiple JD Cloud products:
 | Key management, encryption | `jdcloud-kms-ops` |
 | Load balancer config | `jdcloud-clb-ops` |
 | OSS bucket/object CRUD, storage management | `jdcloud-oss-ops` |
+| NAT gateway/SNAT/DNAT rules | `jdcloud-nat-ops` |
+| Kubernetes cluster/node group mgmt | `jdcloud-kubernetes-ops` |
 | Generate a new product skill | `jdcloud-skill-generator` |
 
 - `jdcloud-alert-intelligence` is **read-only** — it analyzes alerts but delegates alarm rule changes back to `jdcloud-cloudmonitor-ops`.

@@ -154,6 +154,21 @@ jdcloud-skills/
 │   ├── SKILL.md
 │   ├── assets/
 │   └── references/
+├── jdcloud-oss-ops/                  # 对象存储 (OSS) 运维 Skill
+│   ├── SKILL.md
+│   ├── assets/
+│   ├── references/
+│   └── tests/
+├── jdcloud-nat-ops/                  # NAT 网关运维 Skill
+│   ├── SKILL.md
+│   ├── assets/
+│   ├── references/
+│   └── tests/
+├── jdcloud-kubernetes-ops/           # 容器服务 (Kubernetes) 运维 Skill
+│   ├── SKILL.md
+│   ├── assets/
+│   ├── references/
+│   └── tests/
 └── jdcloud-cloudmonitor-ops/          # 云监控运维 Skill
     ├── SKILL.md
     ├── assets/
@@ -175,6 +190,9 @@ jdcloud-skills/
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | 云数据库 MySQL | MySQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | 云数据库 PostgreSQL | PostgreSQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
 | [jdcloud-redis-ops](jdcloud-redis-ops/) | 云缓存 Redis | Redis 实例管理、性能分析、备份恢复 | ✅ 可用 |
+| [jdcloud-oss-ops](jdcloud-oss-ops/) | 对象存储 (OSS) | Bucket 管理、ACL 策略、生命周期配置、对象上传/下载、版本控制 | ✅ 可用 |
+| [jdcloud-nat-ops](jdcloud-nat-ops/) | NAT 网关 | NAT 实例管理、SNAT/DNAT 规则配置、带宽监控 | ✅ 可用 |
+| [jdcloud-kubernetes-ops](jdcloud-kubernetes-ops/) | 容器服务 (K8s) | 集群生命周期、节点组管理、集群升级、凭据管理 | ✅ 可用 |
 | [jdcloud-cloudmonitor-ops](jdcloud-cloudmonitor-ops/) | 云监控 | 告警规则管理、指标查询、监控大盘 | ✅ 可用 |
 | [jdcloud-skill-generator](jdcloud-skill-generator/) | Meta Skill | 自动生成新产品 Skill | ✅ 可用 |
 

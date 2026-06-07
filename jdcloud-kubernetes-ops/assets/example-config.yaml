@@ -1,0 +1,103 @@
+# JD Cloud JCS for Kubernetes Example Configuration
+# This file provides production-ready configurations for common Kubernetes deployment scenarios
+# Refer to SKILL.md for detailed execution flows and parameter validation
+
+# ============================================
+# Scenario 1: Basic Kubernetes Cluster
+# Use case: Development/test environments, microservices deployment
+# ============================================
+basic_cluster:
+  cluster:
+    name: dev-k8s-cluster
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    masterVersion: 1.28.3            # See core-concepts.md for supported versions
+  
+  nodeGroup:
+    name: worker-pool
+    instanceType: g.n2.large          # General purpose, 2 vCPU, 8 GB
+    nodeCount: 3
+    minCount: 1
+    maxCount: 10
+
+# ============================================
+# Scenario 2: Production Multi-AZ Cluster
+# Use case: High-availability production workloads
+# ============================================
+production_cluster:
+  cluster:
+    name: prod-k8s-cluster
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    masterVersion: 1.28.3
+  
+  nodeGroups:
+    - name: az-a-workers
+      instanceType: c.n2.large        # Compute optimized, 4 vCPU, 8 GB
+      nodeCount: 5
+      subnetId: subnet-az-a-xxx
+      labels:
+        zone: az-a
+    - name: az-b-workers
+      instanceType: c.n2.large
+      nodeCount: 5
+      subnetId: subnet-az-b-xxx
+      labels:
+        zone: az-b
+
+# ============================================
+# Scenario 3: GPU Cluster for ML Workloads
+# Use case: Machine learning training, AI inference
+# ============================================
+gpu_cluster:
+  cluster:
+    name: ml-k8s-cluster
+    region: cn-north-1
+    vpcId: vpc-xxx
+    subnetId: subnet-xxx
+    masterVersion: 1.28.3
+  
+  nodeGroups:
+    - name: gpu-pool
+      instanceType: p.n1.large        # GPU instance, 4 vCPU, 32 GB, 1x T4
+      nodeCount: 2
+      labels:
+        gpu-type: t4
+      taints:
+        - key: nvidia.com/gpu
+          value: "true"
+          effect: NoSchedule
+
+# ============================================
+# Environment Variables Template
+# ============================================
+env_template: |
+  # JD Cloud Credentials
+  JDC_ACCESS_KEY=your_access_key_here
+  JDC_SECRET_KEY=your_secret_key_here
+  JDC_REGION=cn-north-1
+  
+  # Optional Settings
+  JDC_ENDPOINT=nc.jdcloud-api.com
+  JDC_SCHEME=https
+  JDC_TIMEOUT=20
+
+# ============================================
+# Monitoring Configuration
+# ============================================
+monitoring:
+  metrics:
+    - name: k8s_cluster_cpu_util
+      alarm_threshold: 80
+      comparison: ">="
+      period: 300
+    - name: k8s_cluster_mem_util
+      alarm_threshold: 85
+      comparison: ">="
+      period: 300
+    - name: k8s_apiserver_up
+      alarm_threshold: 1
+      comparison: "<"
+      period: 60

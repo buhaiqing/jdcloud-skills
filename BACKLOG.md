@@ -30,32 +30,29 @@
 | 项目 | 内容 |
 |------|------|
 | **对应阿里云** | `alicloud-oss-ops` |
-| **状态** | ❌ 未开始 |
+| **状态** | ✅ 已完成 (2026-06-08) |
 | **受影响的 WAF 规则** | WAF-SEC-010 (Bucket ACL), WAF-COST-009 (生命周期), WAF-REL-009 (跨区复制) |
-| **CLI 验证** | 需确认 `jdc oss` 子命令是否存在 |
-| **需要** | SKILL.md + 8 refs + tests + fixtures |
-| **依赖** | 京东云 OSS 服务需开通 |
+| **CLI 验证** | `jdc` 不支持 OSS, 标记为 `sdk-only` |
+| **文件数** | SKILL.md(611行) + 8 refs + tests + fixtures = 16 文件 |
 
 ### 2. `jdcloud-nat-ops` (NAT 网关)
 
 | 项目 | 内容 |
 |------|------|
 | **对应阿里云** | `alicloud-nat-ops` |
-| **状态** | ❌ 未开始 |
+| **状态** | ✅ 已完成 (2026-06-08) |
 | **受影响的 WAF 规则** | WAF-REL-010 (NAT 高可用), WAF-PERF-049 (NAT 带宽) |
-| **CLI 验证** | NAT 网关在 VPC 产品线内(无独立 CLI),需确认 API |
-| **需要** | SKILL.md + 8 refs + tests |
-| **已知信息** | `vpc describe-route-tables` 已发现 NAT 网关 `natgw-p7yhj2m3gv` |
+| **CLI 验证** | NAT 在 VPC 产品线内, CLI 通过 `jdc vpc` 子命令 |
+| **文件数** | SKILL.md(827行) + 8 refs + tests + fixtures = 16 文件 |
 
 ### 3. `jdcloud-kubernetes-ops` (JCS for Kubernetes)
 
 | 项目 | 内容 |
 |------|------|
 | **对应阿里云** | `alicloud-ack-ops` + `alicloud-ack-serverless-ops` |
-| **状态** | ❌ 未开始 |
+| **状态** | ✅ 已完成 (2026-06-08) |
 | **依赖方** | `jdcloud-aiops-cruise` 的 `k8s_analyzer.py` 需要此 skill |
-| **需要** | SKILL.md + 8 refs + tests |
-| **依赖** | JCS for Kubernetes 服务需开通 |
+| **文件数** | SKILL.md(844行) + 8 refs + tests + fixtures = 16 文件 |
 
 ---
 
@@ -131,4 +128,5 @@
 
 | Date | Change |
 |------|--------|
+| 2026-06-08 | Phase B 完成: 创建 jdcloud-oss-ops、jdcloud-nat-ops、jdcloud-kubernetes-ops 三个 Skill (各 16 文件) |
 | 2026-06-08 | 创建 BACKLOG.md,从对话上下文迁移待办事项 |

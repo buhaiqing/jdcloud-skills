@@ -1,0 +1,14 @@
+{
+  "natGatewayId": "nat-test-001",
+  "natGatewayName": "test-nat-gateway",
+  "state": "available",
+  "vpcId": "vpc-test-001",
+  "description": "Test NAT Gateway for integration tests",
+  "elasticIpAddresses": ["eip-test-001", "eip-test-002"],
+  "elasticIpIds": ["eip-test-001", "eip-test-002"],
+  "snatRuleCount": 1,
+  "dnatRuleCount": 1,
+  "natGatewaySpec": "small",
+  "regionId": "cn-north-1",
+  "createdTime": "2026-06-08T10:00:00+08:00"
+}

@@ -1,0 +1,15 @@
+{
+  "nodeGroupId": "ng-test-001",
+  "name": "worker-pool",
+  "state": "running",
+  "instanceType": "g.n2.large",
+  "nodeCount": 3,
+  "minCount": 1,
+  "maxCount": 10,
+  "subnetId": "subnet-test-001",
+  "clusterId": "c-test-001",
+  "labels": {
+    "env": "test"
+  },
+  "createdTime": "2026-06-08T10:05:00+08:00"
+}

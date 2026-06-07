@@ -154,6 +154,21 @@ jdcloud-skills/
 │   ├── SKILL.md
 │   ├── assets/
 │   └── references/
+├── jdcloud-oss-ops/                  # Object Storage (OSS) operations Skill
+│   ├── SKILL.md
+│   ├── assets/
+│   ├── references/
+│   └── tests/
+├── jdcloud-nat-ops/                  # NAT Gateway operations Skill
+│   ├── SKILL.md
+│   ├── assets/
+│   ├── references/
+│   └── tests/
+├── jdcloud-kubernetes-ops/           # Kubernetes operations Skill
+│   ├── SKILL.md
+│   ├── assets/
+│   ├── references/
+│   └── tests/
 ├── jdcloud-cloudmonitor-ops/          # Cloud Monitor operations Skill
 │   ├── SKILL.md
 │   ├── assets/
@@ -187,6 +202,9 @@ A structured Markdown document that guides AI Agents to complete specific tasks.
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | MySQL | MySQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | PostgreSQL | PostgreSQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
 | [jdcloud-redis-ops](jdcloud-redis-ops/) | Redis | Redis instance management, performance analysis, backup/recovery | ✅ Available |
+| [jdcloud-oss-ops](jdcloud-oss-ops/) | Object Storage (OSS) | Bucket management, ACL policies, lifecycle configuration, object upload/download | ✅ Available |
+| [jdcloud-nat-ops](jdcloud-nat-ops/) | NAT Gateway | NAT gateway management, SNAT/DNAT rules, bandwidth monitoring | ✅ Available |
+| [jdcloud-kubernetes-ops](jdcloud-kubernetes-ops/) | Kubernetes | Cluster lifecycle, node group management, cluster upgrade, credential management | ✅ Available |
 | [jdcloud-cloudmonitor-ops](jdcloud-cloudmonitor-ops/) | Cloud Monitor | Alarm rule management, metric query, monitoring dashboard | ✅ Available |
 | [jdcloud-iam-ops](jdcloud-iam-ops/) | IAM | Sub-user, group, role, policy, AK/SK management | ✅ Available |
 | [jdcloud-kms-ops](jdcloud-kms-ops/) | KMS | Key management, encryption/decryption operations | ✅ Available |

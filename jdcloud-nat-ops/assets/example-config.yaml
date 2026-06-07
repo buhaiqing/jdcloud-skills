@@ -1,0 +1,125 @@
+# Example NAT Gateway Configuration
+
+```yaml
+# JD Cloud NAT Gateway Configuration Example
+# This file provides example configs for common NAT Gateway setups
+
+# Example 1: Basic NAT Gateway with Single EIP
+basic_nat:
+  region: cn-north-1
+  nat_gateway_name: prod-web-nat
+  vpc_id: vpc-abc12345
+  elastic_ip_ids:
+    - eip-xyz67890
+  description: "Production web tier NAT for outbound internet access"
+
+# Example 2: Production NAT Gateway with HA (WAF-REL-010)
+production_nat_ha:
+  region: cn-north-1
+  nat_gateway_name: prod-ha-nat
+  vpc_id: vpc-def45678
+  elastic_ip_ids:
+    - eip-abc11111
+    - eip-abc22222
+  description: "Production HA NAT with 2 EIPs for SNAT redundancy"
+  # WAF-REL-010: At least 2 EIPs for production NAT gateways
+
+# Example 3: SNAT Rule Configuration
+snat_example:
+  region: cn-north-1
+  nat_gateway_id: nat-abc12345
+  subnet_id: subnet-private-001
+  elastic_ip_ids:
+    - eip-xyz67890
+  description: "SNAT for private app subnet"
+
+# Example 4: DNAT Rule Configuration (HTTP port forwarding)
+dnat_http_example:
+  region: cn-north-1
+  nat_gateway_id: nat-abc12345
+  protocol: tcp
+  elastic_ip_id: eip-xyz67890
+  public_port: 80
+  private_ip: 10.0.1.10
+  private_port: 8080
+  description: "Forward HTTP (port 80) to internal web server (port 8080)"
+
+# Example 5: DNAT Rule Configuration (SSH access)
+dnat_ssh_example:
+  region: cn-north-1
+  nat_gateway_id: nat-abc12345
+  protocol: tcp
+  elastic_ip_id: eip-xyz67890
+  public_port: 2222
+  private_ip: 10.0.1.20
+  private_port: 22
+  description: "SSH access via port 2222 to bastion host"
+
+# Example 6: Multi-SNAT Multi-Subnet Setup
+multi_snat_setup:
+  region: cn-north-1
+  nat_gateway_id: nat-abc12345
+  
+  # EIPs for SNAT distribution
+  elastic_ip_ids:
+    - eip-snat-001
+    - eip-snat-002
+  
+  # Each private subnet gets its own SNAT rule
+  snat_rules:
+    - subnet_id: subnet-app-001
+      elastic_ip_ids:
+        - eip-snat-001
+      description: "App tier 1 outbound"
+    
+    - subnet_id: subnet-app-002
+      elastic_ip_ids:
+        - eip-snat-002
+      description: "App tier 2 outbound"
+    
+    - subnet_id: subnet-db-001
+      elastic_ip_ids:
+        - eip-snat-001
+        - eip-snat-002
+      description: "Database outbound with HA"
+
+# Example 7: Full Multi-Tier Architecture
+full_architecture:
+  vpc:
+    name: prod-vpc
+    cidr: 10.0.0.0/16
+    
+  nat_gateway:
+    name: prod-nat
+    description: "Production NAT for multi-tier architecture"
+    
+    elastic_ips:
+      - purpose: "Primary SNAT (Line A ISP)"
+        id: eip-linea-001
+      - purpose: "Secondary SNAT (Line B ISP)"
+        id: eip-lineb-001
+      - purpose: "DNAT web service"
+        id: eip-web-001
+    
+    snat_rules:
+      - subnet_cidr: 10.0.1.0/24
+        subnet_name: "public-web-subnet"
+        elastic_ip_ids:
+          - eip-linea-001
+          - eip-lineb-001
+    
+    dnat_rules:
+      - protocol: tcp
+        public_port: 443
+        private_ip: 10.0.1.10
+        private_port: 443
+        elastic_ip_id: eip-web-001
+        description: "HTTPS to web server"
+      
+      - protocol: tcp
+        public_port: 2222
+        private_ip: 10.0.1.20
+        private_port: 22
+        elastic_ip_id: eip-web-001
+        description: "SSH to bastion host"
+```

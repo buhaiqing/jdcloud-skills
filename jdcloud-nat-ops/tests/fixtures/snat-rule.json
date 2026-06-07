@@ -1,0 +1,8 @@
+{
+  "snatRuleId": "snat-test-001",
+  "natGatewayId": "nat-test-001",
+  "subnetId": "subnet-test-001",
+  "elasticIpIds": ["eip-test-001"],
+  "state": "available",
+  "description": "Test SNAT rule for private app subnet"
+}
