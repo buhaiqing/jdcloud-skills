@@ -1,0 +1,18 @@
+{
+  "instanceId": "i-3p9mkq2v3a-001",
+  "instanceName": "web-01",
+  "instanceType": "g.n2.large",
+  "imageId": "img-3p9mkq2v3a-base",
+  "hostName": "web01.prod.local",
+  "status": "running",
+  "description": "Web server 01",
+  "vpcId": "vpc-3p9mkq2v3a",
+  "subnetId": "subnet-3p9mkq2v3a-app",
+  "privateIpAddress": "10.0.1.10",
+  "elasticIpId": "fip-3p9mkq2v3a-001",
+  "elasticIpAddress": "116.196.xx.xx",
+  "az": "cn-north-1a",
+  "createdTime": "2026-02-01T10:00:00+08:00",
+  "keyNames": ["keypair-prod-2026"],
+  "networkSecurityGroupIds": ["sg-3p9mkq2v3a-web"]
+}

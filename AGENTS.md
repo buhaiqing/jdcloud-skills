@@ -127,11 +127,14 @@ When a user's request spans multiple JD Cloud products:
 |---|---|
 | VM create/stop/delete | `jdcloud-vm-ops` |
 | Redis instance CRUD | `jdcloud-redis-ops` |
+| VPC/Subnet/Security Group/Route Table/ACL management | `jdcloud-vpc-ops` |
+| Architecture review / WAF assessment / Recommendation | `jdcloud-arch-advisor` |
 | Monitoring metrics, alarm rules | `jdcloud-cloudmonitor-ops` |
 | Alert analysis, suppression, reporting | `jdcloud-alert-intelligence` |
 | IAM users, policies, keys | `jdcloud-iam-ops` |
 | Key management, encryption | `jdcloud-kms-ops` |
 | Load balancer config | `jdcloud-clb-ops` |
+| OSS bucket/object CRUD, storage management | `jdcloud-oss-ops` |
 | Generate a new product skill | `jdcloud-skill-generator` |
 
 - `jdcloud-alert-intelligence` is **read-only** — it analyzes alerts but delegates alarm rule changes back to `jdcloud-cloudmonitor-ops`.
@@ -348,6 +351,7 @@ Return strict JSON:
 | `jdcloud-clb-ops` | recommended | 3 | listener / backend delete |
 | `jdcloud-cloudmonitor-ops` | recommended | 3 | alarm rule delete |
 | `jdcloud-alert-intelligence` | optional | 5 | read-only |
+| `jdcloud-oss-ops` | recommended | 3 | delete bucket / delete object / set public ACL |
 | `jdcloud-audit-ops` | optional | 5 | read-only |
 | `jdcloud-tag-audit-ops` | optional | 5 | read-only |
 | `jdcloud-skill-generator` | optional | 3 | meta operation |
@@ -391,6 +395,7 @@ Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate
 | 1.6.1 | 2026-06-04 | `jdcloud-audit-ops` rollout (optional, max_iter=5, read-only): rubric + prompts cover `describe-events` / `describe-event-detail` / `describe-trails`; PII masking guard for `requestParameters` (password / secret / accessKey) |
 | 1.6.2 | 2026-06-04 | `jdcloud-tag-audit-ops` rollout (optional, max_iter=5): rubric + prompts cover audit + report + DOPS ticket creation; DOPS ticket payload completeness + duplicate-ticket idempotency check |
 | 1.6.3 | 2026-06-04 | `jdcloud-skill-generator` rollout (optional, max_iter=3, meta): rubric + prompts cover generation steps; secret-leak guard, OpenSpec + 2-round self-review enforcement, jdc CLI / SDK cross-validation |
+| 1.7.0 | 2026-06-08 | `jdcloud-oss-ops` rollout: SDK-only SKILL.md (OSS not exposed via `jdc` CLI); rubric + prompts cover bucket CRUD, object CRUD, ACL, lifecycle, versioning, CRR, presigned URL; safety gates for delete bucket/object, public ACL on prod |
 
 ### 12. See also
 

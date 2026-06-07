@@ -1,0 +1,17 @@
+{
+  "instanceId": "mysql-3p9mkq2v3a-001",
+  "instanceName": "prod-mysql-01",
+  "engine": "MySQL",
+  "engineVersion": "8.0",
+  "instanceClass": "db.mysql.n2.medium",
+  "instanceStorageGB": 100,
+  "instanceType": "primary",
+  "vpcId": "vpc-3p9mkq2v3a",
+  "subnetId": "subnet-3p9mkq2v3a-db",
+  "az": "cn-north-1b",
+  "status": "running",
+  "connectionString": "prod-mysql-001.jcloud.com",
+  "port": 3306,
+  "haMode": "StandardHA",
+  "createdTime": "2026-02-10T14:00:00+08:00"
+}

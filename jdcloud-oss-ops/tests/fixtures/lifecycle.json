@@ -1,0 +1,36 @@
+{
+  "rules": [
+    {
+      "id": "archive-old-logs",
+      "status": "Enabled",
+      "filter": {
+        "prefix": "logs/"
+      },
+      "transitions": [
+        {
+          "days": 30,
+          "storageClass": "InfrequentAccess"
+        },
+        {
+          "days": 180,
+          "storageClass": "Archive"
+        }
+      ],
+      "expiration": {
+        "days": 365
+      },
+      "noncurrentVersionTransitions": [
+        {
+          "noncurrentDays": 30,
+          "storageClass": "InfrequentAccess"
+        }
+      ],
+      "noncurrentVersionExpiration": {
+        "noncurrentDays": 365
+      },
+      "abortIncompleteMultipartUpload": {
+        "daysAfterInitiation": 7
+      }
+    }
+  ]
+}

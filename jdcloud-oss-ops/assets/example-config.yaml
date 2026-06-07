@@ -1,0 +1,252 @@
+# JD Cloud Object Storage Service (OSS) Example Configuration
+# This file provides production-ready configurations for common OSS deployment scenarios
+# Refer to SKILL.md for detailed execution flows and parameter validation
+
+# ============================================
+# Scenario 1: Basic Private Bucket
+# Use case: Internal application data, backups, logs storage
+# ============================================
+basic_private_bucket:
+  bucket:
+    name: app-internal-data-cn-north-1
+    region: cn-north-1
+    acl: private
+    storageClass: Standard
+
+  versioning:
+    status: enabled
+
+  serverSideEncryption:
+    enabled: true
+    algorithm: AES256
+
+# ============================================
+# Scenario 2: Log Storage with Lifecycle
+# Use case: Application logs with automatic transition and expiration
+# ============================================
+log_storage_with_lifecycle:
+  bucket:
+    name: app-prod-logs-cn-north-1
+    region: cn-north-1
+    acl: private
+
+  lifecycle:
+    rules:
+      - id: transition-logs
+        status: Enabled
+        filter:
+          prefix: "app-logs/"
+        transitions:
+          - days: 30
+            storageClass: InfrequentAccess
+          - days: 180
+            storageClass: Archive
+        expiration:
+          days: 365
+        noncurrentVersionTransitions:
+          - noncurrentDays: 30
+            storageClass: InfrequentAccess
+        noncurrentVersionExpiration:
+          noncurrentDays: 365
+        abortIncompleteMultipartUpload:
+          daysAfterInitiation: 7
+
+  versioning:
+    status: enabled
+
+# ============================================
+# Scenario 3: Public Static Website Hosting
+# Use case: Static website (HTML, CSS, JS, images) hosted on OSS
+# ============================================
+static_website_bucket:
+  bucket:
+    name: static-site-prod-cn-north-1
+    region: cn-north-1
+    acl: public-read
+
+  website:
+    enabled: true
+    indexDocument: index.html
+    errorDocument: error.html
+
+  lifecycle:
+    rules:
+      - id: cache-control
+        status: Enabled
+        filter:
+          prefix: "assets/"
+        expiration:
+          days: 3650
+
+  versioning:
+    status: enabled
+
+# ============================================
+# Scenario 4: Cross-Region Replication (DR)
+# Use case: Disaster recovery with cross-region replication for critical data
+# ============================================
+cross_region_replication:
+  sourceBucket:
+    name: critical-data-primary-cn-north-1
+    region: cn-north-1
+    acl: private
+    versioning:
+      status: enabled
+
+  destinationBucket:
+    name: critical-data-dr-cn-south-1
+    region: cn-south-1
+    acl: private
+    versioning:
+      status: enabled
+
+  replication:
+    role: arn:oss:iam::account-id:role/replication-role
+    rules:
+      - id: replicate-all
+        status: Enabled
+        prefix: ""
+        destination:
+          bucket: arn:oss:cn-south-1:account-id:bucket/critical-data-dr-cn-south-1
+        deleteMarkerReplication:
+          status: Enabled
+        sourceSelectionCriteria:
+          sseKmsEncryptedObjects:
+            status: Enabled
+
+# ============================================
+# Scenario 5: Data Archive with Tiered Storage
+# Use case: Long-term archival with cost-optimized storage tiers
+# ============================================
+data_archive_bucket:
+  bucket:
+    name: archive-data-cn-east-1
+    region: cn-east-1
+    acl: private
+
+  lifecycle:
+    rules:
+      - id: tiered-archive
+        status: Enabled
+        filter:
+          prefix: ""
+        transitions:
+          - days: 30
+            storageClass: InfrequentAccess
+          - days: 90
+            storageClass: Archive
+        expiration:
+          expiredObjectDeleteMarker: true
+
+  versioning:
+    status: enabled
+
+  serverSideEncryption:
+    enabled: true
+    algorithm: KMS
+    kmsKeyId: kms-key-xxx
+
+# ============================================
+# Scenario 6: Multi-Purpose Bucket with Prefix-Based Access
+# Use case: Single bucket organized by prefix with different access patterns
+# ============================================
+multi_purpose_bucket:
+  bucket:
+    name: multi-purpose-storage
+    region: cn-north-1
+    acl: private
+
+  versioning:
+    status: enabled
+
+  lifecycle:
+    rules:
+      - id: temp-files-cleanup
+        status: Enabled
+        filter:
+          prefix: "temp/"
+        expiration:
+          days: 7
+
+      - id: media-files-transition
+        status: Enabled
+        filter:
+          prefix: "media/"
+        transitions:
+          - days: 90
+            storageClass: InfrequentAccess
+        expiration:
+          days: 730
+
+      - id: backup-long-term
+        status: Enabled
+        filter:
+          prefix: "backup/"
+        transitions:
+          - days: 30
+            storageClass: InfrequentAccess
+          - days: 365
+            storageClass: Archive
+        expiration:
+          days: 2555
+
+# ============================================
+# Environment Variables Template
+# ============================================
+env_template: |
+  # JD Cloud Credentials
+  JDC_ACCESS_KEY=your_access_key_here
+  JDC_SECRET_KEY=your_secret_key_here
+  JDC_REGION=cn-north-1
+
+  # Optional Settings
+  JDC_OSS_ENDPOINT=oss.jdcloud-api.com
+  JDC_SCHEME=https
+  JDC_TIMEOUT=20
+
+# ============================================
+# Monitoring Configuration
+# ============================================
+monitoring:
+  metrics:
+    - name: oss_storage_bytes
+      alarm_threshold: 9000000000000
+      comparison: ">="
+      period: 3600
+
+    - name: oss_object_count
+      alarm_threshold: 1000000
+      comparison: ">="
+      period: 3600
+
+    - name: oss_5xx_errors
+      alarm_threshold: 10
+      comparison: ">="
+      period: 300
+
+    - name: oss_get_latency
+      alarm_threshold: 500
+      comparison: ">="
+      period: 300
+
+    - name: oss_throttled_requests
+      alarm_threshold: 50
+      comparison: ">="
+      period: 300
+
+# ============================================
+# Bucket ACL Quick Reference
+# ============================================
+acl_reference:
+  - acl: private
+    description: "Only bucket owner has read/write access. Default and recommended for production."
+    use_case: "Private data, backups, internal logs"
+    security: "Secure"
+  - acl: public-read
+    description: "Anyone can read objects. Only owner can write."
+    use_case: "Static websites, public assets"
+    security: "Use with caution -- data is publicly readable"
+  - acl: public-read-write
+    description: "Anyone can read and write objects. No authentication required."
+    use_case: "PUBLIC BUCKETS ONLY. Never use in production."
+    security: "NOT for production -- use presigned URLs instead"

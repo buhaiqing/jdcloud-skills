@@ -1,0 +1,36 @@
+{
+  "region": "cn-north-1",
+  "target_vpc": "vpc-mock1234",
+  "discovery_mode": "mock",
+  "resources": [
+    {"type": "VM", "instances": [
+      {"instance_id": "i-mock0001", "name": "web-01", "status": "running", "instance_type": "g.n2.medium", "vpc_id": "vpc-mock1234", "subnet_id": "subnet-mock01", "private_ip": "10.0.1.10", "security_group_ids": ["sg-mock01"]},
+      {"instance_id": "i-mock0002", "name": "app-01", "status": "running", "instance_type": "g.n2.large", "vpc_id": "vpc-mock1234", "subnet_id": "subnet-mock02", "private_ip": "10.0.2.20", "security_group_ids": ["sg-mock02"]}
+    ]},
+    {"type": "CLB", "instances": [
+      {"load_balancer_id": "lb-mock0001", "name": "web-clb", "address_type": "internet", "network_type": "vpc", "vpc_id": "vpc-mock1234", "subnet_id": "subnet-mock01", "bandwidth": 100, "status": "active"}
+    ]},
+    {"type": "EIP", "instances": [
+      {"elastic_ip_id": "eip-mock0001", "ip_address": "203.0.113.10", "status": "inuse", "bandwidth_mbps": 100, "instance_id": "lb-mock0001"}
+    ]},
+    {"type": "RDS-MySQL", "instances": [
+      {"db_instance_id": "rm-mock0001", "name": "primary-mysql", "engine": "MySQL", "engine_version": "8.0", "status": "running", "vpc_id": "vpc-mock1234", "subnet_id": "subnet-mock03", "instance_type": "rds.mysql.s2.large"}
+    ]},
+    {"type": "Redis", "instances": [
+      {"cache_instance_id": "redis-mock0001", "name": "session-cache", "engine_version": "7.0", "status": "running", "vpc_id": "vpc-mock1234", "subnet_id": "subnet-mock03"}
+    ]},
+    {"type": "Alarm", "instances": [
+      {"alarm_id": "alarm-mock0001", "name": "CPU-High", "metric": "vm.cpu.util", "enabled": true}
+    ]},
+    {"type": "AuditTrail", "instances": [
+      {"trail_id": "trail-mock0001", "name": "main-trail", "status": "Active", "oss_bucket": "audit-logs-mock"}
+    ]},
+    {"type": "IAM-SubUser", "instances": [
+      {"sub_user": "ops-admin", "mfa_enabled": true, "access_key_count": 2}
+    ]},
+    {"type": "KMS-Key", "instances": [
+      {"key_id": "kms-mock0001", "key_state": "Enabled", "rotation_enabled": true}
+    ]}
+  ],
+  "connections": []
+}

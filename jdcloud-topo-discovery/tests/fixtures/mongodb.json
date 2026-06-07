@@ -1,0 +1,11 @@
+{
+  "instanceId": "mongo-3p9mkq2v3a-001",
+  "instanceName": "prod-mongo-01",
+  "engineVersion": "6.0",
+  "instanceClass": "mongo.n2.medium",
+  "vpcId": "vpc-3p9mkq2v3a",
+  "subnetId": "subnet-3p9mkq2v3a-db",
+  "az": "cn-north-1b",
+  "status": "running",
+  "createdTime": "2026-02-18T09:00:00+08:00"
+}

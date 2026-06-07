@@ -1,0 +1,37 @@
+{
+  "networkSecurityGroupId": "sg-test-001",
+  "networkSecurityGroupName": "web-sg",
+  "vpcId": "vpc-test-001",
+  "description": "Web tier security group",
+  "createdTime": "2026-06-01T10:10:00+08:00",
+  "networkSecurityGroupRuleDescriptions": {
+    "inboundRules": [
+      {
+        "protocol": 6,
+        "direction": 0,
+        "addressPrefix": "0.0.0.0/0",
+        "fromPort": 80,
+        "toPort": 80,
+        "description": "HTTP"
+      },
+      {
+        "protocol": 6,
+        "direction": 0,
+        "addressPrefix": "0.0.0.0/0",
+        "fromPort": 443,
+        "toPort": 443,
+        "description": "HTTPS"
+      }
+    ],
+    "outboundRules": [
+      {
+        "protocol": 300,
+        "direction": 1,
+        "addressPrefix": "0.0.0.0/0",
+        "fromPort": 1,
+        "toPort": 65535,
+        "description": "All outbound"
+      }
+    ]
+  }
+}

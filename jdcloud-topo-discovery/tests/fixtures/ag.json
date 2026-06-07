@@ -1,0 +1,8 @@
+{
+  "agId": "ag-3p9mkq2v3a-001",
+  "name": "web-ag",
+  "description": "Web tier availability group",
+  "vpcId": "vpc-3p9mkq2v3a",
+  "az": "cn-north-1a",
+  "createdTime": "2026-02-08T10:00:00+08:00"
+}

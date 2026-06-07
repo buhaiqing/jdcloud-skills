@@ -1,0 +1,12 @@
+{
+  "keyId": "km-3p9mkq2v3a-001",
+  "keyName": "prod-data-key",
+  "description": "Production data encryption key",
+  "keySpec": "AES_256",
+  "keyUsage": "ENCRYPT/DECRYPT",
+  "origin": "JDCLOUD",
+  "rotationEnabled": true,
+  "rotationIntervalDays": 365,
+  "status": "Enabled",
+  "createdTime": "2026-01-20T10:00:00+08:00"
+}

@@ -1,0 +1,11 @@
+{
+  "elasticIpId": "fip-3p9mkq2v3a-001",
+  "elasticIpAddress": "116.196.xx.xx",
+  "name": "web-01-eip",
+  "status": "InUse",
+  "bandwidthMbps": 5,
+  "chargeType": "postpaid_by_traffic",
+  "instanceType": "vm",
+  "instanceId": "i-3p9mkq2v3a-001",
+  "createdTime": "2026-02-01T10:00:00+08:00"
+}

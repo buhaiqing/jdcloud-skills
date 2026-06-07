@@ -1,0 +1,101 @@
+[
+  {
+    "id": "eval-001",
+    "query": "帮我看看我的系统架构是否符合京东云最佳实践",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "B",
+    "expected_pillars": ["security", "reliability", "performance", "cost", "efficiency"],
+    "fixture": "alicloud-arch-advisor/fixtures/standard-3tier.json",
+    "description": "用户请求完整架构评审 (WAF 5 支柱)"
+  },
+  {
+    "id": "eval-002",
+    "query": "检查一下当前环境的安全性,看看有没有安全隐患",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "B",
+    "expected_pillars": ["security"],
+    "fixture": "alicloud-arch-advisor/fixtures/standard-3tier.json",
+    "description": "用户只要求安全支柱检查"
+  },
+  {
+    "id": "eval-003",
+    "query": "看看我当前云上是什么架构,帮我画个图",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "A",
+    "expected_pillars": [],
+    "fixture": "alicloud-arch-advisor/fixtures/standard-3tier.json",
+    "description": "用户需要架构逆向 (Mode A) — 拓扑识别 + Mermaid 图"
+  },
+  {
+    "id": "eval-004",
+    "query": "我要做一个电商平台,大概日活 10 万,帮我设计一个高可用架构",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "C",
+    "expected_pillars": [],
+    "fixture": "alicloud-arch-advisor/fixtures/ecommerce-medium.json",
+    "description": "电商场景架构方案推荐"
+  },
+  {
+    "id": "eval-005",
+    "query": "游戏服务器上京东云怎么搭,需要支持跨区对战",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "C",
+    "expected_pillars": [],
+    "fixture": "alicloud-arch-advisor/fixtures/gaming-medium.json",
+    "description": "游戏后端架构推荐 + 多区域"
+  },
+  {
+    "id": "eval-006",
+    "query": "金融合规场景的高可用架构,需要等保三级",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "C",
+    "expected_pillars": ["security", "reliability"],
+    "fixture": "alicloud-arch-advisor/fixtures/fintech-high-availability.json",
+    "description": "金融合规 + 高可用 + 安全加固"
+  },
+  {
+    "id": "eval-007",
+    "query": "做一个 SaaS 平台,多租户之间怎么隔离最稳妥",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "C",
+    "expected_pillars": ["security", "reliability"],
+    "fixture": "alicloud-arch-advisor/fixtures/saas-multitenant.json",
+    "description": "SaaS 多租户架构 + 隔离策略"
+  },
+  {
+    "id": "eval-008",
+    "query": "我们想做一个 AI 训练推理平台,需要 GPU 集群,推荐一下方案",
+    "expected_skill": "jdcloud-arch-advisor",
+    "expected_mode": "C",
+    "expected_pillars": ["performance", "cost"],
+    "fixture": "alicloud-arch-advisor/fixtures/ai-ml-gpu.json",
+    "description": "AI/ML 平台 GPU 集群架构推荐"
+  },
+  {
+    "id": "eval-negative-009",
+    "query": "创建一台 4 核 8G 的云主机",
+    "expected_skill": "jdcloud-vm-ops",
+    "expected_mode": null,
+    "expected_pillars": [],
+    "fixture": null,
+    "description": "不应该触发 arch-advisor — 资源级操作应路由到 jdcloud-vm-ops"
+  },
+  {
+    "id": "eval-negative-010",
+    "query": "查看本月账单",
+    "expected_skill": "jdcloud-billing-ops",
+    "expected_mode": null,
+    "expected_pillars": [],
+    "fixture": null,
+    "description": "不应该触发 arch-advisor — 计费场景应路由到计费 skill (missing)"
+  },
+  {
+    "id": "eval-negative-011",
+    "query": "帮我做一次云上健康巡检",
+    "expected_skill": "jdcloud-aiops-cruise",
+    "expected_mode": null,
+    "expected_pillars": [],
+    "fixture": null,
+    "description": "不应该触发 arch-advisor — 巡检场景应路由到 jdcloud-aiops-cruise"
+  }
+]

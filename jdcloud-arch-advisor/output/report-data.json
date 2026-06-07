@@ -1,0 +1,86 @@
+{
+  "skill": "jdcloud-arch-advisor",
+  "version": "1.0.0",
+  "mode": "assessment",
+  "format": "markdown",
+  "timestamp": "2026-06-07T19:48:43Z",
+  "region": "cn-north-1",
+  "account": "unknown",
+  "architecture": {
+    "pattern": "3-tier",
+    "description": "3 层 Web 架构 (VM + CLB + RDS/Redis)",
+    "mermaid": "graph TB\n    Internet((Internet))\n    subgraph \"JD Cloud - cn-north-1\"\n        EIP[EIP × 1]\n        CLB[CLB × 1]\n        VM[VM × 2]\n        RDS[(RDS-MySQL × 1)]\n        Redis[(Redis × 1)]\n    end\n    Internet --> CLB\n    CLB --> VM\n    VM --> RDS\n    VM --> Redis",
+    "findings": [
+      "检测到架构模式: 3-tier",
+      "描述: 3 层 Web 架构 (VM + CLB + RDS/Redis)",
+      "建议对照 WAF 5 支柱进行成熟度评估"
+    ]
+  },
+  "pillars": {
+    "security": {
+      "pass": 7,
+      "fail": 1,
+      "warn": 2,
+      "total": 10,
+      "score": 70,
+      "results": [
+        {
+          "id": "WAF-SEC-001",
+          "status": "pass",
+          "message": "IAM 子用户启用 MFA"
+        },
+        {
+          "id": "WAF-SEC-002",
+          "status": "pass",
+          "message": "AccessKey 90 天内轮换"
+        },
+        {
+          "id": "WAF-SEC-003",
+          "status": "pass",
+          "message": "ActionTrail 操作审计已启用"
+        },
+        {
+          "id": "WAF-SEC-004",
+          "status": "warn",
+          "message": "未检测到 WAF 防护, 建议为 Web 入口配置京东云 WAF"
+        },
+        {
+          "id": "WAF-SEC-005",
+          "status": "fail",
+          "message": "KMS 密钥自动轮转未启用 (manual check: jdcloud-kms-ops)"
+        },
+        {
+          "id": "WAF-SEC-006",
+          "status": "pass",
+          "message": "CLB 监听已配置 HTTPS"
+        },
+        {
+          "id": "WAF-SEC-007",
+          "status": "warn",
+          "message": "RDS SSL 加密连接未启用 (manual check)"
+        },
+        {
+          "id": "WAF-SEC-008",
+          "status": "pass",
+          "message": "安全组最小权限收敛"
+        },
+        {
+          "id": "WAF-SEC-009",
+          "status": "pass",
+          "message": "VPC 网络隔离策略合规"
+        },
+        {
+          "id": "WAF-SEC-010",
+          "status": "pass",
+          "message": "未发现 AccessKey 泄露到代码仓库"
+        }
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "id": "WAF-SEC-005",
+      "message": "KMS 密钥自动轮转未启用 (manual check: jdcloud-kms-ops)"
+    }
+  ]
+}

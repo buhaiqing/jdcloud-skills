@@ -1,0 +1,38 @@
+# JD Cloud Topology Baseline - GitLab CI
+stages:
+  - baseline
+
+topology-baseline:
+  stage: baseline
+  image: python:3.10-slim
+  before_script:
+    - apt-get update && apt-get install -y curl
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - source $HOME/.cargo/env
+    - uv venv --python 3.10
+    - source .venv/bin/activate
+    - uv pip install jdcloud_cli jdcloud_sdk
+    - export HOME=/tmp/jdc-home
+    - mkdir -p $HOME/.jdc
+    - |
+      cat > $HOME/.jdc/config << 'CFGEOF'
+      [default]
+      access_key = $JDC_ACCESS_KEY
+      secret_key = $JDC_SECRET_KEY
+      region_id = $JDC_REGION
+      endpoint = vpc.jdcloud-api.com
+      scheme = https
+      timeout = 20
+      CFGEOF
+    - printf "%s" "default" > $HOME/.jdc/current
+  script:
+    - source .venv/bin/activate
+    - python jdcloud-topo-discovery/scripts/baseline-manager.py --output-dir ./infra-baseline
+  artifacts:
+    paths:
+      - infra-baseline/
+    expire_in: 90 days
+  only:
+    - main
+  schedule:
+    - cron: "0 2 * * *"

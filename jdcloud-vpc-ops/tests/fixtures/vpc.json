@@ -1,0 +1,8 @@
+{
+  "vpcId": "vpc-test-001",
+  "vpcName": "test-vpc",
+  "addressPrefix": "10.0.0.0/16",
+  "description": "Test VPC",
+  "azType": "standard",
+  "createdTime": "2026-06-01T10:00:00+08:00"
+}

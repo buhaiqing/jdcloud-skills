@@ -1,0 +1,17 @@
+{
+  "instanceId": "pg-3p9mkq2v3a-001",
+  "instanceName": "prod-pg-01",
+  "engine": "PostgreSQL",
+  "engineVersion": "15",
+  "instanceClass": "db.pg.n2.medium",
+  "instanceStorageGB": 100,
+  "instanceType": "primary",
+  "vpcId": "vpc-3p9mkq2v3a",
+  "subnetId": "subnet-3p9mkq2v3a-db",
+  "az": "cn-north-1b",
+  "status": "running",
+  "connectionString": "prod-pg-001.jcloud.com",
+  "port": 5432,
+  "haMode": "StandardHA",
+  "createdTime": "2026-02-15T10:00:00+08:00"
+}

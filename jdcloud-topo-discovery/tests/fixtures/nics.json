@@ -1,0 +1,10 @@
+{
+  "networkInterfaceId": "eni-3p9mkq2v3a-001",
+  "networkInterfaceName": "web-01-nic-0",
+  "vpcId": "vpc-3p9mkq2v3a",
+  "subnetId": "subnet-3p9mkq2v3a-app",
+  "privateIpAddress": "10.0.1.11",
+  "macAddress": "fa:16:3e:xx:xx:xx",
+  "az": "cn-north-1a",
+  "createdTime": "2026-02-01T10:05:00+08:00"
+}

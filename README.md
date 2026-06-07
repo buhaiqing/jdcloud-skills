@@ -103,7 +103,14 @@ jdcloud-skills/
 ├── jdcloud-skill-generator/           # Skill 生成器（Meta Skill）
 │   ├── SKILL.md
 │   └── references/
-├── jdcloud-link-cruise/               # ⭐ 全链路巡检 Skill
+├── jdcloud-arch-advisor/              # ⭐ 架构评审 Skill
+│   ├── SKILL.md
+│   ├── references/
+│   │   ├── rules/                      # WAF 五支柱评估规则
+│   │   └── scenario-templates/         # 架构场景模板
+│   ├── scripts/
+│   └── assets/
+├── jdcloud-aiops-cruise/               # ⭐ 全链路巡检 Skill
 │   ├── SKILL.md
 │   ├── runbooks/                       # 4 x 巡检场景定义
 │   ├── references/
@@ -119,6 +126,14 @@ jdcloud-skills/
 │   ├── QUICK_REFERENCE.md
 │   ├── assets/
 │   └── references/
+├── jdcloud-vpc-ops/                   # VPC 网络运维 Skill
+│   ├── SKILL.md
+│   └── references/
+│       ├── cli-usage.md               # CLI 使用示例
+│       ├── api-sdk-usage.md           # SDK 代码示例
+│       ├── monitoring.md              # VPC 监控与流日志
+│       ├── rubric.md                  # GCL 质量评分规则
+│       └── prompt-templates.md        # Agent 提示词模板
 ├── jdcloud-mysql-ops/                 # MySQL 数据库运维 Skill
 │   ├── SKILL.md                       # 主技能定义（含慢日志查询）
 │   └── references/
@@ -153,7 +168,9 @@ jdcloud-skills/
 
 | Skill 名称 | 产品 | 功能描述 | 状态 |
 |------------|------|----------|------|
-| [jdcloud-link-cruise](jdcloud-link-cruise/) | ⭐ 全链路巡检 | EIP→CLB→VM→Redis→ES→NAT→K8s 全链路自动拓扑发现+深度巡检，一键出报告 | ✅ 可用 |
+| [jdcloud-arch-advisor](jdcloud-arch-advisor/) | ⭐ 架构评审 | WAF 五支柱成熟度评估、架构逆向分析、架构方案推荐、多场景模板 | ✅ 可用 |
+| [jdcloud-vpc-ops](jdcloud-vpc-ops/) | VPC 网络 | VPC/子网/安全组/路由表/ACL/对等连接管理，支持 GCL 安全门 | ✅ 可用 |
+| [jdcloud-aiops-cruise](jdcloud-aiops-cruise/) | ⭐ 全链路巡检 | EIP→CLB→VM→Redis→ES→NAT→K8s 全链路自动拓扑发现+深度巡检，一键出报告 | ✅ 可用 |
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | 云主机 (VM) | 云主机生命周期管理、监控、故障排查、**云助手批量执行命令** | ✅ 可用 |
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | 云数据库 MySQL | MySQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | 云数据库 PostgreSQL | PostgreSQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |

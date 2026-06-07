@@ -1,0 +1,12 @@
+{
+  "subnetId": "subnet-test-001",
+  "subnetName": "test-subnet",
+  "vpcId": "vpc-test-001",
+  "addressPrefix": "10.0.1.0/24",
+  "az": "cn-north-1a",
+  "description": "Test subnet",
+  "availableIpAddressCount": 250,
+  "routeTableId": "rtb-test-001",
+  "aclId": "acl-test-001",
+  "createdTime": "2026-06-01T10:05:00+08:00"
+}

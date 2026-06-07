@@ -1,0 +1,124 @@
+pillar: Efficiency
+rules:
+  - id: WAF-EFF-001
+    title: 资源标签治理
+    severity: high
+    check_type: existence
+    resource_type: TAG
+    description: 应对云资源实施标签策略，便于资源分类、成本分摊和运维管理
+    check_logic:
+      field: TagCoverage
+      operator: gte
+      value: 80
+    remediation: 制定标签规范（环境、项目、负责人、用途等），对现有资源补充标签并治理不合规资源
+    data_source: jdcloud-tag-audit-ops
+
+  - id: WAF-EFF-002
+    title: 关键指标监控覆盖
+    severity: high
+    check_type: existence
+    resource_type: CMS
+    description: 应对 CPU、内存、磁盘、网络等关键资源指标配置云监控告警
+    check_logic:
+      field: AlarmRuleCount
+      operator: gte
+      value: 1
+    remediation: 为所有核心资源配置云监控告警规则，覆盖 CPU、内存、磁盘和网络指标
+    data_source: jdcloud-cloudmonitor-ops
+
+  - id: WAF-EFF-003
+    title: 自动化部署流水线
+    severity: high
+    check_type: existence
+    resource_type: OPS
+    description: 应构建自动化部署流水线实现应用的持续集成和持续部署
+    check_logic:
+      field: PipelineConfig
+      operator: exists
+    remediation: 使用京东云 DevOps 或 Jenkins 构建 CI/CD 流水线
+    data_source: (无对应 skill，标记为 manual check)
+
+  - id: WAF-EFF-004
+    title: 资源组组织管理
+    severity: medium
+    check_type: existence
+    resource_type: RG
+    description: 应使用资源组对云资源进行逻辑分组，实现细粒度的权限管理和资源隔离
+    check_logic:
+      field: ResourceGroupId
+      operator: exists
+    remediation: 按业务/项目/环境创建资源组，将资源分配到对应资源组统一管理
+    data_source: jdcloud-iam-ops
+
+  - id: WAF-EFF-005
+    title: 弹性伸缩配置
+    severity: high
+    check_type: existence
+    resource_type: ESS
+    description: 应对有波峰波谷特征的业务配置弹性伸缩策略，自动调整资源数量
+    check_logic:
+      field: ScalingGroupId
+      operator: exists
+    remediation: 配置弹性伸缩组和伸缩规则，设置合理的触发条件和冷却时间
+    data_source: (无对应 skill，标记为 manual check)
+
+  - id: WAF-EFF-006
+    title: 告警噪音治理
+    severity: medium
+    check_type: existence
+    resource_type: Alert
+    description: 应使用告警智能分析对告警事件进行聚合、降噪、抑制
+    check_logic:
+      field: AlertIntelligenceEnabled
+      operator: equals
+      value: true
+    remediation: 启用 jdcloud-alert-intelligence 对告警进行聚合降噪
+    data_source: jdcloud-alert-intelligence
+
+  - id: WAF-EFF-007
+    title: 运维 Runbook 文档化
+    severity: low
+    check_type: existence
+    resource_type: OPS
+    description: 常见运维操作应有标准化的 Runbook 文档，减少人为失误并提升效率
+    check_logic:
+      field: Runbook_Docs
+      operator: exists
+    remediation: 编写运维操作手册，覆盖部署、扩缩容、备份恢复、故障处理等场景
+    data_source: (无对应 skill，标记为 manual check)
+
+  - id: WAF-EFF-008
+    title: 关键指标监控大盘
+    severity: medium
+    check_type: existence
+    resource_type: CMS
+    description: 应创建云监控大盘可视化展示关键业务和技术指标
+    check_logic:
+      field: DashboardId
+      operator: exists
+    remediation: 创建云监控大盘，展示核心服务的性能、容量和健康状态
+    data_source: jdcloud-cloudmonitor-ops
+
+  - id: WAF-EFF-009
+    title: 资源全生命周期管理
+    severity: medium
+    check_type: existence
+    resource_type: OPS
+    description: 应建立资源申请、审批、释放的全生命周期流程
+    check_logic:
+      field: LifecycleProcess
+      operator: exists
+    remediation: 制定资源申请/审批/释放 SOP，使用 IAM 策略和资源组配合执行
+    data_source: jdcloud-iam-ops + jdcloud-tag-audit-ops
+
+  - id: WAF-EFF-010
+    title: 定期容量评估
+    severity: low
+    check_type: existence
+    resource_type: OPS
+    description: 应定期进行容量评估，提前识别资源瓶颈和扩容需求
+    check_logic:
+      field: CapacityReview
+      operator: exists_recent
+    remediation: 季度性输出容量评估报告，覆盖 CPU/内存/存储/带宽/连接数等关键指标
+    data_source: jdcloud-cloudmonitor-ops

@@ -1,0 +1,193 @@
+pillar: Reliability
+rules:
+  - id: WAF-REL-001
+    title: CLB 多可用区部署
+    severity: critical
+    check_type: config
+    resource_type: CLB
+    description: CLB 实例应部署在至少两个可用区以实现高可用
+    check_logic:
+      field: ZoneMappings
+      operator: count_gte
+      value: 2
+    remediation: 在 CLB 配置中添加备用可用区，确保跨可用区高可用
+    data_source: jdcloud-clb-ops
+
+  - id: WAF-REL-002
+    title: JCS for MySQL 自动备份已启用
+    severity: high
+    check_type: config
+    resource_type: MySQL
+    description: JCS for MySQL 实例应开启自动备份以防止数据丢失
+    check_logic:
+      field: BackupPolicy.Enabled
+      operator: equals
+      value: true
+    remediation: 在 JCS for MySQL 控制台开启自动备份，设置每日备份窗口和保留天数
+    data_source: jdcloud-mysql-ops
+
+  - id: WAF-REL-003
+    title: VM 部署在多个可用区
+    severity: high
+    check_type: relation
+    resource_type: VM
+    description: 承载应用的 VM 实例应分布在多个可用区，避免单 AZ 故障导致全停
+    check_logic:
+      field: AvailabilityZone
+      operator: multi_az
+    remediation: 将 VM 实例分布在至少 2 个可用区，结合 CLB 多 AZ 部署
+    data_source: jdcloud-vm-ops
+
+  - id: WAF-REL-004
+    title: JCS for MySQL 主备高可用
+    severity: critical
+    check_type: config
+    resource_type: MySQL
+    description: 生产环境 JCS for MySQL 实例应启用主备高可用部署，实现跨 AZ 容灾
+    check_logic:
+      field: HaMode
+      operator: in
+      value: ["StandardHA", "FinanceHA"]
+    remediation: 将 JCS for MySQL 实例升级到主备高可用版，主备在不同可用区
+    data_source: jdcloud-mysql-ops
+
+  - id: WAF-REL-005
+    title: JCS for Redis 主从/集群架构
+    severity: high
+    check_type: config
+    resource_type: Redis
+    description: 生产环境 JCS for Redis 实例应使用主从或集群版，避免单点故障
+    check_logic:
+      field: InstanceType
+      operator: in
+      value: ["RedisCluster", "RedisMasterSlave"]
+    remediation: 将 Redis 单机版升级为主从版或集群版
+    data_source: jdcloud-redis-ops
+
+  - id: WAF-REL-006
+    title: CLB 健康检查已配置
+    severity: critical
+    check_type: existence
+    resource_type: CLB
+    description: CLB 监听器应配置健康检查，自动移除异常后端服务器
+    check_logic:
+      field: HealthCheck.HealthCheckEnabled
+      operator: equals
+      value: true
+    remediation: 为 CLB 监听器开启健康检查，配置合理的检查间隔和超时阈值
+    data_source: jdcloud-clb-ops
+
+  - id: WAF-REL-007
+    title: EIP 绑定高可用资源
+    severity: medium
+    check_type: relation
+    resource_type: VPC
+    description: 弹性公网 IP(EIP)应绑定到高可用资源，避免单点故障
+    check_logic:
+      field: BindInstanceType
+      operator: in
+      value: ["CLB", "NAT"]
+    remediation: 将 EIP 绑定到 CLB 或 NAT 网关，避免直接绑定单台 VM
+    data_source: jdcloud-eip-ops
+
+  - id: WAF-REL-008
+    title: 数据库连接数上限合理配置
+    severity: medium
+    check_type: config
+    resource_type: RDS
+    description: JCS 数据库实例应设置合理的最大连接数，防止连接耗尽导致服务不可用
+    check_logic:
+      field: MaxConnections
+      operator: gte
+      value: 200
+    remediation: 评估业务并发需求，调整数据库最大连接数参数
+    data_source: jdcloud-mysql-ops / jdcloud-postgresql-ops
+
+  - id: WAF-REL-009
+    title: 对象存储 Bucket 跨区域复制
+    severity: high
+    check_type: config
+    resource_type: OSS
+    description: 存储重要数据的对象存储 Bucket 应配置跨区域复制
+    check_logic:
+      field: CrossRegionReplication
+      operator: enabled
+    remediation: 在对象存储 Bucket 配置中开启跨区域复制规则
+    data_source: (无对应 skill，标记为 manual check)
+
+  - id: WAF-REL-010
+    title: NAT 网关高可用部署
+    severity: medium
+    check_type: config
+    resource_type: VPC
+    description: 生产环境 NAT 网关应部署高可用模式，避免单点故障影响出网能力
+    check_logic:
+      field: NatGatewayBandwidthPackageCount
+      operator: count_gte
+      value: 2
+    remediation: 创建多个 NAT 网关或使用增强型 NAT 网关实现高可用
+    data_source: (无对应 skill，标记为 manual check)
+
+  - id: WAF-REL-011
+    title: VM 至少 2 节点部署
+    severity: high
+    check_type: config
+    resource_type: VM
+    description: 承载应用服务的 VM 集群应至少包含 2 台实例以保证应用高可用
+    check_logic:
+      field: InstanceCount
+      operator: count_gte
+      value: 2
+    remediation: 扩容 VM 集群至 2 台以上，分布在不同的可用区
+    data_source: jdcloud-vm-ops
+
+  - id: WAF-REL-012
+    title: Elasticsearch 数据备份
+    severity: high
+    check_type: existence
+    resource_type: Elasticsearch
+    description: JCS for Elasticsearch 实例应配置自动快照备份，防止数据丢失
+    check_logic:
+      field: SnapshotConfiguration
+      operator: not_null
+    remediation: 在 JCS for Elasticsearch 控制台配置自动快照备份策略
+    data_source: jdcloud-elasticsearch-ops
+
+  - id: WAF-REL-013
+    title: JCS for MySQL 只读实例应对读负载
+    severity: medium
+    check_type: relation
+    resource_type: MySQL
+    description: 高读取负载的 JCS for MySQL 实例应创建只读实例来分担读压力
+    check_logic:
+      field: ReadOnlyInstanceCount
+      operator: count_gte
+      value: 1
+    remediation: 为 JCS for MySQL 主实例创建只读实例，应用程序配置读写分离
+    data_source: jdcloud-mysql-ops
+
+  - id: WAF-REL-014
+    title: 应用层熔断降级
+    severity: low
+    check_type: existence
+    resource_type: Application
+    description: 应用服务应配置熔断降级机制，防止下游故障级联扩散
+    check_logic:
+      field: CircuitBreakerEnabled
+      operator: equals
+      value: true
+    remediation: 引入 Sentinel 或 Hystrix 等熔断框架，为关键依赖配置熔断规则
+    data_source: (无对应 skill，标记为 manual check)
+
+  - id: WAF-REL-015
+    title: 跨可用区数据持久化
+    severity: high
+    check_type: config
+    resource_type: Storage
+    description: 关键业务云硬盘应使用多 AZ 冗余存储类型（本地冗余 → 同城冗余）
+    check_logic:
+      field: DiskType
+      operator: in
+      value: ["ssd.gp2.az", "ssd.io1.az", "premium-hdd.az"]
+    remediation: 将关键云盘变配为同城冗余存储类型
+    data_source: jdcloud-vm-ops

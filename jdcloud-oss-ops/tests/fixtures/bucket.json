@@ -1,0 +1,11 @@
+{
+  "bucketName": "oss-test-bucket-001",
+  "regionId": "cn-north-1",
+  "bucketAcl": "private",
+  "storageClass": "Standard",
+  "objectCount": 150,
+  "totalSizeBytes": 10737418240,
+  "creationDate": "2026-06-01T10:00:00+08:00",
+  "versioning": "none",
+  "location": "https://oss-test-bucket-001.oss.cn-north-1.jdcloud.com"
+}

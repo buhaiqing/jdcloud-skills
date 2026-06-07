@@ -1,0 +1,51 @@
+# Topology Baseline - GitHub Actions
+# Schedule: daily 2 AM UTC + manual trigger
+name: JD Cloud Topology Baseline
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Install deps
+        run: |
+          uv venv --python 3.10
+          source .venv/bin/activate
+          uv pip install jdcloud_cli jdcloud_sdk
+      - name: Configure jdc credentials (sandbox-safe)
+        run: |
+          export HOME=/tmp/jdc-home
+          mkdir -p $HOME/.jdc
+          cat > $HOME/.jdc/config << 'CFGEOF'
+          [default]
+          access_key = ${{ secrets.JDC_ACCESS_KEY }}
+          secret_key = ${{ secrets.JDC_SECRET_KEY }}
+          region_id = ${{ secrets.JDC_REGION }}
+          endpoint = vpc.jdcloud-api.com
+          scheme = https
+          timeout = 20
+          CFGEOF
+          printf "%s" "default" > $HOME/.jdc/current
+      - name: Run baseline
+        run: source .venv/bin/activate && python jdcloud-topo-discovery/scripts/baseline-manager.py --output-dir ./infra-baseline
+        env:
+          JDC_REGION: ${{ secrets.JDC_REGION }}
+      - name: Commit and push baseline
+        run: |
+          git config user.name "topo-discovery"
+          git config user.email "topo@jdcloud.com"
+          git add infra-baseline/
+          git diff --staged --quiet || git commit -m "baseline: $(date +%Y-%m-%d)"
+          git push

@@ -1,0 +1,9 @@
+{
+  "instanceId": "es-3p9mkq2v3a-001",
+  "instanceName": "prod-es-01",
+  "engineVersion": "7.10",
+  "instanceClass": "es.n2.medium",
+  "az": "cn-north-1a",
+  "status": "running",
+  "createdTime": "2026-03-01T10:00:00+08:00"
+}

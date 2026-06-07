@@ -103,7 +103,14 @@ jdcloud-skills/
 ├── jdcloud-skill-generator/           # Skill generator (Meta Skill)
 │   ├── SKILL.md
 │   └── references/
-├── jdcloud-link-cruise/               # ⭐ Full-link Inspection Skill
+├── jdcloud-arch-advisor/              # ⭐ Architecture Review Skill
+│   ├── SKILL.md
+│   ├── references/
+│   │   ├── rules/                      # WAF 5-pillar assessment rules
+│   │   └── scenario-templates/         # Architecture scenario templates
+│   ├── scripts/
+│   └── assets/
+├── jdcloud-aiops-cruise/               # ⭐ Full-link Inspection Skill
 │   ├── SKILL.md
 │   ├── runbooks/
 │   ├── references/
@@ -119,6 +126,14 @@ jdcloud-skills/
 │   ├── QUICK_REFERENCE.md
 │   ├── assets/
 │   └── references/
+├── jdcloud-vpc-ops/                   # VPC network operations Skill
+│   ├── SKILL.md
+│   └── references/
+│       ├── cli-usage.md               # CLI usage examples
+│       ├── api-sdk-usage.md           # SDK code examples
+│       ├── monitoring.md              # VPC monitoring & flow logs
+│       ├── rubric.md                  # GCL quality scoring rules
+│       └── prompt-templates.md        # Agent prompt templates
 ├── jdcloud-mysql-ops/                 # MySQL operations Skill
 │   ├── SKILL.md                       # Main skill definition (includes slow log query)
 │   └── references/
@@ -165,7 +180,9 @@ A structured Markdown document that guides AI Agents to complete specific tasks.
 
 | Skill Name | Product | Description | Status |
 |------------|---------|-------------|--------|
-| [jdcloud-link-cruise](jdcloud-link-cruise/) | ⭐ Full-Link Inspection | Auto-discover topology (EIP→CLB→VM→Redis→ES→K8s), deep analysis, one-command report | ✅ Available |
+| [jdcloud-arch-advisor](jdcloud-arch-advisor/) | ⭐ Architecture Review | WAF 5-pillar maturity assessment, architecture reverse-engineering, architecture recommendations, multi-scenario templates | ✅ Available |
+| [jdcloud-vpc-ops](jdcloud-vpc-ops/) | VPC | VPC/Subnet/SecurityGroup/RouteTable/ACL/Peering management with GCL safety gates | ✅ Available |
+| [jdcloud-aiops-cruise](jdcloud-aiops-cruise/) | ⭐ Full-Link Inspection | Auto-discover topology (EIP→CLB→VM→Redis→ES→K8s), deep analysis, one-command report | ✅ Available |
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | VM | VM lifecycle management, monitoring, troubleshooting, **Cloud Assistant batch command execution** | ✅ Available |
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | MySQL | MySQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | PostgreSQL | PostgreSQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |

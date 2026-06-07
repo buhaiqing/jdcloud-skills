@@ -1,0 +1,14 @@
+{
+  "cacheInstanceId": "redis-3p9mkq2v3a-001",
+  "cacheInstanceName": "prod-redis-01",
+  "engineVersion": "7.0",
+  "instanceClass": "redis.cluster.2g",
+  "instanceType": "RedisCluster",
+  "vpcId": "vpc-3p9mkq2v3a",
+  "subnetId": "subnet-3p9mkq2v3a-app",
+  "az": "cn-north-1a",
+  "port": 6379,
+  "connectionDomain": "prod-redis-001.jcloud.com",
+  "status": "running",
+  "createdTime": "2026-02-12T09:00:00+08:00"
+}

@@ -1,0 +1,200 @@
+# =============================================================================
+# jdcloud-arch-advisor - Configuration Example
+# =============================================================================
+# This file is a TEMPLATE / EXAMPLE — never hard-code real credentials.
+# All sensitive values are sourced from the agent runtime via {{env.*}}.
+#
+# Security Rules:
+#   1. NEVER hard-code JDC_ACCESS_KEY / JDC_SECRET_KEY in this file.
+#   2. The jdc CLI (>=1.2.12) reads credentials ONLY from `~/.jdc/config`
+#      (INI file under section [default]). Environment variables alone are
+#      NOT picked up by the CLI — they are picked up by the Python SDK.
+#   3. NEVER print or log JDC_SECRET_KEY. Existence checks use `test -n`.
+#   4. This file is documentation/reference; production agents should resolve
+#      `{{env.*}}` placeholders from their own secret store.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. JD Cloud credentials (referenced — never embedded)
+# -----------------------------------------------------------------------------
+# The two values below are runtime placeholders consumed by the agent harness.
+# Do NOT replace with real keys. Do NOT commit this file with substituted values.
+credentials:
+  access_key: "{{env.JDC_ACCESS_KEY}}"   # NEVER log, NEVER prompt
+  secret_key: "{{env.JDC_SECRET_KEY}}"   # NEVER log, NEVER prompt
+  region: "cn-north-1"                   # default region (Beijing-1)
+  endpoint: "vm.jdcloud-api.com"         # default service endpoint
+  scheme: "https"
+  timeout_seconds: 20
+
+# -----------------------------------------------------------------------------
+# 2. CLI configuration note
+# -----------------------------------------------------------------------------
+# jdc CLI requires `~/.jdc/config` (INI) — see AGENTS.md "Credentials" section.
+# Example (do NOT commit real keys):
+#
+#   [default]
+#   access_key = {{env.JDC_ACCESS_KEY}}
+#   secret_key = {{env.JDC_SECRET_KEY}}
+#   region_id  = cn-north-1
+#   endpoint   = vm.jdcloud-api.com
+#   scheme     = https
+#   timeout    = 20
+#
+# `~/.jdc/current` MUST NOT contain a trailing newline:
+#   printf "%s" "default" > ~/.jdc/current
+#
+# Invocation pattern (note --output json MUST come before the subcommand):
+#   jdc --output json vm describe-instances --instance-id i-xxx
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 3. Advisor behaviour
+# -----------------------------------------------------------------------------
+advisory:
+  output_format: markdown        # markdown | json
+  log_level: info                # debug | info | warn | error
+  default_pillars:
+    - security
+    - reliability
+    - performance
+    - cost
+    - efficiency
+
+  # Target scope (vpc / resources to assess)
+  target:
+    vpc_id: ""                   # leave empty to scan all VPCs
+    vpc_name: "main-vpc"         # human-friendly label for reports
+    resource_group_id: ""        # optional, e.g. "rg-prod"
+    tags: ""                     # "env=prod,app=ecommerce"
+
+  # Data-collection timeouts
+  data_collection:
+    timeout_seconds: 120
+    retry_count: 3
+    backoff: exponential         # 0s → 2s → 4s
+
+# -----------------------------------------------------------------------------
+# 4. WAF (Well-Architected Framework) evaluation
+# -----------------------------------------------------------------------------
+evaluation_pillars:
+  - security
+  - reliability
+  - performance
+  - cost
+  - efficiency
+
+# Per-pillar weight (must sum to 1.0; default = equal weight)
+waf_weight:
+  security: 0.20
+  reliability: 0.20
+  performance: 0.20
+  cost: 0.20
+  efficiency: 0.20
+
+# Score thresholds (determines report colour)
+thresholds:
+  excellent: 90   # >= 90 %
+  good: 80        # >= 80 %
+  warning: 60     # >= 60 %
+  critical: 0     # < 60 %
+
+# -----------------------------------------------------------------------------
+# 5. Report output
+# -----------------------------------------------------------------------------
+report:
+  format: markdown               # markdown | json
+  include_mermaid_topology: true
+  include_recommendations: true
+  include_cost_estimate: false   # opt-in (requires billing permissions)
+
+# -----------------------------------------------------------------------------
+# 6. GCL (Generator-Critic-Loop) — see AGENTS.md §3
+# -----------------------------------------------------------------------------
+# arch-advisor is `optional` in the GCL rollout (AGENTS.md §8). When enabled,
+# Generator and Critic MUST run in isolated prompt contexts and the trace is
+# persisted to ./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json.
+gcl:
+  enabled: true
+  classification: optional       # optional | recommended | required
+  max_iter: 5                    # see AGENTS.md §8 — arch-advisor default
+  rubric_path: references/rubric.md
+  prompt_templates_path: references/prompt-templates.md
+  trace_dir: audit-results
+
+# -----------------------------------------------------------------------------
+# 7. Cross-skill delegation
+# -----------------------------------------------------------------------------
+# jdcloud-arch-advisor is a meta-skill (Mode A / B / C) — it NEVER mutates
+# resources directly. It delegates read-only data collection to:
+delegation:
+  # Confirmed-existing skills
+  compute:
+    - jdcloud-vm-ops
+  database:
+    - jdcloud-mysql-ops
+    - jdcloud-postgresql-ops
+    - jdcloud-mongodb-ops
+  cache_search:
+    - jdcloud-redis-ops
+    - jdcloud-elasticsearch-ops
+  network:
+    - jdcloud-clb-ops
+    - jdcloud-eip-ops
+  security_governance:
+    - jdcloud-iam-ops
+    - jdcloud-kms-ops
+  observability:
+    - jdcloud-cloudmonitor-ops
+    - jdcloud-audit-ops
+  meta:
+    - jdcloud-tag-audit-ops
+    - jdcloud-alert-intelligence
+
+  # Skills marked "manual check" in WAF rules (not yet in repo)
+  manual_check:
+    - jdcloud-vpc-ops          # pending creation
+    - jdcloud-nat-ops
+    - jdcloud-oss-ops
+    - jdcloud-cdn-ops
+    - jdcloud-kubernetes-ops
+    - jdcloud-jcq-ops
+    - jdcloud-billing-ops
+    - jdcloud-auto-scaling-orch
+
+# -----------------------------------------------------------------------------
+# 8. Scenario recommendation defaults
+# -----------------------------------------------------------------------------
+scenario_overrides:
+  ecommerce:
+    default_dau: 100000
+    default_ha: multi-az
+  gaming:
+    default_dau: 50000
+    default_ha: multi-region
+  fintech:
+    default_dau: 20000
+    default_ha: multi-az
+    default_compliance: equal-protection
+  saas_multi_tenant:
+    default_dau: 30000
+    default_ha: multi-az
+  ai_ml:
+    default_dau: 1000
+    default_ha: single-az
+    default_gpu_pool: true
+
+# -----------------------------------------------------------------------------
+# 9. Safety gates (inherited from AGENTS.md)
+# -----------------------------------------------------------------------------
+safety:
+  # Advisor is read-only by design. These flags prevent accidental mutation
+  # when the skill is invoked with destructive-sounding verbs.
+  refuse_resource_mutation: true
+  require_user_confirmation_for:
+    - "delete"          # routed to owning skill
+    - "stop"            # routed to owning skill
+    - "release"         # routed to owning skill
+    - "rotate-keys"     # routed to jdcloud-iam-ops
+    - "schedule-deletion"  # routed to jdcloud-kms-ops
+  secret_logging: forbid     # never write JDC_SECRET_KEY / AccessKeySecret to logs
