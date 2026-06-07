@@ -39,6 +39,97 @@ jdcloud-[product]-ops/
     └── troubleshooting.md
 ```
 
+## AIOps Cruise Skill Directory Structure (Three-Phase Model)
+
+**AIOps 巡检类 Skill**（如 `jdcloud-aiops-cruise`）遵循 **Perceive → Reason → Execute** 三阶段模型，目录结构必须体现这三个分类：
+
+```
+jdcloud-aiops-cruise/
+├── SKILL.md                    # Skill 定义（入口）
+├── runbooks/                   # 巡检场景定义
+│   ├── 00-index.md             #   场景索引
+│   ├── 01-daily-health-check.md
+│   ├── 02-emergency-troubleshoot.md
+│   ├── 03-capacity-planning.md
+│   ├── 04-pre-launch-check.md
+│   └── 05-mysql-slowquery-audit.md
+├── scripts/                    # 执行脚本（三阶段分层）
+│   ├── 01-perceive/            #   感知层 — 数据收集与拓扑发现
+│   │   └── cruise_sniff.py     #     Phase 1: 资源嗅探 + 拓扑初判
+│   ├── 02-reason/              #   推理层 — 分析与诊断
+│   │   ├── cruise_link.py      #     Phase 2: 全链路深度巡检编排器
+│   │   └── analyzers/          #     各资源类型分析器
+│   │       ├── base_analyzer.py
+│   │       ├── vm_analyzer.py
+│   │       ├── clb_analyzer.py
+│   │       ├── eip_analyzer.py
+│   │       ├── redis_analyzer.py
+│   │       ├── rds_mysql_analyzer.py
+│   │       ├── k8s_analyzer.py
+│   │       ├── nat_analyzer.py
+│   │       ├── es_analyzer.py
+│   │       └── sg_analyzer.py
+│   ├── 03-execute/             #   执行层 — 修复建议与闭环
+│   │   └── README.md           #     说明：本层只生成建议，不直接执行变更
+│   ├── lib/                    #   共享库
+│   │   ├── jdc_client.py       #     JD Cloud CLI/SDK 封装
+│   │   └── resource_discovery.py
+│   └── README.md               #   脚本结构说明
+├── references/                 # 参考文档
+│   ├── prompt-templates.md     #   GCL Prompt 模板
+│   ├── severity-matrix.md      #   严重级别矩阵
+│   └── threshold-definitions.md #   阈值定义
+└── reports/                    # 报告输出
+    └── templates/              #   报告模板
+```
+
+### 三阶段职责划分
+
+| 阶段 | 目录 | 职责 | 输入 | 输出 |
+|------|------|------|------|------|
+| **Perceive** | `01-perceive/` | 数据采集、资源发现、拓扑构建 | 客户标签、区域范围 | 拓扑初判报告 |
+| **Reason** | `02-reason/` | 指标分析、异常检测、根因定位 | Phase 1 输出、监控数据 | 深度巡检报告 |
+| **Execute** | `03-execute/` | 修复建议生成、闭环跟踪 | Phase 2 findings | Action 建议（供人工确认） |
+
+### 关键设计约束
+
+1. **Execute 层只读原则**: `jdcloud-aiops-cruise` 是纯只读巡检 Skill，`03-execute/` 不放置实际变更脚本，只生成标准化的修复建议，供人工确认后通过对应 ops skill 执行。
+
+2. **路径约定**: 脚本导入路径必须兼容三阶段目录结构：
+   ```python
+   # 在 01-perceive/ 或 02-reason/ 子目录中的脚本
+   _scripts_dir = os.path.dirname(os.path.abspath(__file__))
+   _project_dir = os.path.join(_scripts_dir, "..")  # 指向 scripts/
+   sys.path.insert(0, _project_dir)
+   from lib.jdc_client import JdcClient
+   ```
+
+3. **命名规范**:
+   - `01-perceive/*_sniff.py` — 嗅探/发现类脚本
+   - `02-reason/*_link.py` — 分析/关联类脚本
+   - `02-reason/analyzers/*_analyzer.py` — 特定资源分析器
+   - `03-execute/*_action.py` — 建议生成器（如有）
+
+### 执行顺序
+
+```bash
+# Phase 1: 感知
+python scripts/01-perceive/cruise_sniff.py --customer 烟台振华
+
+# Phase 2: 推理
+python scripts/02-reason/cruise_link.py --customer 烟台振华 --sniff-file reports/output/sniff-xxx.json
+
+# Phase 3: 执行建议（人工确认后调用对应 skill）
+# 根据 Phase 2 报告，由人工通过 jdcloud-vm-ops / jdcloud-redis-ops 等执行实际变更
+```
+
+### 为什么需要三阶段分离
+
+1. **职责清晰**: 每个阶段有明确的输入输出契约，便于独立测试和迭代
+2. **安全隔离**: Execute 层可独立审计，确保变更操作可控
+3. **扩展友好**: 新增资源类型只需在 `02-reason/analyzers/` 添加 analyzer
+4. **符合 AIOps 认知模型**: Perceive/Reason/Execute 是行业通用框架
+
 ## Development Environment
 
 **Python 3.10** | **`uv`** (package manager) | **`jdc`** (JD Cloud CLI)

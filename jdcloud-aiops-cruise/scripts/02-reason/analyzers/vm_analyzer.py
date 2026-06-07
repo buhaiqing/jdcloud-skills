@@ -16,7 +16,7 @@ from . import register
 from .base_analyzer import BaseAnalyzer
 import sys, os
 # Make imports work both as a module and as a standalone script
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 from lib.jdc_client import tag_dict, get_tag

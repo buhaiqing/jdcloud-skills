@@ -1,6 +1,6 @@
 ---
 name: "jdcloud-aiops-cruise"
-version: "1.0.0"
+version: "1.3.0"
 metadata:
   description: "JD Cloud 全链路巡检 Skill — 覆盖 EIP/CLB/VM/K8s/Redis/NAT/安全组的自动拓扑发现与深度诊断"
   cli_applicability: "partial"
@@ -31,6 +31,7 @@ metadata:
 |---|---|
 | VM 创建/停止/删除 | `jdcloud-vm-ops` |
 | Redis 实例 CRUD | `jdcloud-redis-ops` |
+| MySQL 慢查询分析/索引优化 | `jdcloud-mysql-ops` |
 | 监控告警规则变更 | `jdcloud-cloudmonitor-ops` |
 | IAM/权限管理 | `jdcloud-iam-ops` |
 
@@ -44,16 +45,16 @@ metadata:
 
 ## Execution Flow
 
-### Phase 1: 嗅探（cruise_sniff.py）
+### Phase 1: 嗅探（`scripts/01-perceive/cruise_sniff.py`）
 
 1. **Pre-flight**: 读取 runbook 配置，解析阈值
-2. **Discover**: 扫描客户标签下的 EIP/CLB/VM/Redis/NAT/K8s/安全组
+2. **Discover**: 扫描客户标签下的 EIP/CLB/VM/Redis/RDS MySQL/NAT/K8s/安全组
 3. **Classify**: 按标签置信度分类部署模式（K8s / 传统 / 未知）
 4. **Build Topology**: 构建 VPC→子网→资源拓扑
 5. **Human Confirm**: 低置信度资源输出待确认清单
 6. **Output**: 拓扑初判报告（Markdown / JSON）
 
-### Phase 2: 深度巡检（cruise_link.py）
+### Phase 2: 深度巡检（`scripts/02-reason/cruise_analyze.py`）
 
 1. **Collect**: 采集 6h 监控 + 昨日/上周环比 + 告警历史
 2. **Check Spec Limits**: 对比实例规格上限，计算资源水位
@@ -96,4 +97,7 @@ metadata:
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-06-08 | 新增 PostgreSQL 巡检场景（runbook 06），新增 rds_postgresql_analyzer，支持 PostgreSQL 实例健康检查、慢查询分析、VACUUM 状态检查 |
+| 1.2.0 | 2026-06-08 | 脚本目录按 AIOps 三阶段模型重组：`scripts/01-perceive/`（感知）、`scripts/02-reason/`（推理）、`scripts/03-execute/`（执行建议），更新 AGENTS.md 规范 |
+| 1.1.0 | 2026-06-08 | 新增 MySQL 慢查询巡检场景（runbook 05），新增 rds_mysql_analyzer，支持三阶段慢查询分析（严重度分级、根因分析、优化建议） |
 | 1.0.0 | 2026-06-06 | 初始版本 |

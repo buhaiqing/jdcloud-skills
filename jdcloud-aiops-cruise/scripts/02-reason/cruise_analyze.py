@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-cruise_link.py — Phase 2: 全链路深度巡检
+cruise_analyze.py — Phase 2: 全链路深度巡检与分析
 
 Usage:
-    python cruise_link.py --customer 烟台振华 [--sniff-file sniff-output.json]
+    python cruise_analyze.py --customer 烟台振华 [--sniff-file sniff-output.json]
                           [--hours 6] [--format markdown]
 
 If --sniff-file is provided, uses cached topology from Phase 1.
@@ -14,7 +14,8 @@ import sys, os, json, argparse
 from datetime import datetime
 
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _scripts_dir)
+_project_dir = os.path.join(_scripts_dir, "..")
+sys.path.insert(0, _project_dir)
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources
@@ -33,7 +34,7 @@ def main():
 
     client = JdcClient()
     customer = args.customer
-    output_dir = args.output_dir or os.path.join(_scripts_dir, "..", "reports", "output")
+    output_dir = args.output_dir or os.path.join(_scripts_dir, "..", "..", "reports", "output")
 
     # ── Phase 1: Discovery ──
     if args.sniff_file:

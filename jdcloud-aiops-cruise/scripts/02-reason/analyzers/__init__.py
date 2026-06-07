@@ -7,7 +7,8 @@ Analyzer registry. Auto-imports all registered analyzers.
 import sys, os
 
 # Ensure scripts/ is in path for all analyzer submodules
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# analyzers/ is at scripts/02-reason/analyzers/, so project root is two levels up
+_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 
@@ -27,6 +28,8 @@ def create_all() -> list:
     # Explicit imports to trigger register() calls
     from analyzers import vm_analyzer
     from analyzers import redis_analyzer
+    from analyzers import rds_mysql_analyzer
+    from analyzers import rds_postgresql_analyzer
     from analyzers import clb_analyzer
     from analyzers import eip_analyzer
     from analyzers import k8s_analyzer

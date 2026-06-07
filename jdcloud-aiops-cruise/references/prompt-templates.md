@@ -19,7 +19,7 @@ Rubric 要求:
 
 请按以下步骤执行：
 1. 读取 runbook 中的步骤定义
-2. 按步骤调用 `cruise_sniff.py` 或 `cruise_link.py`
+2. 按步骤调用 `scripts/01-perceive/cruise_sniff.py` 或 `scripts/02-reason/cruise_analyze.py`
 3. 输出结果 + 执行追踪
 
 输出格式：JSON 或 Markdown（根据 runbook 定义）

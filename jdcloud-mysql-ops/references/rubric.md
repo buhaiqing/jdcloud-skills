@@ -26,6 +26,9 @@
 | `describe-instance` / `list` | Correctness, Traceability | Safety & Idempotency are N/A; score 1.0 by default |
 | `describe-slow-logs` | Correctness, Traceability | Read-only query; Safety = 1.0 by default. Must validate `startTime` and `endTime` are within 7-day window |
 | `describe-slow-logs-by-tags` | Correctness, Traceability, **Spec Compliance** | Composite operation; Safety = 1.0 by default. Must validate: (1) tag_filters format, (2) time window ≤ 7 days, (3) engine filter = MySQL, (4) max_instances respected or user confirmed |
+| `analyze-slow-queries` | Correctness, Traceability | Analysis-only operation; Safety = 1.0 by default. Must validate: (1) severity classification rules applied, (2) root cause analysis covers 7 pattern types, (3) optimization advice includes actionable SQL, (4) impact estimation provided |
+| `scheduled-slowquery-audit` | Correctness, Traceability, **Spec Compliance** | Composite scheduled operation; Safety = 1.0 by default. Must validate: (1) tag-based instance discovery, (2) cross-instance aggregation, (3) trend comparison vs previous period, (4) top priority extraction |
+| `slowquery-alarm-integration` | Correctness, Traceability | Alarm-triggered analysis; Safety = 1.0 by default. Must validate: (1) alarm payload parsing, (2) automatic time window calculation, (3) report generation and delivery |
 
 ### Composite operation specific rules (describe-slow-logs-by-tags)
 
@@ -91,5 +94,6 @@ via the SDK low-level `pymysql` / `mysql.connector` path. This is an
 
 | Version | Date | Change |
 |---|---|---|
+| 1.2.0 | 2026-06-08 | Added scoring rules for `analyze-slow-queries` (severity classification, root cause analysis), `scheduled-slowquery-audit` (trend analysis, priority extraction), and `slowquery-alarm-integration` (alarm-triggered analysis) operations |
 | 1.0.0 | 2026-06-04 | Initial rubric for `jdcloud-mysql-ops` GCL rollout (covers instance-level + DDL/DML paths) |
 | 1.1.0 | 2026-06-05 | Added `describe-slow-logs` and `describe-slow-logs-by-tags` operations with composite operation scoring rules |

@@ -15,7 +15,8 @@ import sys, os, json, argparse
 from datetime import datetime
 
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _scripts_dir)
+_project_dir = os.path.join(_scripts_dir, "..")
+sys.path.insert(0, _project_dir)
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources
@@ -33,7 +34,7 @@ def main():
     client = JdcClient()
     regions = args.region
     customer = args.customer
-    output_dir = args.output_dir or os.path.join(_scripts_dir, "..", "reports", "output")
+    output_dir = args.output_dir or os.path.join(_scripts_dir, "..", "..", "reports", "output")
 
     print(f"\n🔍 嗅探阶段: 客户={customer}, 区域={regions or '全部'}")
     print("=" * 60)

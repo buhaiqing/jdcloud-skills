@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.2.0"
-  last_updated: "2026-06-05"
+  version: "1.3.0"
+  last_updated: "2026-06-08"
   runtime: Harness AI Agent
   api_profile: "JD Cloud RDS MySQL API v1 - https://rds.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -159,6 +159,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2026-06-08 | **Enhanced slow query capabilities**: (1) **Automated Perception**: Added CloudMonitor alarm integration for automatic slow query detection and alert-triggered analysis. (2) **Scheduled Audit**: Added `scheduled_slowquery_audit` for daily/weekly automated patrol with trend analysis and optimization tracking. (3) **Improved Analysis**: Enhanced `analyzeSlowQueries` with severity classification (Critical/Major/Minor), root cause detection (7 patterns), and actionable optimization advice with impact estimation. |
 | 1.2.0 | 2026-06-05 | **Added Describe Slow Logs operations**: (1) `describeSlowLogs` — query slow query summaries by time range for single instance. (2) `describeSlowLogsByTags` — two-phase composite operation: filter instances by tags (环境=生产, 客户=xxx), then parallel query slow logs across all matching instances. Both support pagination, filtering (account/keyword), sorting (execution metrics), with safety guards (max_instances limit, parallel execution control). |
 | 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DDL/DML paths, op-specific overrides including storage shrink and SQL `WHERE` check) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, DDL `DROP`/`TRUNCATE`, DML `UPDATE`/`DELETE` without WHERE. |
 | 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
@@ -990,7 +991,581 @@ for log in result['aggregated_slowlogs'][:10]:
 3. **部分失败处理:** 单个实例查询失败不影响其他实例
 4. **数据聚合上限:** 跨实例聚合结果限制返回数量，避免过大响应
 
-### Operation: Describe MySQL Instance
+### Operation: Analyze MySQL Slow Queries（分析定位与优化建议）
+
+> 基于慢日志查询结果（`describeSlowLogs`），自动分析慢查询根因并给出优化建议。
+> 这是一个**分析型组合操作**：先调用 `describeSlowLogs` 获取原始数据，再基于指标模式匹配合适的诊断规则。
+
+#### Input Variables
+
+本操作直接复用 `describeSlowLogs` 的查询参数，在查询结果上叠加分析层：
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `{{user.instance_id}}` | string | MySQL 实例 ID |
+| `{{user.start_time}}` | string | 开始时间 (`YYYY-MM-DD HH:mm:ss`) |
+| `{{user.end_time}}` | string | 结束时间 (`YYYY-MM-DD HH:mm:ss`) |
+| `{{user.db_name}}` | string | (可选) 数据库名过滤 |
+| `{{user.analysis_depth}}` | string | 分析深度: `basic`(默认,汇总) / `deep`(逐条分析+建议) |
+| `{{user.focus}}` | string | (可选) 关注重点: `all`(默认) / `most_time`(最耗时) / `most_freq`(最频繁) / `full_scan`(全表扫描) / `lock`(锁等待) |
+
+#### Analysis Pipeline（三阶段分析）
+
+```
+原始慢日志数据
+    │
+    ▼
+[Phase 1] 严重度分级 ──► 将每条慢查询标记为 Critical / Major / Minor
+    │
+    ▼
+[Phase 2] 根因分析 ──► 基于 rowsExamined/rowsSent/lockTime 等指标推断根因
+    │
+    ▼
+[Phase 3] 优化建议 ──► 根据根因类型生成具体的 SQL 优化方案
+    │
+    ▼
+输出：结构化的分析报告 + 可执行建议
+```
+
+---
+
+#### Phase 1：严重度分级
+
+分析器根据执行时间和频率，按照以下规则分级：
+
+| 严重度 | 判定条件 | 颜色标记 | Agent 行动 |
+|--------|----------|----------|------------|
+| 🔴 **Critical** | `executionTimeAvg ≥ 5000ms` 或 `executionTimeSum ≥ 300000ms` 或 `executionCount ≥ 10000` | 红色 | 立即告警，建议优先处理 |
+| 🟡 **Major** | `executionTimeAvg ≥ 1000ms` 或 `rowsExaminedSum ≥ 500000` 或 `executionCount ≥ 1000` | 黄色 | 标记为需要优化 |
+| 🔵 **Minor** | 其他慢查询 | 蓝色 | 记录在案，作为潜在优化目标 |
+
+**Python 实现示例：**
+
+```python
+def classify_slow_query(log: dict) -> str:
+    """Classify slow query by severity."""
+    avg_time = log.get("executionTimeAvg", 0)
+    total_time = log.get("executionTimeSum", 0)
+    count = log.get("executionCount", 0)
+    rows_examined = log.get("rowsExaminedSum", 0)
+
+    if avg_time >= 5000 or total_time >= 300_000 or count >= 10000:
+        return "🔴 Critical"
+    if avg_time >= 1000 or rows_examined >= 500_000 or count >= 1000:
+        return "🟡 Major"
+    return "🔵 Minor"
+```
+
+---
+
+#### Phase 2：根因分析
+
+基于慢日志指标组合，推断可能的根因类型。每种根因对应一组明确的指标特征：
+
+| 根因类型 | 判定规则 | 说明 |
+|---------|----------|------|
+| 🏷️ **Missing Index（缺少索引）** | `rowsExaminedSum > rowsSentSum × 100` 且 `executionTimeAvg > 500` | 扫描大量行但返回少量行，典型的缺少索引 |
+| 📊 **Full Table Scan（全表扫描）** | `rowsExaminedSum > 100000` 且 `SQL` 无 `WHERE` 或 `WHERE` 条件无索引列 | 查询扫描整个表或分区 |
+| 🔒 **Lock Contention（锁竞争）** | `lockTimeSum > executionTimeSum × 0.3` 或 `lockTimeSum > 60000` | 锁等待时间占总执行时间比例过高 |
+| 🔗 **Inefficient Join（低效 JOIN）** | `rowsExaminedSum > 500000` 且 SQL 包含多个 `JOIN` 且 `rowsSentSum` 较小 | JOIN 缺乏索引或驱动表选择不当 |
+| 📦 **Large Result Set（大结果集）** | `rowsSentSum > 10000` 且 `executionTimeAvg > 2000` | 返回过多行导致网络/内存开销 |
+| ⏰ **Frequent Small Query（频繁小查询）** | `executionCount > 1000` 且 `executionTimeAvg < 500` | 频繁执行但单次不慢，N+1 问题 |
+| 📝 **No WHERE / Bad Filter（缺少过滤条件）** | 无 `WHERE` 子句或 `WHERE` 条件不含索引列 | 全表扫描或过滤无效 |
+| 📐 **Temp Table / File Sort（临时表/文件排序）** | `rowsExaminedSum > 100000` 且 `executionTimeAvg > 2000` 且 `SQL` 含 `ORDER BY` | 缺少排序索引导致文件排序 |
+
+**Python 实现示例：**
+
+```python
+import re
+
+def analyze_root_cause(log: dict) -> list:
+    """Analyze root cause(s) of a slow query."""
+    findings = []
+    sql = log.get("sql", "").lower()
+    avg_time = log.get("executionTimeAvg", 0)
+    rows_examined = log.get("rowsExaminedSum", 0)
+    rows_sent = log.get("rowsSentSum", 0)
+    lock_time = log.get("lockTimeSum", 0)
+    total_time = log.get("executionTimeSum", 0)
+    count = log.get("executionCount", 0)
+
+    # 1. Missing Index: scanned >> sent
+    if rows_examined > rows_sent * 100 and rows_examined > 10000:
+        findings.append({
+            "type": "missing_index",
+            "label": "🏷️ Missing Index",
+            "confidence": "high" if rows_examined > rows_sent * 1000 else "medium",
+            "detail": f"Scanned {rows_examined} rows but only returned {rows_sent} "
+                      f"(ratio {rows_examined // max(rows_sent, 1)}:1)"
+        })
+
+    # 2. Lock Contention
+    if total_time > 0 and lock_time > total_time * 0.3:
+        findings.append({
+            "type": "lock_contention",
+            "label": "🔒 Lock Contention",
+            "confidence": "high",
+            "detail": f"Lock wait time {lock_time}ms is {lock_time * 100 // total_time}% of total"
+        })
+
+    # 3. Full Table Scan (no WHERE clause)
+    if "where" not in sql and rows_examined > 50000:
+        findings.append({
+            "type": "full_table_scan",
+            "label": "📊 Full Table Scan",
+            "confidence": "high",
+            "detail": "Query has no WHERE clause, examining large row set"
+        })
+
+    # 4. Inefficient JOIN
+    join_count = len(re.findall(r'\bjoin\b', sql))
+    if join_count >= 2 and rows_examined > 200000 and rows_sent < 1000:
+        findings.append({
+            "type": "inefficient_join",
+            "label": "🔗 Inefficient JOIN",
+            "confidence": "medium",
+            "detail": f"Query joins {join_count} tables, examined {rows_examined} rows"
+        })
+
+    # 5. Large Result Set
+    if rows_sent > 10000 and avg_time > 2000:
+        findings.append({
+            "type": "large_result_set",
+            "label": "📦 Large Result Set",
+            "confidence": "medium",
+            "detail": f"Returned {rows_sent} rows, consider pagination (LIMIT/OFFSET)"
+        })
+
+    # 6. Frequent Small Query (N+1 pattern)
+    if count > 1000 and avg_time < 500:
+        findings.append({
+            "type": "frequent_small_query",
+            "label": "⏰ Frequent Small Query",
+            "confidence": "medium",
+            "detail": f"Executed {count} times, avg {avg_time}ms each — possible N+1 pattern"
+        })
+
+    # 7. Temp Table / File Sort
+    if "order by" in sql and rows_examined > 100000 and avg_time > 2000:
+        findings.append({
+            "type": "temp_table_sort",
+            "label": "📐 Temp Table / File Sort",
+            "confidence": "medium",
+            "detail": "ORDER BY without index causes filesort on large result set"
+        })
+
+    return findings
+```
+
+---
+
+#### Phase 3：优化建议生成
+
+根据根因分析结果为每条慢查询生成具体、可执行的优化建议。每种优化建议包含问题描述、具体操作和示例 SQL：
+
+| 根因类型 | 优化建议 | 示例 |
+|---------|---------|------|
+| 🏷️ Missing Index | `CREATE INDEX idx_<table>_<cols> ON <table>(<cols>)` | `CREATE INDEX idx_orders_created ON orders(created_at)` |
+| 📊 Full Table Scan | 添加 WHERE 条件或创建覆盖索引 | `CREATE INDEX idx_users_status ON users(status, created_at)` |
+| 🔒 Lock Contention | 缩短事务范围；降低隔离级别；优化 UPDATE/DELETE 条件 | `BEGIN; ... COMMIT;` 尽量短; 检查 `innodb_lock_wait_timeout` |
+| 🔗 Inefficient JOIN | 添加 JOIN 列索引；调整驱动表；使用 STRAIGHT_JOIN | `ALTER TABLE orders ADD INDEX idx_user_id(user_id)` |
+| 📦 Large Result Set | 添加 LIMIT/分页；只查询需要的列 | `SELECT id, name FROM users LIMIT 50` |
+| ⏰ Frequent Small Query | 合并为批量查询；使用 JOIN 替代 N+1；添加缓存 | 改用 `WHERE id IN (...)` 替代循环单条查询 |
+| 📐 Temp Table / File Sort | 为 ORDER BY 列创建索引 | `CREATE INDEX idx_orders_date ON orders(order_date)` |
+
+**Python 实现示例：**
+
+```python
+def generate_optimization_advice(findings: list, log: dict) -> list:
+    """Generate actionable optimization advice based on root cause analysis."""
+    sql = log.get("sql", "")
+    advice_list = []
+
+    for finding in findings:
+        advice = {"type": finding["type"], "priority": finding.get("confidence", "medium")}
+
+        if finding["type"] == "missing_index":
+            # Try to extract table/column info from SQL
+            tables = re.findall(r'from\s+(\w+)', sql, re.IGNORECASE)
+            where_cols = re.findall(r'where\s+(\w+(?:\.\w+)?)\s*[=<>]', sql, re.IGNORECASE)
+            table = tables[0] if tables else "<table>"
+            cols = [c.split(".")[-1] for c in where_cols[:3]]
+            idx_name = f"idx_{table}_{'_'.join(cols)}" if cols else f"idx_{table}_<columns>"
+            idx_cols = ", ".join(cols) if cols else "<columns>"
+
+            advice["action"] = f"Add index: CREATE INDEX {idx_name} ON {table}({idx_cols})"
+            advice["rationale"] = (
+                f"Query examines {log.get('rowsExaminedSum', 0)} rows but only returns "
+                f"{log.get('rowsSentSum', 0)}. An index on the WHERE columns would "
+                f"dramatically reduce rows scanned."
+            )
+
+        elif finding["type"] == "full_table_scan":
+            advice["action"] = (
+                "Add WHERE clause filter on indexed column(s), or "
+                "create a covering index for the query"
+            )
+            advice["rationale"] = (
+                "Full table scan detected. Use EXPLAIN to verify and add "
+                "appropriate index to avoid scanning the entire table."
+            )
+
+        elif finding["type"] == "lock_contention":
+            advice["action"] = (
+                "1. Shorten transaction boundaries\n"
+                "2. Consider lowering isolation level (e.g. READ COMMITTED)\n"
+                "3. Check innodb_lock_wait_timeout setting\n"
+                "4. Move long-running UPDATE/DELETE outside peak hours"
+            )
+            advice["rationale"] = (
+                f"Lock wait time ({log.get('lockTimeSum', 0)}ms) accounts for a "
+                f"significant portion of total execution time."
+            )
+
+        elif finding["type"] == "inefficient_join":
+            advice["action"] = (
+                "1. Add indexes on all JOIN columns\n"
+                "2. Ensure smaller table drives the JOIN (or use STRAIGHT_JOIN)\n"
+                "3. Verify all JOIN conditions use indexed columns"
+            )
+            advice["rationale"] = (
+                f"Multi-table JOIN examining {log.get('rowsExaminedSum', 0)} rows "
+                f"but returning few results. Likely missing join column indexes."
+            )
+
+        elif finding["type"] == "large_result_set":
+            advice["action"] = (
+                "Add LIMIT clause for pagination, or only SELECT needed columns"
+            )
+            advice["rationale"] = (
+                f"Query returns {log.get('rowsSentSum', 0)} rows. Large result sets "
+                f"increase network I/O and memory usage."
+            )
+
+        elif finding["type"] == "frequent_small_query":
+            advice["action"] = (
+                "1. Use batch query (WHERE id IN (...)) instead of loop\n"
+                "2. Add application-level cache (Redis) for hot data\n"
+                "3. Use JOIN to fetch related data in one query"
+            )
+            advice["rationale"] = (
+                f"Executed {log.get('executionCount', 0)} times with avg {log.get('executionTimeAvg', 0)}ms. "
+                f"Total: {log.get('executionTimeSum', 0)}ms. Batch or cache can eliminate overhead."
+            )
+
+        elif finding["type"] == "temp_table_sort":
+            advice["action"] = (
+                f"CREATE INDEX idx_<table>_<sort_col> ON <table>(<sort_col>) "
+                f"— or a composite index covering both WHERE and ORDER BY"
+            )
+            advice["rationale"] = (
+                "ORDER BY on large result set without index causes "
+                "filesort/using temporary. Add index to avoid sorting."
+            )
+
+        advice_list.append(advice)
+
+    return advice_list
+```
+
+---
+
+#### End-to-End Analysis Report（完整分析报告模板）
+
+```json
+{
+  "analysis_summary": {
+    "instance_id": "rds-xxxx",
+    "time_range": {"start": "2026-06-01 00:00:00", "end": "2026-06-03 23:59:59"},
+    "total_patterns": 25,
+    "by_severity": {
+      "🔴 Critical": 3,
+      "🟡 Major": 8,
+      "🔵 Minor": 14
+    },
+    "top_issues": [
+      {
+        "sql_truncated": "SELECT * FROM orders WHERE ...",
+        "severity": "🔴 Critical",
+        "findings": ["🏷️ Missing Index", "📦 Large Result Set"],
+        "recommended_action": "CREATE INDEX idx_orders_created ON orders(created_at)",
+        "estimated_impact": "Reduce execution time by ~80%"
+      }
+    ]
+  },
+  "by_root_cause": {
+    "missing_index": {"count": 5, "total_time_ms": 450000},
+    "lock_contention": {"count": 2, "total_time_ms": 120000},
+    "full_table_scan": {"count": 3, "total_time_ms": 280000},
+    "inefficient_join": {"count": 1, "total_time_ms": 95000},
+    "large_result_set": {"count": 2, "total_time_ms": 150000},
+    "frequent_small_query": {"count": 1, "total_time_ms": 180000},
+    "temp_table_sort": {"count": 1, "total_time_ms": 75000}
+  },
+  "quick_wins": [
+    {
+      "sql_truncated": "UPDATE inventory SET stock = ...",
+      "severity": "🟡 Major",
+      "finding": "🔒 Lock Contention",
+      "action": "Check transaction scope, move bulk updates to off-peak"
+    }
+  ]
+}
+```
+
+#### Present to User（中文展示模板）
+
+```
+📊 MySQL 慢查询分析报告
+═══════════════════════
+实例: rds-xxxx | 时间范围: 2026-06-01 ~ 2026-06-03
+───────────────────────────────────────
+
+📈 概览
+────────────────
+总慢查询模式数: 25
+
+按严重度分布:
+  🔴 Critical: 3 条
+  🟡 Major: 8 条
+  🔵 Minor: 14 条
+
+🔴 严重问题 (Critical) — 建议立即处理
+────────────────────────────────────
+1. SELECT * FROM orders WHERE created_at > ?
+   执行次数: 120 | 平均耗时: 1500ms | 总耗时: 180000ms
+   扫描行数: 500000
+
+   分析结果:
+   ├─ 🏷️ Missing Index: 扫描500000行，返回50行(10000:1)
+   └─ 📦 Large Result Set: 返回全部行，缺少 LIMIT
+
+   优化建议:
+   ├─ 🎯 添加索引: CREATE INDEX idx_orders_created ON orders(created_at)
+   │   预期效果: 减少扫描行数 ~99%，平均耗时从1500ms降至~50ms
+   └─ 🎯 添加 LIMIT: SELECT * FROM orders WHERE created_at > ? LIMIT 100
+       预期效果: 减少网络传输和内存开销
+
+🟡 重点关注 (Major) — 建议近期优化
+─────────────────────────────────────
+2. UPDATE inventory SET stock = stock - ? WHERE sku = ?
+   执行次数: 85 | 平均耗时: 800ms | 总耗时: 68000ms
+
+   分析结果:
+   └─ 🔒 Lock Contention: 锁等待时间 22000ms，占总耗时 32%
+
+   优化建议:
+   └─ 🎯 缩短事务范围，将大事务拆分为小批量
+       参考: SET autocommit=1; 或在应用层分页提交
+
+📊 根因分布汇总
+────────────────
+   🏷️ Missing Index:     5 条 (45.0% 总耗时)
+   📊 Full Table Scan:   3 条 (28.0% 总耗时)
+   🔒 Lock Contention:   2 条 (12.0% 总耗时)
+   📦 Large Result Set:  2 条 (15.0% 总耗时)
+   🔗 Inefficient JOIN:  1 条 (9.5% 总耗时)
+   ⏰ Frequent Query:    1 条 (18.0% 总耗时)
+   📐 File Sort:         1 条 (7.5% 总耗时)
+
+🏆 Quick Wins（低投入高回报）
+──────────────────────────────
+1. [Missing Index] 为 orders.created_at 添加索引
+   → 消除 #1 慢查询，预计降低总慢查询耗时 30%
+
+2. [Full Table Scan] 为 logs.cleanup SQL 添加 WHERE 条件
+   → 消除全表扫描，预计降低总慢查询耗时 20%
+```
+
+#### Failure Recovery
+
+| 错误模式 | 重试 | Agent 行动 |
+|---------|:----:|-----------|
+| 慢日志数据为空 | 0 | 报告"该时段无慢查询"; 建议缩小时间范围或检查 slow_query_log 是否开启 |
+| SQL 文本过短(截断) | 0 | 基于可用的执行指标进行分析; 提示用户使用 `SELECT * FROM performance_schema` 获取完整 SQL |
+| 指标数据缺失(如 lockTime) | 0 | 基于已有指标进行分析; 标注"部分分析因数据缺失受限" |
+| 实例不存在 | 0 | HALT; 提示检查实例 ID |
+
+#### 慢查询感知自动化（监控联动）
+
+将慢查询分析与 CloudMonitor 告警联动，实现自动化的慢查询感知：
+
+**Step 1: 配置慢查询告警规则**（通过 `jdcloud-cloudmonitor-ops`）
+```bash
+# 当慢查询数量超过阈值时触发告警
+jdc --output json cm create-alarm-rule \
+  --region-id "{{user.region}}" \
+  --alarm-rule-name "mysql-slow-query-alert" \
+  --metric-name "SlowQueries" \
+  --resource-type "rds" \
+  --resource-id "{{user.instance_id}}" \
+  --threshold "10" \
+  --comparison-operator "GreaterThan" \
+  --evaluation-periods "2" \
+  --period "300"
+```
+
+**Step 2: 告警响应自动分析**（告警回调触发）
+```python
+# 告警回调接收到的信息
+alert_payload = {
+    "instance_id": "rds-xxxx",
+    "metric": "SlowQueries",
+    "current_value": 15,
+    "threshold": 10,
+    "timestamp": "2026-06-08T10:30:00+08:00"
+}
+
+# 自动触发慢日志查询（告警触发前15分钟窗口）
+auto_start_time = alert_timestamp - timedelta(minutes=15)
+auto_end_time = alert_timestamp
+
+# 调用 describeSlowLogs 获取告警时段慢日志
+# 调用 analyzeSlowQueries 生成分析报告
+# 发送分析报告到指定渠道（钉钉/邮件/短信）
+```
+
+**Step 3: 分析报告输出格式**
+```
+🚨 慢查询告警自动分析报告
+═══════════════════════════
+告警实例: rds-xxxx
+告警时间: 2026-06-08 10:30:00
+触发条件: 慢查询数 15 > 阈值 10
+
+📊 告警时段慢查询概况 (10:15:00 ~ 10:30:00)
+───────────────────────────────────────
+慢查询模式数: 3 条
+Critical: 1 条 | Major: 2 条
+
+🔴 Critical 问题
+────────────────
+SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at
+执行次数: 8 | 平均耗时: 3200ms | 总耗时: 25600ms
+
+根因: 🏷️ Missing Index + 📐 Temp Table / File Sort
+建议: CREATE INDEX idx_orders_status_created ON orders(status, created_at)
+预期收益: 降低查询时间 ~95%
+
+完整报告: [查看详情]
+```
+
+#### 慢查询定期巡检（Scheduled Audit）
+
+**使用场景**: 每日/每周自动巡检生产环境慢查询，生成趋势报告。
+
+**Execution Flow**:
+```python
+def scheduled_slowquery_audit(tag_filters, time_window_hours=24):
+    """
+    定期慢查询巡检
+    
+    Args:
+        tag_filters: 标签过滤，如 [{"name": "tag:环境", "values": ["生产"]}]
+        time_window_hours: 巡检时间窗口，默认24小时
+    """
+    end_time = datetime.now()
+    start_time = end_time - timedelta(hours=time_window_hours)
+    
+    # Phase 1: 按标签查询所有实例慢日志
+    slowlog_results = query_slowlogs_by_tags(
+        tag_filters=tag_filters,
+        start_time=start_time.strftime("%Y-%m-%d %H:%M:%S"),
+        end_time=end_time.strftime("%Y-%m-%d %H:%M:%S"),
+        max_instances=50
+    )
+    
+    # Phase 2: 分析所有实例的慢查询
+    analysis_results = []
+    for instance_result in slowlog_results["results"]:
+        if instance_result["total_count"] > 0:
+            analysis = analyze_slow_queries_batch(
+                instance_id=instance_result["instance_id"],
+                slow_logs=instance_result["slow_logs"]
+            )
+            analysis_results.append(analysis)
+    
+    # Phase 3: 生成趋势报告
+    trend_report = generate_trend_report(analysis_results)
+    
+    return {
+        "audit_time": end_time.isoformat(),
+        "time_window": f"{time_window_hours}h",
+        "instances_audited": len(slowlog_results["results"]),
+        "instances_with_issues": len(analysis_results),
+        "trend_report": trend_report,
+        "top_priorities": extract_top_priorities(analysis_results, top_n=5)
+    }
+```
+
+**输出示例**:
+```
+📋 MySQL 慢查询巡检报告 (2026-06-08)
+═══════════════════════════════════════
+巡检时间范围: 过去 24 小时
+巡检实例数: 12 个 (标签: 环境=生产)
+存在慢查询实例: 5 个
+
+📈 趋势对比 (vs 昨日)
+─────────────────────
+慢查询模式总数: 45 → 38 (-15.6%) ✅
+Critical 级别: 3 → 2 (-33.3%) ✅
+总执行耗时: 1,250,000ms → 980,000ms (-21.6%) ✅
+
+🔥 Top 5 优化优先级
+───────────────────
+1. [rds-prod-01] orders 表缺少索引 (impact: 高)
+   SQL: SELECT * FROM orders WHERE user_id = ?
+   建议: CREATE INDEX idx_orders_user_id ON orders(user_id)
+   预计收益: 减少 ~450s 日累计耗时
+
+2. [rds-prod-03] inventory UPDATE 锁竞争 (impact: 中)
+   建议: 缩短事务范围 + 批量更新优化
+
+3. [rds-prod-02] logs 表全表扫描 (impact: 中)
+   建议: 添加 created_at 范围查询索引
+
+4. [rds-prod-01] products JOIN 低效 (impact: 中)
+   建议: 优化 JOIN 列索引
+
+5. [rds-prod-05] 分页查询深翻页 (impact: 低)
+   建议: 使用游标分页替代 OFFSET
+
+📊 根因分布
+───────────
+🏷️ Missing Index:     18 条 (47%)
+📊 Full Table Scan:    8 条 (21%)
+🔒 Lock Contention:    5 条 (13%)
+⏰ Frequent Query:     4 条 (11%)
+📦 Large Result Set:   3 条 (8%)
+
+✅ 已优化确认
+─────────────
+昨日建议 #1 (rds-prod-02): 已添加索引 ✅
+昨日建议 #3 (rds-prod-01): 已优化 SQL ✅
+```
+
+#### Failure Recovery
+
+| 错误模式 | 重试 | Agent 行动 |
+|---------|:----:|-----------|
+| 慢日志数据为空 | 0 | 报告"该时段无慢查询"; 建议缩小时间范围或检查 slow_query_log 是否开启 |
+| SQL 文本过短(截断) | 0 | 基于可用的执行指标进行分析; 提示用户使用 `SELECT * FROM performance_schema` 获取完整 SQL |
+| 指标数据缺失(如 lockTime) | 0 | 基于已有指标进行分析; 标注"部分分析因数据缺失受限" |
+| 实例不存在 | 0 | HALT; 提示检查实例 ID |
+
+#### 与 describeSlowLogs 的关系
+
+| 方面 | describeSlowLogs | analyzeSlowQueries（本操作） |
+|------|-----------------|---------------------------|
+| 输出 | 原始慢日志数据 | 结构化分析报告 + 优化建议 |
+| 目的 | 数据查询 | 智能诊断 |
+| 是否调用 API | 是（必须） | 否（纯计算层，基于 API 返回数据） |
+| 依赖 | 无 | 依赖 describeSlowLogs 的返回数据 |
+| 可组合性 | 独立使用 | 先 query → 后 analyze |
+
+> **组合使用建议：** 推荐先执行 `describeSlowLogs` 获取数据，再将结果输入本分析操作。
+> 当用户问"慢查询怎么办"时，应该：感知 → 分析 → 优化，三步联动。
 
 #### Execution (CLI) [Primary Path]
 

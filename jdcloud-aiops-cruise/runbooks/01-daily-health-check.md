@@ -145,6 +145,7 @@ steps:
       - "nat_analyzer"
       - "k8s_analyzer"       # 仅在检测到 K8s 时启用
       - "sg_analyzer"
+      - "rds_mysql_analyzer" # MySQL 慢查询分析（如检测到 RDS MySQL 实例）
 
   - id: "correlate_chain"
     description: "链路关联推理：组合多个 Analyzer 的结果定位根因"

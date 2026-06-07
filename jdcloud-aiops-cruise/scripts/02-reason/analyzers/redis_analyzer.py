@@ -9,7 +9,7 @@ Features: detects high-memory (OOM risk), low hit rate (cache miss / penetration
 """
 
 import sys, os
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 from analyzers import register

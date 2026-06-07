@@ -1000,7 +1000,432 @@ for log in result['aggregated_slowlogs'][:10]:
 3. **部分失败处理:** 单个实例查询失败不影响其他实例
 4. **数据聚合上限:** 跨实例聚合结果限制返回数量，避免过大响应
 
-### Operation: Describe PostgreSQL Instance
+### Operation: Analyze PostgreSQL Slow Queries（分析定位与优化建议）
+
+> 基于慢日志查询结果（`describeSlowLogs`），自动分析 PostgreSQL 慢查询根因并给出优化建议。
+> 这是一个**分析型组合操作**：先调用 `describeSlowLogs` 获取原始数据，再基于指标模式匹配诊断规则。
+
+#### Input Variables
+
+本操作直接复用 `describeSlowLogs` 的查询参数，在查询结果上叠加分析层：
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `{{user.instance_id}}` | string | PostgreSQL 实例 ID |
+| `{{user.start_time}}` | string | 开始时间 (`YYYY-MM-DD HH:mm:ss`) |
+| `{{user.end_time}}` | string | 结束时间 (`YYYY-MM-DD HH:mm:ss`) |
+| `{{user.analysis_depth}}` | string | 分析深度: `basic`(默认,汇总) / `deep`(逐条分析+建议) |
+| `{{user.focus}}` | string | (可选) 关注重点: `all`(默认) / `most_time`(最耗时) / `most_freq`(最频繁) / `seq_scan`(顺序扫描) / `lock`(锁等待) / `bloat`(表膨胀) |
+
+#### Analysis Pipeline（三阶段分析）
+
+```
+原始慢日志数据
+    │
+    ▼
+[Phase 1] 严重度分级 ──► 将每条慢查询标记为 Critical / Major / Minor
+    │
+    ▼
+[Phase 2] 根因分析 ──► 基于 rowsExamined/rowsSent/lockTime 等指标推断 PG 特有根因
+    │
+    ▼
+[Phase 3] 优化建议 ──► 根据根因类型生成 PG 特定的优化方案
+    │
+    ▼
+输出：结构化的分析报告 + 可执行建议
+```
+
+---
+
+#### Phase 1：严重度分级
+
+| 严重度 | 判定条件 | 颜色标记 | Agent 行动 |
+|--------|----------|----------|------------|
+| 🔴 **Critical** | `executionTimeAvg ≥ 5000ms` 或 `executionTimeSum ≥ 300000ms` 或 `executionCount ≥ 10000` | 红色 | 立即告警，建议优先处理 |
+| 🟡 **Major** | `executionTimeAvg ≥ 1000ms` 或 `rowsExaminedSum ≥ 500000` 或 `executionCount ≥ 1000` | 黄色 | 标记为需要优化 |
+| 🔵 **Minor** | 其他慢查询 | 蓝色 | 记录在案，作为潜在优化目标 |
+
+**Python 实现示例：**
+
+```python
+def classify_slow_query(log: dict) -> str:
+    """Classify slow query by severity."""
+    avg_time = log.get("executionTimeAvg", 0)
+    total_time = log.get("executionTimeSum", 0)
+    count = log.get("executionCount", 0)
+    rows_examined = log.get("rowsExaminedSum", 0)
+
+    if avg_time >= 5000 or total_time >= 300_000 or count >= 10000:
+        return "🔴 Critical"
+    if avg_time >= 1000 or rows_examined >= 500_000 or count >= 1000:
+        return "🟡 Major"
+    return "🔵 Minor"
+```
+
+---
+
+#### Phase 2：根因分析（PostgreSQL 专用规则）
+
+PostgreSQL 的慢查询根因与 MySQL 有显著区别。以下规则针对 PG 的执行引擎、查询规划器（planner）和 MVCC 机制设计：
+
+| 根因类型 | 判定规则 | 说明 |
+|---------|----------|------|
+| 🏷️ **Missing Index（缺少索引）** | `rowsExaminedSum > rowsSentSum × 100` 且 `executionTimeAvg > 500` | 扫描大量行但返回少量行，典型的 seq scan → index scan 转换机会 |
+| 📊 **Sequential Scan（顺序扫描）** | `rowsExaminedSum > 100000` 且 SQL 无过滤条件或条件列无索引 | PG 规划器选择了 Seq Scan 而非 Index Scan |
+| 🔒 **Lock Contention（锁竞争）** | `lockTimeSum > executionTimeSum × 0.3` 或 `lockTimeSum > 60000` | PG 的 RowExclusiveLock 或 AccessExclusiveLock 导致阻塞 |
+| 🧹 **Autovacuum / Bloat（表膨胀）** | `executionTimeAvg > 2000` 且 `rowsExaminedSum > 500000` 且 SQL 含 `UPDATE`/`DELETE` | MVCC 死元组未及时回收导致表膨胀，扫描更多页面 |
+| 🔗 **Inefficient Nested Loop（低效嵌套循环）** | `rowsExaminedSum > 300000` 且 SQL 含多个 `JOIN` 且 `rowsSentSum < 1000` | PG 规划器选择了 Nested Loop，但内表未走索引扫描 |
+| 📦 **Large Result Set（大结果集）** | `rowsSentSum > 10000` 且 `executionTimeAvg > 2000` | 返回过多行导致网络/内存开销 |
+| 💾 **Work Mem / Temp File（临时文件溢出）** | `executionTimeAvg > 3000` 且 SQL 含 `ORDER BY`/`DISTINCT`/`GROUP BY`/`JOIN` 且 `rowsExaminedSum > 100000` | `work_mem` 不足导致排序/哈希操作溢出到磁盘临时文件 |
+| ⏰ **Frequent Small Query（频繁小查询/N+1）** | `executionCount > 1000` 且 `executionTimeAvg < 500` | 频繁执行但单次不慢，PG 中常见于 ORM 生成的 N+1 查询 |
+| ⚙️ **Parameter Tuning（参数配置不当）** | `executionTimeAvg > 3000` 且 `rowsExaminedSum > 200000` 且 SQL 模式为简单扫描 | `shared_buffers`/`effective_cache_size`/`work_mem` 可能低于建议值 |
+
+**Python 实现示例：**
+
+```python
+import re
+
+def analyze_root_cause_pg(log: dict) -> list:
+    """Analyze root cause(s) of a PostgreSQL slow query."""
+    findings = []
+    sql = log.get("sql", "").lower()
+    avg_time = log.get("executionTimeAvg", 0)
+    rows_examined = log.get("rowsExaminedSum", 0)
+    rows_sent = log.get("rowsSentSum", 0)
+    lock_time = log.get("lockTimeSum", 0)
+    total_time = log.get("executionTimeSum", 0)
+    count = log.get("executionCount", 0)
+
+    # 1. Missing Index: scanned >> sent
+    if rows_examined > rows_sent * 100 and rows_examined > 10000:
+        findings.append({
+            "type": "missing_index",
+            "label": "🏷️ Missing Index",
+            "confidence": "high" if rows_examined > rows_sent * 1000 else "medium",
+            "detail": f"Scanned {rows_examined} rows but only returned {rows_sent} "
+                      f"(ratio {rows_examined // max(rows_sent, 1)}:1)"
+        })
+
+    # 2. Lock Contention
+    if total_time > 0 and lock_time > total_time * 0.3:
+        findings.append({
+            "type": "lock_contention",
+            "label": "🔒 Lock Contention",
+            "confidence": "high",
+            "detail": f"Lock wait time {lock_time}ms is {lock_time * 100 // total_time}% of total"
+        })
+
+    # 3. Sequential Scan (no WHERE clause or non-indexed filter)
+    if "where" not in sql and rows_examined > 50000:
+        findings.append({
+            "type": "sequential_scan",
+            "label": "📊 Sequential Scan",
+            "confidence": "high",
+            "detail": "Query has no WHERE clause. PG planner chose Seq Scan over Index Scan."
+        })
+
+    # 4. Autovacuum / Bloat (UPDATE/DELETE-heavy with high scan)
+    if ("update" in sql or "delete" in sql) and rows_examined > 500000 and avg_time > 2000:
+        findings.append({
+            "type": "bloat",
+            "label": "🧹 Autovacuum / Table Bloat",
+            "confidence": "medium",
+            "detail": "High row scan count on UPDATE/DELETE. Dead tuples may cause table bloat, "
+                      "increasing scan pages. Check pg_stat_user_tables.n_dead_tup."
+        })
+
+    # 5. Inefficient Nested Loop
+    join_count = len(re.findall(r'\bjoin\b', sql))
+    if join_count >= 2 and rows_examined > 200000 and rows_sent < 1000:
+        findings.append({
+            "type": "inefficient_join",
+            "label": "🔗 Inefficient Nested Loop",
+            "confidence": "medium",
+            "detail": f"Query joins {join_count} tables, examined {rows_examined} rows. "
+                      "PG planner chose Nested Loop but inner table may lack index."
+        })
+
+    # 6. Large Result Set
+    if rows_sent > 10000 and avg_time > 2000:
+        findings.append({
+            "type": "large_result_set",
+            "label": "📦 Large Result Set",
+            "confidence": "medium",
+            "detail": f"Returned {rows_sent} rows. Consider LIMIT/OFFSET pagination."
+        })
+
+    # 7. Work Mem / Temp File (sort/hash/group without index)
+    has_sort = "order by" in sql or "distinct" in sql
+    has_agg = "group by" in sql
+    if (has_sort or has_agg) and rows_examined > 100000 and avg_time > 2000:
+        findings.append({
+            "type": "work_mem_temp",
+            "label": "💾 Work Mem / Temp File",
+            "confidence": "medium",
+            "detail": "ORDER BY/DISTINCT/GROUP BY without index — PG spill to disk if work_mem insufficient."
+        })
+
+    # 8. Frequent Small Query (N+1 pattern)
+    if count > 1000 and avg_time < 500:
+        findings.append({
+            "type": "frequent_small_query",
+            "label": "⏰ Frequent Small Query (N+1)",
+            "confidence": "medium",
+            "detail": f"Executed {count} times, avg {avg_time}ms each — typical N+1 from ORM layer."
+        })
+
+    return findings
+```
+
+---
+
+#### Phase 3：优化建议生成（PostgreSQL 专用）
+
+| 根因类型 | 优化建议 | PostgreSQL 特有说明 |
+|---------|---------|-------------------|
+| 🏷️ Missing Index | `CREATE INDEX CONCURRENTLY idx_<table>_<cols> ON <table>(<cols>)` | 生产环境使用 `CONCURRENTLY` 避免锁表 |
+| 📊 Sequential Scan | `CREATE INDEX ON <table>(<cols>)` 或使用 `pg_hint_plan` 强制索引 | 用 `EXPLAIN (ANALYZE, BUFFERS)` 验证 |
+| 🔒 Lock Contention | 缩短事务；使用 `SET lock_timeout = '5s'`；避免 DDL 长事务 | PG 无 `NOWAIT`/`SKIP LOCKED` 可用于高并发 |
+| 🧹 Autovacuum / Bloat | 调大 `autovacuum_vacuum_scale_factor`；执行 `VACUUM VERBOSE` 或 `pg_repack` | 检查 `pg_stat_user_tables.n_dead_tup` / `n_live_tup` 比例 |
+| 🔗 Inefficient Nested Loop | 添加 JOIN 列索引；调大 `random_page_cost` 鼓励 Hash Join | `SET enable_nestloop = off` 可临时禁用（不推荐长期） |
+| 📦 Large Result Set | 添加 `LIMIT` 分页；使用游标（`DECLARE CURSOR`）处理大数据集 | PG 游标支持 `SCROLL` 和 `WITH HOLD` |
+| 💾 Work Mem / Temp File | 增加 `work_mem`（会话级: `SET work_mem = '64MB'`） | 监控 `pg_stat_database.temp_files` / `temp_bytes` |
+| ⏰ Frequent Small Query | 使用批量查询 `WHERE id = ANY($1)` 替代 N+1；应用层加缓存 | Rails/Sequelize ORM 常见 N+1，使用 `includes`/`preload` |
+| ⚙️ Parameter Tuning | 检查 `shared_buffers`(推荐 25% RAM)、`effective_cache_size`(75% RAM)、`work_mem`、`maintenance_work_mem` | 用 `pg_settings` 视图和 `EXPLAIN (BUFFERS)` 综合判断 |
+
+**Python 实现示例：**
+
+```python
+def generate_optimization_advice_pg(findings: list, log: dict) -> list:
+    """Generate actionable optimization advice based on PG-specific root causes."""
+    sql = log.get("sql", "")
+    advice_list = []
+
+    for finding in findings:
+        advice = {"type": finding["type"], "priority": finding.get("confidence", "medium")}
+
+        if finding["type"] == "missing_index":
+            tables = re.findall(r'from\s+(\w+)', sql, re.IGNORECASE)
+            where_cols = re.findall(r'where\s+(\w+(?:\.\w+)?)\s*[=<>]', sql, re.IGNORECASE)
+            table = tables[0] if tables else "<table>"
+            cols = [c.split(".")[-1] for c in where_cols[:3]]
+            idx_name = f"idx_{table}_{'_'.join(cols)}" if cols else f"idx_{table}_<columns>"
+            idx_cols = ", ".join(cols) if cols else "<columns>"
+
+            advice["action"] = f"Add index: CREATE INDEX CONCURRENTLY {idx_name} ON {table}({idx_cols})"
+            advice["rationale"] = (
+                f"Query examines {log.get('rowsExaminedSum', 0)} rows but only returns "
+                f"{log.get('rowsSentSum', 0)}. PG planner will switch from Seq Scan to Index Scan."
+            )
+
+        elif finding["type"] == "sequential_scan":
+            advice["action"] = (
+                "Add WHERE clause on indexed column, or CREATE INDEX CONCURRENTLY "
+                "for the filter column(s)"
+            )
+            advice["rationale"] = (
+                "PG planner chose Seq Scan due to missing index. "
+                "Use EXPLAIN (ANALYZE, BUFFERS) to confirm."
+            )
+
+        elif finding["type"] == "lock_contention":
+            advice["action"] = (
+                "1. Shorten transaction boundaries\n"
+                "2. Set lock_timeout = '5s' to prevent indefinite waiting\n"
+                "3. Use NOWAIT or SKIP LOCKED for high-concurrency queues\n"
+                "4. Avoid long-running DDL (use pg_repack for online DDL)"
+            )
+            advice["rationale"] = (
+                f"Lock wait time ({log.get('lockTimeSum', 0)}ms) dominates. "
+                "PG locks are heavy — even RowExclusiveLock blocks concurrent DDL."
+            )
+
+        elif finding["type"] == "bloat":
+            advice["action"] = (
+                "1. Check autovacuum: SHOW autovacuum_vacuum_scale_factor;\n"
+                "2. Monitor bloat: SELECT n_dead_tup, n_live_tup FROM pg_stat_user_tables;\n"
+                "3. Tune: ALTER TABLE <t> SET (autovacuum_vacuum_scale_factor = 0.01);\n"
+                "4. If severe bloat: consider pg_repack or VACUUM FULL (table-level lock)"
+            )
+            advice["rationale"] = (
+                "Dead tuple accumulation from MVCC. PG needs VACUUM to reclaim space. "
+                "Check n_dead_tup / n_live_tup ratio in pg_stat_user_tables."
+            )
+
+        elif finding["type"] == "inefficient_join":
+            advice["action"] = (
+                "1. Add indexes on JOIN columns\n"
+                "2. Increase random_page_cost to encourage Hash Join over Nested Loop\n"
+                "3. ANALYZE to update table statistics\n"
+                "4. Consider SET enable_nestloop = off (session-level, temporary)"
+            )
+            advice["rationale"] = (
+                f"PG planner chose Nested Loop scanning {log.get('rowsExaminedSum', 0)} rows. "
+                "Missing statistics or outdated ANALYZE may cause bad plan choices."
+            )
+
+        elif finding["type"] == "large_result_set":
+            advice["action"] = (
+                "Add LIMIT clause, or use server-side cursors (DECLARE CURSOR) "
+                "for large data processing"
+            )
+            advice["rationale"] = (
+                f"Query returns {log.get('rowsSentSum', 0)} rows. "
+                "In PG, large result sets also consume shared_buffers."
+            )
+
+        elif finding["type"] == "work_mem_temp":
+            advice["action"] = (
+                "Increase work_mem: SET work_mem = '64MB' (session) or "
+                "ALTER SYSTEM SET work_mem = '64MB';\n"
+                "Or add index on ORDER BY / GROUP BY columns"
+            )
+            advice["rationale"] = (
+                "Temp file spill detected. Check pg_stat_database.temp_bytes. "
+                "Each sort/hash operation can use up to work_mem before spilling to disk."
+            )
+
+        elif finding["type"] == "frequent_small_query":
+            advice["action"] = (
+                "1. Use batch query: WHERE id = ANY($1)\n"
+                "2. Use JOIN/EAGER loading to eliminate N+1\n"
+                "3. Add pgpool-II / PgBouncer for connection pooling\n"
+                "4. Use prepared statements to avoid repeated planning"
+            )
+            advice["rationale"] = (
+                f"Executed {log.get('executionCount', 0)} times. "
+                "PG parsing/planning overhead adds up — use prepared statements."
+            )
+
+        advice_list.append(advice)
+
+    return advice_list
+```
+
+---
+
+#### End-to-End Analysis Report（完整分析报告模板）
+
+```json
+{
+  "analysis_summary": {
+    "instance_id": "rds-pg-xxx",
+    "engine": "PostgreSQL",
+    "time_range": {"start": "2026-06-01 00:00:00", "end": "2026-06-03 23:59:59"},
+    "total_patterns": 25,
+    "by_severity": {
+      "🔴 Critical": 3,
+      "🟡 Major": 8,
+      "🔵 Minor": 14
+    },
+    "by_root_cause": {
+      "missing_index": {"count": 5, "total_time_ms": 450000},
+      "sequential_scan": {"count": 3, "total_time_ms": 280000},
+      "lock_contention": {"count": 2, "total_time_ms": 120000},
+      "bloat": {"count": 2, "total_time_ms": 200000},
+      "inefficient_join": {"count": 1, "total_time_ms": 95000},
+      "work_mem_temp": {"count": 2, "total_time_ms": 180000},
+      "large_result_set": {"count": 2, "total_time_ms": 150000},
+      "frequent_small_query": {"count": 1, "total_time_ms": 180000}
+    },
+    "top_issues": [
+      {
+        "sql_truncated": "SELECT * FROM orders WHERE ...",
+        "severity": "🔴 Critical",
+        "findings": ["🏷️ Missing Index", "📦 Large Result Set"],
+        "recommended_action": "CREATE INDEX CONCURRENTLY idx_orders_created ON orders(created_at)",
+        "estimated_impact": "Reduce execution time by ~80% (Seq Scan → Index Scan)"
+      }
+    ],
+    "quick_wins": [
+      {
+        "sql_truncated": "UPDATE inventory SET stock = ... WHERE sku = ?",
+        "severity": "🟡 Major",
+        "finding": "🔒 Lock Contention",
+        "action": "Shorten transaction, add sku index, check work_mem"
+      }
+    ]
+  }
+}
+```
+
+#### Present to User（中文展示模板）
+
+```
+📊 PostgreSQL 慢查询分析报告
+══════════════════════════
+实例: rds-pg-xxx | 引擎: PostgreSQL | 时间范围: 2026-06-01 ~ 2026-06-03
+───────────────────────────────────────
+
+📈 概览
+────────────────
+总慢查询模式数: 25
+
+按严重度分布:
+  🔴 Critical: 3 条
+  🟡 Major: 8 条
+  🔵 Minor: 14 条
+
+🔴 严重问题 (Critical) — 建议立即处理
+────────────────────────────────────
+1. SELECT * FROM orders WHERE created_at > ?
+   执行次数: 120 | 平均耗时: 1500ms | 总耗时: 180000ms
+   扫描行数: 500000 | 返回行数: 50
+
+   分析结果:
+   ├─ 🏷️ Missing Index: 扫描500000行，返回50行(10000:1)
+   │   PG 规划器选择了 Seq Scan，应当使用 Index Scan
+   └─ 📦 Large Result Set: 返回全部行，缺少 LIMIT
+
+   优化建议:
+   ├─ 🎯 添加索引 (CONCURRENTLY 避免锁表):
+   │   CREATE INDEX CONCURRENTLY idx_orders_created ON orders(created_at);
+   │   预期效果: Seq Scan → Index Scan，预计降至 ~50ms
+   └─ 🎯 添加 LIMIT:
+       SELECT * FROM orders WHERE created_at > ? LIMIT 100;
+
+🟡 重点关注 (Major) — 建议近期优化
+─────────────────────────────────────
+2. UPDATE inventory SET stock = stock - ? WHERE sku = ?
+   执行次数: 85 | 平均耗时: 800ms | 总耗时: 68000ms
+
+   分析结果:
+   ├─ 🔒 Lock Contention: 锁等待时间 22000ms，占 32%
+   └─ 🧹 Autovacuum / Bloat: UPDATE 频繁，死元组可能影响性能
+
+   优化建议:
+   ├─ 🎯 检查 autovacuum 状态:
+   │   SELECT relname, n_dead_tup, n_live_tup, last_autovacuum
+   │   FROM pg_stat_user_tables WHERE relname = 'inventory';
+   └─ 🎯 缩短事务范围，批量提交
+
+📊 根因分布汇总 (按总耗时排序)
+─────────────────────────────────────
+   🏷️ Missing Index:       5 条 (45.0%)
+   📊 Sequential Scan:     3 条 (28.0%)
+   💾 Work Mem / Temp:     2 条 (18.0%)
+   🧹 Autovacuum / Bloat:  2 条 (20.0%)
+   🔒 Lock Contention:     2 条 (12.0%)
+   🔗 Inefficient Nested:  1 条 (9.5%)
+   ⏰ Frequent Query:      1 条 (18.0%)
+
+🏆 Quick Wins（低投入高回报）
+──────────────────────────────
+1. [Missing Index] 为 orders.created_at 添加 CONCURRENTLY 索引
+   → 消除 #1 慢查询，预计降低总慢查询耗时 30%
+
+2. [Work Mem] 检查 work_mem 设置，ORDER BY 查询溢出到 temp 文件
+   → 修改 postgresql.conf: work_mem = '64MB'（当前可能仅 4MB）
+
+3. [Bloat] 监视 inventory 表的死元组比例
+   → VACUUM VERBOSE inventory; 或设置更积极的 autovacuum
+```
+
+#### Failure Recovery
+
+| 错误模式 | 重试 | Agent 行动 |
+|---------|:----:|-----------|
+| 慢日志数据为空 | 0 |URRENTLY idx_orders_created ON orders(created_at);\n   │   预期效果: Seq Scan → Index Scan，预计降至 ~50ms\n   └─ 🎯 添加 LIMIT:\n       SELECT * FROM orders WHERE created_at > ? LIMIT 100;\n\n🟡 重点关注 (Major) — 建议近期优化\n─────────────────────────────────────\n2. UPDATE inventory SET stock = stock - ? WHERE sku = ?\n   执行次数: 85 | 平均耗时: 800ms | 总耗时: 68000ms\n\n   分析结果:\n   ├─ 🔒 Lock Contention: 锁等待时间 22000ms，占 32%\n   └─ 🧹 Autovacuum / Bloat: UPDATE 频繁，死元组可能影响性能\n\n   优化建议:\n   ├─ 🎯 检查 autovacuum 状态:\n   │   SELECT relname, n_dead_tup, n_live_tup, last_autovacuum\n   │   FROM pg_stat_user_tables WHERE relname = 'inventory';\n   └─ 🎯 缩短事务范围，批量提交\n\n📊 根因分布汇总 (按总耗时排序)\n─────────────────────────────────────\n   🏷️ Missing Index:       5 条 (45.0%)\n   📊 Sequential Scan:     3 条 (28.0%)\n   💾 Work Mem / Temp:     2 条 (18.0%)\n   🧹 Autovacuum / Bloat:  2 条 (20.0%)\n   🔒 Lock Contention:     2 条 (12.0%)\n   🔗 Inefficient Nested:  1 条 (9.5%)\n   ⏰ Frequent Query:      1 条 (18.0%)\n\n🏆 Quick Wins（低投入高回报）\n──────────────────────────────\n1. [Missing Index] 为 orders.created_at 添加 CONCURRENTLY 索引\n   → 消除 #1 慢查询，预计降低总慢查询耗时 30%\n\n2. [Work Mem] 检查 work_mem 设置，ORDER BY 查询溢出到 temp 文件\n   → 修改 postgresql.conf: work_mem = '64MB'（当前可能仅 4MB）\n\n3. [Bloat] 监视 inventory 表的死元组比例\n   → VACUUM VERBOSE inventory; 或设置更积极的 autovacuum\n```\n\n#### Failure Recovery\n\n| 错误模式 | 重试 | Agent 行动 |\n|---------|:----:|-----------|\n| 慢日志数据为空 | 0 | 报告"该时段无慢查询"; 建议缩小时间范围或检查 `log_min_duration_statement` 配置 |\n| SQL 文本过短(截断) | 0 | 基于可用的执行指标进行分析; 提示用户通过 `pg_stat_statements` 获取完整 SQL |\n| 指标数据缺失(如 lockTime) | 0 | 基于已有指标进行分析; 标注"部分分析因数据缺失受限" |\n| 实例不存在 | 0 | HALT; 提示检查实例 ID |\n\n#### 与 describeSlowLogs 的关系\n\n| 方面 | describeSlowLogs | analyzeSlowQueries（本操作） |\n|------|-----------------|---------------------------|\n| 输出 | 原始慢日志数据 | 结构化分析报告 + 优化建议 |\n| 目的 | 数据查询 | 智能诊断 |\n| 是否调用 API | 是（必须） | 否（纯计算层，基于 API 返回数据） |\n| 依赖 | 无 | 依赖 describeSlowLogs 的返回数据 |\n| 可组合性 | 独立使用 | 先 query → 后 analyze |\n\n> **组合使用建议：** 推荐先执行 `describeSlowLogs` 获取数据，再将结果输入本分析操作。\n> 当用户问"慢查询怎么办"时，应该：感知 → 分析 → 优化，三步联动。\n\n---\n\n### Operation: Describe PostgreSQL Instance"}]
 
 #### Execution (CLI) [Primary Path]
 

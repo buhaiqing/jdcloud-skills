@@ -4,7 +4,10 @@ Run with: python -m pytest tests/test_jdc_client.py -v
 """
 
 import sys, os, json
+# Add scripts/ to path for lib/ imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+# Add scripts/02-reason/ to path for analyzers/ imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts", "02-reason"))
 
 from lib.jdc_client import (
     JdcClient, resolve_credentials, filter_by_tag,
@@ -203,14 +206,14 @@ class TestCruiseScripts:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "cruise_sniff",
-            os.path.join(os.path.dirname(__file__), "..", "scripts", "cruise_sniff.py")
+            os.path.join(os.path.dirname(__file__), "..", "scripts", "01-perceive", "cruise_sniff.py")
         )
         assert spec is not None
 
-    def test_link_import(self):
+    def test_analyze_import(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "cruise_link",
-            os.path.join(os.path.dirname(__file__), "..", "scripts", "cruise_link.py")
+            "cruise_analyze",
+            os.path.join(os.path.dirname(__file__), "..", "scripts", "02-reason", "cruise_analyze.py")
         )
         assert spec is not None

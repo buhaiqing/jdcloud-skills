@@ -13,6 +13,8 @@
 | 02 | 故障应急排查 | 告警触发 / 用户报障 | 按需 | 故障响应 | 高 |
 | 03 | 容量规划检查 | 定时 | 每周 | 容量管理 | 中 |
 | 04 | 大促前全链路预检 | 人工触发 | 大促前 3 天 | 变更准备 | 高 |
+| 05 | MySQL 慢查询巡检 | 定时 / 告警触发 / 人工 | 每日 | 数据库优化 | 中 |
+| 06 | PostgreSQL 巡检 | 定时 / 告警触发 / 人工 | 每日 | 数据库优化 | 中 |
 
 ---
 
@@ -105,7 +107,9 @@ runbooks/
 ├── 01-daily-health-check.md             ← 日常健康巡检
 ├── 02-emergency-troubleshoot.md         ← 故障应急排查
 ├── 03-capacity-planning.md              ← 容量规划
-└── 04-pre-launch-check.md              ← 大促前预检
+├── 04-pre-launch-check.md              ← 大促前预检
+├── 05-mysql-slowquery-audit.md         ← MySQL 慢查询巡检
+└── 06-postgresql-audit.md              ← PostgreSQL 巡检
 references/
 ├── severity-matrix.md                   ← 严重级别矩阵
 └── threshold-definitions.md             ← 阈值定义 + 规格上限速查
