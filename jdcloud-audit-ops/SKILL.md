@@ -1,28 +1,29 @@
 ---
 name: jdcloud-audit-ops
 description: >-
-  Use when managing JD Cloud Audit Log resources — query operation events,
-  describe event details, list operation trails, analyze user activity history,
-  and manage event tracking. Works with "审计日志", "操作审计", "云审计",
+  Use when querying/inspecting JD Cloud Audit Log events and trails —
+  query operation events, describe event details, list operation trails,
+  analyze user activity history, and review event tracking data. Works with "审计日志", "操作审计", "云审计",
   "Audit Log", or "操作记录" without saying "audit". Not for CloudTrail
   configurations from other clouds, VPC flow logs, or general monitoring.
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network
-  access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`) when this
-  product is supported by the CLI (jdc-first with SDK fallback).
+  access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`) — see
+  Current Status for current CLI/SDK limitations.
 metadata:
   author: buhaiqing
-  version: "1.2.0"
-  last_updated: "2026-06-04"
+  version: "1.3.0"
+  last_updated: "2026-06-09"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Audit Log API v1 - https://docs.jdcloud.com/cn/audit-log"
-  cli_applicability: jdc-first-with-fallback
+  cli_applicability: sdk-or-api-only
   cli_version_locked: "1.2.12"
   sdk_version_locked: ">=1.6.26"
   cli_support_evidence: >-
-    Confirmed via `jdc audit --help` showing audit log operations:
-    describe-events, describe-event-detail, describe-trails, etc.
+    NOT VERIFIED in current locked toolchain (jdcloud_cli==1.2.12).
+    `jdc audit` returned "invalid choice: 'audit'" in testing.
+    All CLI examples are expected syntax only.
     Official CLI documentation: https://docs.jdcloud.com/cn/cli/introduction
   environment:
     - JDC_ACCESS_KEY
@@ -34,27 +35,41 @@ metadata:
 
 # JD Cloud Audit Log Operations Skill
 
+> **⚠️ Current Status**: This skill is a **documentation stub** for the JD Cloud Audit Log / 操作审计 product.
+>   - The `jdc audit` CLI command has NOT been verified in the current locked toolchain (`jdcloud_cli==1.2.12`).
+>   - The `jdcloud_sdk.services.audit` Python SDK module has NOT been found in the current lock.
+>   - All CLI/SDK examples below are **expected API syntax only**; actual execution requires:
+>     1. Confirming that a newer CLI version supports `jdc audit ...`
+>     2. Or using the raw REST API at `https://audit.jdcloud-api.com/v1/...`
+>     3. Or confirming the correct SDK service module name with JD Cloud documentation.
+>   - See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for quick look-up.
+
 ## Overview
 
-JD Cloud Audit Log (操作审计/云审计) provides comprehensive tracking and recording of user operations and API calls on JD Cloud resources. It enables security auditing, compliance monitoring, operational troubleshooting, and accountability by capturing who did what, when, and from where. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **jdc-first execution with SDK/API fallback**, response validation, and failure recovery.
+JD Cloud Audit Log (操作审计/云审计) provides comprehensive tracking and recording of user operations and API calls on JD Cloud resources. It enables security auditing, compliance monitoring, operational troubleshooting, and accountability by capturing who did what, when, and from where. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **SDK/API 优先（当前 CLI 未验证）**, response validation, and failure recovery.
 
 **Quick Reference**: [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - For commonly used commands and quick lookup.
 
 ### CLI applicability (repository policy)
 
-- **`cli_applicability: jdc-first-with-fallback`:** Official `jdc` supports this product with audit log subcommands. The Agent MUST attempt to use `jdc` as the **primary execution path**. If `jdc` installation or command execution fails, the Agent MUST retry up to **3 times** (with exponential backoff). Only after **3 consecutive failures** should the Agent fall back to **SDK/API**. Both paths are documented in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
+- **`cli_applicability: sdk-or-api-only`:** 当前仓库锁定的 `jdcloud_cli==1.2.12` 未暴露 `jdc audit` 顶层命令。Agent MUST treat CLI snippets as **期望语法示例** only, and MUST verify CLI support before execution. Use SDK/API semantics first; because the locked SDK also lacks `jdcloud_sdk.services.audit`, raw OpenAPI REST is the current safest execution path until JD Cloud confirms the SDK module.
 
-### Path Preference (jdc-first with SDK Fallback)
+### Path Preference (SDK/API 优先，当前 CLI 未验证)
 
 The Agent MUST follow this execution priority:
 
-1. **`jdc` CLI (primary path)** — Attempt `jdc` first for every operation
-2. **Retry up to 3 times** if `jdc` fails (with exponential backoff: 0s → 2s → 4s)
-3. **SDK/API (fallback path, after 3 jdc failures)** — Use only when `jdc` is persistently unavailable
+1. **Raw OpenAPI REST (current executable path)** — Use `https://audit.jdcloud-api.com/v1/...` with JD Cloud request signing after confirming endpoint/path with official docs.
+2. **Official SDK (only after service module is confirmed)** — Do not import `jdcloud_sdk.services.audit` until the real SDK service name is verified.
+3. **`jdc` CLI (expected syntax only)** — Execute only after confirming a newer CLI exposes `jdc audit ...`.
 
-When both paths succeed, prefer `jdc` output for consistency.
+When a path is not verified, present it as documentation-only and do not claim successful execution.
 
 ### Critical jdc CLI Behavioral Notes (from empirical testing)
+
+> **⚠️ 注意**: 以下 CLI 失败模式基于当前锁定版本 `jdcloud_cli==1.2.12`。该版本不支持 `jdc audit` 顶层命令。所有 CLI 示例仅供参考，实际执行前请确认 CLI 版本支持。
+
+**Failure 0: `jdc audit` 命令不存在（当前锁定版本）**
+当前锁定的 `jdcloud_cli==1.2.12` 未暴露 `audit` 顶层命令。执行 `jdc audit --help` 会返回 `invalid choice: 'audit'`。需等待官方 CLI 更新后方可使用。
 
 **Failure 1: `--output json` must be TOP-LEVEL, not subcommand-level**
 The `--output json` argument is defined in the base controller, not in individual subcommands. It MUST be placed **before** the subcommand.
@@ -78,13 +93,15 @@ In sandboxed environments where home is not writable, set `HOME` to a writable p
 - Task keywords: describeEvents, describeEventDetail, describeTrails, searchEvents, 查询事件, 操作记录
 - User asks to track resource changes, API calls, or user actions on JD Cloud
 - Task involves compliance auditing or security investigation
-- Task involves trail management (if supported by API)
+- Task involves trail listing and inspection
 
 ### SHOULD NOT Use This Skill When
 
 - Task is about CloudTrail from AWS or other clouds → state this is JD Cloud only
 - Task is about VPC flow logs → delegate to appropriate VPC skill
 - Task is about Cloud Monitor metrics / alarms → delegate to: `jdcloud-cloudmonitor-ops`
+- Task involves alert aggregation, deduplication, weekly reports → delegate to: `jdcloud-alert-intelligence`
+- Task is full-link cruise, topology, capacity planning, comprehensive root cause → delegate to: `jdcloud-aiops-cruise`
 - Task is purely billing / account management → delegate to appropriate skill
 - Task is IAM permission analysis only → delegate to: `jdcloud-iam-ops`
 - User insists on **console-only** flows with no API → state limitation; do not invent undocumented HTTP steps
@@ -92,6 +109,11 @@ In sandboxed environments where home is not writable, set `HOME` to a writable p
 ### Delegation Rules
 
 - If audit analysis reveals resource issues (e.g., unauthorized VM changes), delegate resource remediation to appropriate skill (e.g., `jdcloud-vm-ops`)
+- Alert aggregation / deduplication / rollup → delegate to: `jdcloud-alert-intelligence`
+- Monitoring metric queries / alarm rule CRUD / custom metric → delegate to: `jdcloud-cloudmonitor-ops`
+- Full-link cruise inspection / topology / capacity / comprehensive root cause → delegate to: `jdcloud-aiops-cruise`
+- Audit logs / who changed what / change evidence → `jdcloud-audit-ops` (self)
+- Resource remediation after audit finding → delegate to corresponding `jdcloud-*-ops` (e.g., `jdcloud-vm-ops`, `jdcloud-disk-ops`)
 - Multi-product requests: handle each product with its skill; do not merge unrelated APIs into one ambiguous flow
 
 ## Variable Convention (Agent-Readable)
@@ -113,6 +135,31 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | `{{output.event_id}}` | From last API or CLI JSON response | Parse from response per operation |
 
 > **`{{env.*}}` MUST NOT** be collected from the user. **`{{user.*}}`** MUST be collected interactively when missing.
+
+> **Sensitive Data Redaction Rule**: When outputting `requestParameters` or `responseElements` from audit event details, the agent MUST apply `mask_sensitive(data)` to redact the following fields to `***` or their SHA-256 prefix:
+> - `password`, `passwd`, `pwd`
+> - `secret`, `secretKey`, `accessKeySecret`
+> - `accessKey`
+> - `token`, `authorization`, `credential`
+> - `privateKey`, `sessionKey`, `apiKey`
+> - PII (手机号、邮箱等) 按策略 mask/hash
+>
+> 未脱敏的敏感字段出现在输出中将导致 GCL Safety = 0 → ABORT。
+>
+> 脱敏参考实现详见 [Redaction Reference](references/redaction.md)。
+
+> **Privacy Display Policy**: 以下字段在不同模式下的展示策略：
+>
+> | 字段 | masked_default | full_internal | forensic_sealed | 外部导出（SIEM/Slack/Email） |
+> |---|---|---|---|---|
+> | eventId | 原样 | 原样 | 原样 | 原样 |
+> | resourceId | 部分 mask（保留前4字符） | 原样 | 原样 | 部分 mask（保留前4字符） |
+> | username | 可显示（内部审计） | 可显示 | mask/hash | mask/hash |
+> | sourceIpAddress | 公网 /24 mask；私网原样 | 原样 | mask/`/24` hash | mask/hash |
+> | userAgent | truncate（保留前80字符） | 可显示 | truncate（保留前40字符） | truncate/mask |
+> | requestParameters / responseElements | 始终脱敏 | 始终脱敏（secret 类字段 `***`） | 始终脱敏 | 始终脱敏 |
+>
+> `masked_default`：默认模式。`full_internal`：受控内网排障。`forensic_sealed`：复盘关联（输出 SHA-256 前缀，不暴露原文）。详见 [Redaction Reference](references/redaction.md)。
 
 > **Security Warning**: **NEVER** log, print, or expose `JDC_SECRET_KEY` (or any secret) in console output, debug messages, or logs. When verification is needed, check existence only (e.g., `if os.environ.get('JDC_SECRET_KEY')`) without printing the actual value. If logging credential status is required, use masked placeholders like `JDC_SECRET_KEY=<masked>` or `JDC_SECRET_KEY=***`. This applies to all execution flows (SDK, CLI, and debugging scripts).
 
@@ -152,15 +199,19 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2026-06-09 | **P1 SecOps+AIOps**: Added mask_sensitive reference implementation (`references/redaction.md`), Privacy Display Policy, AIOps runbook scene definitions (`references/aiops-runbooks.md`), tightened external export security (Slack/Email/SIEM), clarified cross-skill delegation & PII display strategy, fixed Quick Reference raw eventDetail output. |
+| 1.2.1 | 2026-06-09 | **P0 corrective update**: Marked current CLI/SDK paths as unverified in locked toolchain, switched to SDK/API-only metadata, added documentation-stub status, and tightened redaction / pagination guidance. |
 | 1.2.0 | 2026-06-04 | **GCL rollout (optional)**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, read-only audit log query, PII masking guard for `requestParameters`) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=5`. `safety_confirm_required=false` (read-only by definition). |
 | 1.1.0 | 2026-06-04 | Optimized SKILL.md structure, created QUICK_REFERENCE.md, split detailed content to references/ directory |
-| 1.0.0 | 2026-06-03 | Initial version with audit log query support: describe-events, describe-event-detail, describe-trails; jdc-first with SDK fallback |
+| 1.0.0 | 2026-06-03 | Initial version with audit log query support: describe-events, describe-event-detail, describe-trails |
 
 ## Execution Flows (Agent-Readable)
 
-Every operation: **Pre-flight → Execute (jdc primary / SDK fallback) → Validate → Recover**. Do not skip phases.
+Every operation: **Pre-flight → Execute → Validate → Recover**. Do not skip phases.
 
-**jdc-first strategy:** The Agent MUST attempt `jdc` CLI first (primary path). If `jdc` fails after **3 retries** with exponential backoff, fall back to SDK/API. Complete examples for both paths are in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
+**执行策略说明:** 当前锁定版本 CLI (`jdcloud_cli==1.2.12`) 不支持 `jdc audit`。SDK 模块 (`jdcloud_sdk.services.audit`) 也未在当前锁定版本中找到。以下 CLI 和 SDK 示例均为**期望语法**，Agent SHOULD NOT 直接执行未验证的命令。
+
+> 安全执行路径：通过原始 REST API (`https://audit.jdcloud-api.com/v1/...`) 或确认 SDK 正确服务名后使用 SDK。详见 [API & SDK Usage](references/api-sdk-usage.md)。
 
 ### Operation: Describe Events (List Operation Events)
 
@@ -168,16 +219,19 @@ Every operation: **Pre-flight → Execute (jdc primary / SDK fallback) → Valid
 
 | Check | Method | Expected | On Failure |
 |-------|--------|----------|------------|
-| CLI / deps | `jdc --version` | Exit code 0 | Retry up to 3 times; then fall back to SDK |
-| SDK / deps | `import jdcloud_sdk.services.audit.client.AuditClient` | No import error | Document install pin (fallback path) |
+| CLI / deps | `jdc --version` | Exit code 0 | 当前锁定版本不支持 jdc audit；视为文档参考 |
+| SDK / deps | `import requests` | 标准库可用 | 如不可用，安装 `requests`；优先使用 REST API |
 | Credentials | Construct credential from env or CLI config | Non-empty keys | HALT; user configures env |
 | Time range | Collect `{{user.start_time}}` and `{{user.end_time}}` | Valid ISO 8601 | Ask user; suggest defaults (last 24h) |
 
-#### Execution — CLI (`jdc`) [Primary Path]
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
 
-**Required** when `cli_applicability: jdc-first-with-fallback`. Use `--output json` at the **top level** (before the subcommand). Do NOT use `--no-interactive` — it is not supported by jdc CLI.
+> **⚠️ 注意**: `jdc audit` 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+**Documentation-only** when `cli_applicability: sdk-or-api-only`. Use `--output json` at the **top level** (before the subcommand). Do NOT use `--no-interactive` — it is not supported by jdc CLI.
 
 ```bash
+# NOTE: jdc audit 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例，实际执行前请确认 CLI 版本支持
 jdc --output json audit describe-events \
   --region-id "{{user.region}}" \
   --start-time "{{user.start_time}}" \
@@ -189,6 +243,7 @@ jdc --output json audit describe-events \
 **With optional filters:**
 
 ```bash
+# NOTE: jdc audit 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例，实际执行前请确认 CLI 版本支持
 jdc --output json audit describe-events \
   --region-id "{{user.region}}" \
   --start-time "{{user.start_time}}" \
@@ -200,42 +255,49 @@ jdc --output json audit describe-events \
   --page-size 50
 ```
 
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK/API Expected Syntax — SDK module currently unavailable)
+
+> **⚠️ 注意**: `jdcloud_sdk.services.audit` 模块当前不可用，建议直接通过 OpenAPI REST 调用。以下为 REST API 伪代码。
 
 ```python
-import os
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.audit.client.AuditClient import AuditClient
-from jdcloud_sdk.services.audit.apis.DescribeEventsRequest import DescribeEventsRequest, DescribeEventsParameters
+# REST API 伪代码（当前 SDK 模块不可用，建议直接调用 OpenAPI）
+import os, json, requests
 
-credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
-client = AuditClient(credential)
+# endpoint 路径需按官方 OpenAPI 文档确认；以下为典型格式
+endpoint = "https://audit.jdcloud-api.com/v1/regions/{{user.region}}/events"
 
-params = DescribeEventsParameters(
-    regionId="{{user.region}}",
-    startTime="{{user.start_time}}",
-    endTime="{{user.end_time}}",
-    pageNumber=1,
-    pageSize=50
-)
+headers = {
+    "Content-Type": "application/json",
+    # Authorization / Jdcloud-Date 需按 JD Cloud V3 签名规范生成
+    "Authorization": "JDCLOUD <signed>",
+    "Jdcloud-Date": "20260609T120000Z",
+}
+
+params = {
+    "startTime": "{{user.start_time}}",
+    "endTime": "{{user.end_time}}",
+    "pageNumber": 1,
+    "pageSize": 50,
+}
 
 # Optional filters (add if provided by user)
 if "{{user.event_name}}":
-    params.eventName = "{{user.event_name}}"
+    params["eventName"] = "{{user.event_name}}"
 if "{{user.resource_type}}":
-    params.resourceType = "{{user.resource_type}}"
+    params["resourceType"] = "{{user.resource_type}}"
 if "{{user.username}}":
-    params.username = "{{user.username}}"
+    params["username"] = "{{user.username}}"
 
-req = DescribeEventsRequest(parameters=params)
-resp = client.send(req)
+resp = requests.get(endpoint, headers=headers, params=params, timeout=30)
 
-if resp.error is None:
-    events = resp.result.get("events", [])
+if resp.status_code == 200:
+    data = resp.json()
+    events = data.get("result", {}).get("events", [])
     for event in events:
-        print(f"Event: {event.get('eventId')} | Time: {event.get('eventTime')} | User: {event.get('username')} | Action: {event.get('eventName')}")
+        safe_event = mask_sensitive(event, mode="masked_default")
+        print(f"Event: {safe_event.get('eventId')} | Time: {safe_event.get('eventTime')} | User: {safe_event.get('username')} | Action: {safe_event.get('eventName')}")
 else:
-    print(f"Error: {resp.error.code} - {resp.error.message}")
+    print(f"Error: {resp.status_code} - {resp.text}")
 ```
 
 #### Post-execution Validation
@@ -273,38 +335,49 @@ else:
 | Check | Method | Expected | On Failure |
 |-------|--------|----------|------------|
 | Event ID | Collect `{{user.event_id}}` | Non-empty string | Ask user |
-| CLI / deps | `jdc --version` | Exit code 0 | Retry up to 3 times; then fall back to SDK |
+| CLI / deps | `jdc --version` | Exit code 0 | 当前锁定版本不支持 jdc audit；视为文档参考 |
 
-#### Execution — CLI (`jdc`) [Primary Path]
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
 
 ```bash
+# NOTE: jdc audit 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例，实际执行前请确认 CLI 版本支持
 jdc --output json audit describe-event-detail \
   --region-id "{{user.region}}" \
   --event-id "{{user.event_id}}"
 ```
 
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK/API Expected Syntax — SDK module currently unavailable)
+
+> **⚠️ 注意**: `jdcloud_sdk.services.audit` 模块当前不可用，建议直接通过 OpenAPI REST 调用。以下为 REST API 伪代码。
 
 ```python
-from jdcloud_sdk.services.audit.apis.DescribeEventDetailRequest import DescribeEventDetailRequest, DescribeEventDetailParameters
+# REST API 伪代码（当前 SDK 模块不可用，建议直接调用 OpenAPI）
+import os, json, requests
 
-params = DescribeEventDetailParameters(
-    regionId="{{user.region}}",
-    eventId="{{user.event_id}}"
-)
-req = DescribeEventDetailRequest(parameters=params)
-resp = client.send(req)
+# endpoint 路径需按官方 OpenAPI 文档确认；以下为典型格式
+endpoint = "https://audit.jdcloud-api.com/v1/regions/{{user.region}}/events/{{user.event_id}}"
 
-if resp.error is None:
-    detail = resp.result.get("eventDetail", {})
+headers = {
+    "Content-Type": "application/json",
+    # Authorization / Jdcloud-Date 需按 JD Cloud V3 签名规范生成
+    "Authorization": "JDCLOUD <signed>",
+    "Jdcloud-Date": "20260609T120000Z",
+}
+
+resp = requests.get(endpoint, headers=headers, timeout=30)
+
+if resp.status_code == 200:
+    data = resp.json()
+    detail = data.get("result", {}).get("eventDetail", {})
     print(f"Event ID: {detail.get('eventId')}")
     print(f"Time: {detail.get('eventTime')}")
     print(f"User: {detail.get('username')}")
     print(f"Action: {detail.get('eventName')}")
-    print(f"Request Params: {detail.get('requestParameters')}")
-    print(f"Response: {detail.get('responseElements')}")
+    # ⚠️ 敏感字段脱敏：requestParameters / responseElements 中可能包含 password、secretKey、accessKey 等敏感信息，输出前必须脱敏
+    print(f"Request Params: {mask_sensitive(detail.get('requestParameters', {}))}")
+    print(f"Response: {mask_sensitive(detail.get('responseElements', {}))}")
 else:
-    print(f"Error: {resp.error.code} - {resp.error.message}")
+    print(f"Error: {resp.status_code} - {resp.text}")
 ```
 
 #### Output to Present to User
@@ -319,37 +392,48 @@ else:
 | Resource ID | `$.result.eventDetail.resourceId` | Plain text |
 | Source IP | `$.result.eventDetail.sourceIpAddress` | Plain text |
 | User Agent | `$.result.eventDetail.userAgent` | Plain text |
-| Request Parameters | `$.result.eventDetail.requestParameters` | JSON formatted |
-| Response Elements | `$.result.eventDetail.responseElements` | JSON formatted |
+| Request Parameters | `$.result.eventDetail.requestParameters` | JSON formatted ⚠️ 必须脱敏 |
+| Response Elements | `$.result.eventDetail.responseElements` | JSON formatted ⚠️ 必须脱敏 |
 | Error Code | `$.result.eventDetail.errorCode` | Red text if present |
 | Error Message | `$.result.eventDetail.errorMessage` | Red text if present |
 
 ### Operation: Describe Trails (List Audit Trails)
 
-#### Execution — CLI (`jdc`) [Primary Path]
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
 
 ```bash
+# NOTE: jdc audit 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例，实际执行前请确认 CLI 版本支持
 jdc --output json audit describe-trails \
   --region-id "{{user.region}}"
 ```
 
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK/API Expected Syntax — SDK module currently unavailable)
+
+> **⚠️ 注意**: `jdcloud_sdk.services.audit` 模块当前不可用，建议直接通过 OpenAPI REST 调用。以下为 REST API 伪代码。
 
 ```python
-from jdcloud_sdk.services.audit.apis.DescribeTrailsRequest import DescribeTrailsRequest, DescribeTrailsParameters
+# REST API 伪代码（当前 SDK 模块不可用，建议直接调用 OpenAPI）
+import os, json, requests
 
-params = DescribeTrailsParameters(
-    regionId="{{user.region}}"
-)
-req = DescribeTrailsRequest(parameters=params)
-resp = client.send(req)
+# endpoint 路径需按官方 OpenAPI 文档确认；以下为典型格式
+endpoint = "https://audit.jdcloud-api.com/v1/regions/{{user.region}}/trails"
 
-if resp.error is None:
-    trails = resp.result.get("trails", [])
+headers = {
+    "Content-Type": "application/json",
+    # Authorization / Jdcloud-Date 需按 JD Cloud V3 签名规范生成
+    "Authorization": "JDCLOUD <signed>",
+    "Jdcloud-Date": "20260609T120000Z",
+}
+
+resp = requests.get(endpoint, headers=headers, timeout=30)
+
+if resp.status_code == 200:
+    data = resp.json()
+    trails = data.get("result", {}).get("trails", [])
     for trail in trails:
         print(f"Trail: {trail.get('trailId')} | Name: {trail.get('trailName')} | Status: {trail.get('status')}")
 else:
-    print(f"Error: {resp.error.code} - {resp.error.message}")
+    print(f"Error: {resp.status_code} - {resp.text}")
 ```
 
 #### Output to Present to User
@@ -387,7 +471,7 @@ User request
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
    │
    ▼
-[1] Generator (G)            ──► jdc audit (primary) → SDK (after 3 fails)
+[1] Generator (G)            ──► OpenAPI REST (primary) → SDK (after module confirmed)
    │
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
@@ -407,8 +491,8 @@ User request
 
 ### Integration with existing flows
 
-The GCL **wraps** the jdc-first / SDK-fallback flow defined under
-`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+The GCL **wraps** the SDK/API-first flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing REST-or-SDK
 executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
 access. The Orchestrator (O) owns the loop and persists the GCL trace.
 
@@ -416,7 +500,7 @@ access. The Orchestrator (O) owns the loop and persists the GCL trace.
 
 - **`describe-events`** (list operation events) — Time range + region +
   filter MUST be explicit. Default time range = last 24h. Trace MUST
-  include page token if paginated.
+  include `pageNumber` / `pageSize` / `totalCount` if paginated.
 - **`describe-event-detail`** (get single event details) — Event id MUST
   be explicit. **Sensitive fields in `requestParameters` MUST be
   masked** (password, secret, accessKey, accessKeySecret, privateKey →
@@ -428,13 +512,13 @@ access. The Orchestrator (O) owns the loop and persists the GCL trace.
 
 > **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
 
-Environment setup follows a **jdc-first with fallback** strategy. Complete setup guide is in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
+Environment setup follows a **SDK/API 优先（当前 CLI 未验证）** strategy. Complete setup guide is in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
 
 ### Quick Setup Summary
 
-1. **Attempt `jdc` CLI setup** via `uv` (primary path)
-2. On failure, **retry up to 3 times** with exponential backoff
-3. After **3 consecutive failures**, fall back to **SDK-only** setup
+1. **Attempt OpenAPI REST / confirmed SDK setup** via `uv` (current executable path)
+2. **`jdc` CLI** — only after confirming the CLI version supports `jdc audit`
+3. If CLI is not supported, use **REST API** directly
 
 ### Python Runtime (uv)
 
@@ -463,6 +547,8 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 - [Troubleshooting Guide](references/troubleshooting.md) - Detailed troubleshooting
 - [Monitoring & Alerts](references/monitoring.md) - Monitoring setup
 - [Integration](references/integration.md) - Integration guide
+- [Redaction Reference](references/redaction.md) - Sensitive data masking utilities
+- [AIOps Runbooks](references/aiops-runbooks.md) - AIOps incident/postmortem scene definitions
 
 ## Operational Best Practices
 

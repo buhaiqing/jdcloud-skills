@@ -15,15 +15,15 @@
 | 1 | **Correctness** | hard | ≥ 0.5; **= 1.0 required** for event detail, time-range filter, principal filter | 0 / 0.5 / 1 | Verifies the time range, region, resource id, and event name filters match the user request. Read back via `describe-events` and compare. |
 | 2 | **Safety** | hard | = 1 | 0 / 1 | **Read-only by definition**. Safety = 0 if the response includes PII (access-key secret, password, plaintext) verbatim. |
 | 3 | **Idempotency** | soft | ≥ 0.5 | 0 / 0.5 / 1 | `describe-events` / `describe-event-detail` / `describe-trails` are naturally idempotent. Re-running the same query returns the same data. |
-| 4 | **Traceability** | soft | ≥ 0.5 | 0 / 0.5 / 1 | Trace MUST contain: full `jdc` command (or SDK call), args, exit code, raw response excerpt (≤ 2 KB), and the page token if paginated. |
+| 4 | **Traceability** | soft | ≥ 0.5 | 0 / 0.5 / 1 | Trace MUST contain: full command (or REST/SDK call), args, exit code, raw response excerpt (≤ 2 KB), and `pageNumber`/`pageSize`/`totalCount` if paginated. |
 | 5 | **Spec Compliance** | soft | ≥ 0.5 | 0 / 0.5 / 1 | Conforms to `core-concepts.md`: time range within retention (90 days for trail; event detail per request), region valid, event name valid. |
 
 ## Operation-specific overrides
 
 | Operation | Required dimensions = 1.0 | Notes |
 |---|---|---|
-| `describe-events` (list operation events) | Correctness, Traceability, Spec Compliance | Time range + region + filter MUST be explicit. Default time range = last 24h |
-| `describe-event-detail` (get single event details) | Correctness, Safety, Traceability | Event id MUST be explicit. Response MAY contain sensitive request parameters — mask them per Safety rule |
+| `describe-events` (list operation events) | Correctness, Traceability, Spec Compliance | Time range + region + filter MUST be explicit. Default time range = last 24h. Trace MUST include `pageNumber`/`pageSize`/`totalCount` |
+| `describe-event-detail` (get single event details) | Correctness, Safety, Traceability | Event id MUST be explicit. Response MAY contain sensitive request parameters — **MUST mask** `requestParameters`/`responseElements` per Safety rule; unmasked sensitive data → Safety = 0 → ABORT |
 | `describe-trails` (list audit trails) | Correctness, Traceability | All trails visible to the principal |
 
 ## Safety special cases (auto-fail)

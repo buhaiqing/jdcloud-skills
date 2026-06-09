@@ -1,5 +1,9 @@
 # API & SDK — Audit Log
 
+> **⚠️ 当前状态说明**：当前仓库锁定的 JD Cloud SDK 中未发现 `jdcloud_sdk.services.audit` 模块；以下 SDK 代码均为期望语法示例。实际执行前必须确认官方 SDK 真实服务名，或直接通过 OpenAPI REST API (`https://audit.jdcloud-api.com/v1/...`) 调用。
+>
+> **脱敏要求**：任何 `requestParameters` / `responseElements` 输出或外发前必须调用 `mask_sensitive(data)` / `redact_sensitive_fields(data)`。必须脱敏字段：`password`, `passwd`, `pwd`, `secret`, `secretKey`, `accessKeySecret`, `accessKey`, `token`, `authorization`, `credential`, `privateKey`, `sessionKey`, `apiKey`；手机号、邮箱等 PII 按策略 mask/hash。
+
 ## OpenAPI
 
 - **Service:** audit
@@ -150,63 +154,82 @@
 ### Setup Client
 
 ```python
-import os
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.audit.client.AuditClient import AuditClient
+# REST API 伪代码（当前 SDK 模块不可用，建议直接调用 OpenAPI）
+import os, json, requests
 
-credential = Credential(
-    os.environ["JDC_ACCESS_KEY"],
-    os.environ["JDC_SECRET_KEY"]
-)
-client = AuditClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))
+# 签名工具：JD Cloud V3 签名需按官方规范实现，此处为示意
+# 详见 https://docs.jdcloud.com/cn/signed-request
+
+def _make_auth_headers(access_key, secret_key, region, method, path, query=""):
+    """生成带 V3 签名的请求头（伪代码，需替换为真实签名实现）。"""
+    return {
+        "Content-Type": "application/json",
+        "Authorization": f"JDCLOUD {access_key}:<signed>",
+        "Jdcloud-Date": "20260609T120000Z",
+    }
 ```
 
 ### Query Events
 
 ```python
-from jdcloud_sdk.services.audit.apis.DescribeEventsRequest import (
-    DescribeEventsRequest, DescribeEventsParameters
+# REST API 伪代码（当前 SDK 模块不可用，建议直接调用 OpenAPI）
+import os, json, requests
+
+region = "cn-north-1"
+endpoint = f"https://audit.jdcloud-api.com/v1/regions/{region}/events"
+
+headers = _make_auth_headers(
+    os.environ["JDC_ACCESS_KEY"],
+    os.environ["JDC_SECRET_KEY"],
+    region, "GET", "/v1/regions/cn-north-1/events"
 )
 
-params = DescribeEventsParameters(
-    regionId="cn-north-1",
-    startTime="2026-06-01T00:00:00+08:00",
-    endTime="2026-06-03T23:59:59+08:00",
-    pageNumber=1,
-    pageSize=50
-)
+params = {
+    "startTime": "2026-06-01T00:00:00+08:00",
+    "endTime": "2026-06-03T23:59:59+08:00",
+    "pageNumber": 1,
+    "pageSize": 50,
+}
 
-request = DescribeEventsRequest(parameters=params)
-response = client.send(request)
+resp = requests.get(endpoint, headers=headers, params=params, timeout=30)
 
-if response.error is None:
-    events = response.result.get("events", [])
+if resp.status_code == 200:
+    data = resp.json()
+    events = data.get("result", {}).get("events", [])
     for event in events:
-        print(f"{event['eventTime']}: {event['username']} performed {event['eventName']}")
+        safe_event = mask_sensitive(event, mode="masked_default")
+        print(f"{safe_event.get('eventTime')}: {safe_event.get('username')} performed {safe_event.get('eventName')}")
 else:
-    print(f"Error: {response.error.code} - {response.error.message}")
+    print(f"Error: {resp.status_code} - {resp.text}")
 ```
 
 ### Get Event Detail
 
 ```python
-from jdcloud_sdk.services.audit.apis.DescribeEventDetailRequest import (
-    DescribeEventDetailRequest, DescribeEventDetailParameters
+# REST API 伪代码（当前 SDK 模块不可用，建议直接调用 OpenAPI）
+import os, json, requests
+
+region = "cn-north-1"
+event_id = "evt-abc123"
+endpoint = f"https://audit.jdcloud-api.com/v1/regions/{region}/events/{event_id}"
+
+headers = _make_auth_headers(
+    os.environ["JDC_ACCESS_KEY"],
+    os.environ["JDC_SECRET_KEY"],
+    region, "GET", f"/v1/regions/{region}/events/{event_id}"
 )
 
-params = DescribeEventDetailParameters(
-    regionId="cn-north-1",
-    eventId="evt-abc123"
-)
+resp = requests.get(endpoint, headers=headers, timeout=30)
 
-request = DescribeEventDetailRequest(parameters=params)
-response = client.send(request)
-
-if response.error is None:
-    detail = response.result.get("eventDetail", {})
-    print(f"Event: {detail['eventName']}")
-    print(f"Request: {detail.get('requestParameters', {})}")
-    print(f"Response: {detail.get('responseElements', {})}")
+if resp.status_code == 200:
+    data = resp.json()
+    detail = data.get("result", {}).get("eventDetail", {})
+    print(f"Event: {detail.get('eventName')}")
+    # ⚠️ 敏感字段脱敏：requestParameters / responseElements 中可能包含 password、secretKey、accessKey、token、PII 等，输出前必须脱敏
+    print(f"Request: {mask_sensitive(detail.get('requestParameters', {}))}")
+    print(f"Response: {mask_sensitive(detail.get('responseElements', {}))}")
+else:
+    print(f"Error: {resp.status_code} - {resp.text}")
 ```
 
 ## Pagination Handling
@@ -214,33 +237,42 @@ if response.error is None:
 For large result sets, implement pagination:
 
 ```python
-def get_all_events(client, region_id, start_time, end_time):
+def get_all_events(region_id, start_time, end_time):
+    """REST API 分页示例（当前 SDK 模块不可用，建议直接调用 OpenAPI）。"""
+    import os, requests
+
     all_events = []
     page_number = 1
     page_size = 100
-    
+    endpoint = f"https://audit.jdcloud-api.com/v1/regions/{region_id}/events"
+
     while True:
-        params = DescribeEventsParameters(
-            regionId=region_id,
-            startTime=start_time,
-            endTime=end_time,
-            pageNumber=page_number,
-            pageSize=page_size
+        headers = _make_auth_headers(
+            os.environ["JDC_ACCESS_KEY"],
+            os.environ["JDC_SECRET_KEY"],
+            region_id, "GET", f"/v1/regions/{region_id}/events"
         )
-        request = DescribeEventsRequest(parameters=params)
-        response = client.send(request)
-        
-        if response.error is not None:
-            raise Exception(f"API error: {response.error.message}")
-        
-        events = response.result.get("events", [])
+        params = {
+            "startTime": start_time,
+            "endTime": end_time,
+            "pageNumber": page_number,
+            "pageSize": page_size,
+        }
+        response = requests.get(endpoint, headers=headers, params=params, timeout=30)
+
+        if response.status_code != 200:
+            raise Exception(f"API error: {response.status_code} {response.text}")
+
+        data = response.json()
+        # ⚠️ 如果 event 中含 requestParameters / responseElements，追加前必须先脱敏
+        events = [redact_sensitive_fields(e) for e in data.get("result", {}).get("events", [])]
         all_events.extend(events)
-        
-        total = response.result.get("totalCount", 0)
+
+        total = data.get("result", {}).get("totalCount", 0)
         if len(all_events) >= total or len(events) == 0:
             break
-        
+
         page_number += 1
-    
+
     return all_events
 ```

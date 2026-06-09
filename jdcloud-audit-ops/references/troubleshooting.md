@@ -40,6 +40,12 @@
 
 ## CLI-Specific Issues
 
+### "invalid choice: 'audit'"
+
+**Cause:** 当前锁定的 `jdcloud_cli==1.2.12` 未暴露 `audit` 顶层命令
+
+**Fix:** 确认 CLI 版本是否支持 `jdc audit`；如不支持，请通过 REST API 或确认后的 SDK 模块执行操作。
+
 ### "unrecognized arguments: --output json"
 
 **Cause:** `--output json` placed after subcommand
@@ -87,9 +93,12 @@ printf "%s" "default" > ~/.jdc/current
 
 ### Import Error: No module named 'jdcloud_sdk.services.audit'
 
-**Cause:** SDK version too old or audit service not included
+**Cause:** 当前锁定的 JD Cloud SDK (`jdcloud_sdk>=1.6.26`) 中不包含 `jdcloud_sdk.services.audit` 模块。该模块可能在后续 SDK 版本中提供，或服务名不同。
 
-**Fix:** Update SDK:
+**Fix:**
+1. 确认官方 SDK 真实服务名（可能是其他模块名如 `dbaudit` 或通过 REST API 直接调用）
+2. 通过 OpenAPI REST API (`https://audit.jdcloud-api.com/v1/...`) 直接调用
+3. 如有新版 SDK 提供了该模块，更新 SDK：
 ```bash
 uv pip install --upgrade jdcloud_sdk
 ```

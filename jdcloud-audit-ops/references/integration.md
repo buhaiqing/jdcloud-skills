@@ -64,13 +64,14 @@ source .venv/bin/activate  # macOS/Linux
 ```python
 import os
 from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.audit.client.AuditClient import AuditClient
+# TODO: 确认官方 SDK 真实服务名（当前锁定 JD Cloud SDK 中未包含 services.audit 模块，API 调用需通过 REST API）
+# from jdcloud_sdk.services.audit.client.AuditClient import AuditClient
 
 credential = Credential(
     os.environ["JDC_ACCESS_KEY"],
     os.environ["JDC_SECRET_KEY"],
 )
-client = AuditClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))
+# client = AuditClient(credential, os.environ.get("JDC_REGION", "cn-north-1"))  # 当前模块不可用，需确认服务名
 ```
 
 > Use `os.environ['KEY']` for secrets (fail-fast). Use `.get` only for optional non-secret config.
@@ -145,25 +146,43 @@ pipeline {
 
 ## Integration with SIEM Systems
 
+> **外部导出审批要求**：导出到 SIEM / Slack / Email / 对象存储前，必须完成安全审批，使用 TLS，限制收件人与索引访问权限，并设置保留期。字段展示策略参考 [Redaction Reference](redaction.md)。
+>
+> | 字段 | 外部导出策略 |
+> |---|---|
+> | `eventId` | 原样，作为证据锚点 |
+> | `resourceId` | 部分 mask 或仅保留资源类型 + 后 6 位 |
+> | `username` | mask/hash；仅 forensic_sealed 且审批后可关联原值 |
+> | `sourceIpAddress` | `/24` mask 或 hash |
+> | `userAgent` | truncate 到固定长度 |
+> | `requestParameters` / `responseElements` | 必须 `mask_sensitive()` / `redact_sensitive_fields()` |
+
 ### Export to Elasticsearch
 
 ```python
 from elasticsearch import Elasticsearch
 
 def export_to_elasticsearch(events, es_host='localhost:9200'):
+    """⚠️ 外部导出前必须完成脱敏，且必须经过安全审批。"""
     es = Elasticsearch([es_host])
     
     for event in events:
+        # ⚠️ 脱敏：requestParameters / responseElements 中的敏感字段必须在导出前移除/替换
+        # 必须脱敏字段：password, passwd, pwd, secret, secretKey, accessKeySecret, accessKey,
+        # token, authorization, credential, privateKey, sessionKey, apiKey；手机号/邮箱等 PII 按策略 mask/hash
+        # masked_default 会同时处理 username / sourceIpAddress / resourceId 等 PII/准标识符
+        safe_event = mask_sensitive(event, mode='masked_default')
         doc = {
-            'event_id': event['eventId'],
-            'timestamp': event['eventTime'],
-            'user': event['username'],
-            'action': event['eventName'],
-            'resource_type': event['resourceType'],
-            'resource_id': event['resourceId'],
-            'source_ip': event['sourceIpAddress'],
-            'request': event.get('requestParameters'),
-            'response': event.get('responseElements')
+            'event_id': safe_event['eventId'],
+            'timestamp': safe_event['eventTime'],
+            'user': safe_event.get('username'),          # 外部导出：mask/hash
+            'action': safe_event['eventName'],
+            'resource_type': safe_event['resourceType'],
+            'resource_id': safe_event.get('resourceId'), # 外部导出：部分 mask
+            'source_ip': safe_event.get('sourceIpAddress'), # 外部导出：/24 mask 或 hash
+            'user_agent': safe_event.get('userAgent', '')[:160],
+            'request': safe_event.get('requestParameters', {}),
+            'response': safe_event.get('responseElements', {})
         }
         
         es.index(index='jdcloud-audit', body=doc)
@@ -175,14 +194,17 @@ def export_to_elasticsearch(events, es_host='localhost:9200'):
 import requests
 
 def export_to_splunk(events, splunk_hec_url, splunk_token):
+    """⚠️ 外部导出前必须完成脱敏，且必须经过安全审批；splunk_token 只能从 Secret Manager/env 注入，禁止打印。"""
     headers = {
         'Authorization': f'Splunk {splunk_token}',
         'Content-Type': 'application/json'
     }
     
     for event in events:
+        # ⚠️ 脱敏：整个 event 对象中可能含 requestParameters / responseElements、username、sourceIp、resourceId，导出前必须脱敏
+        safe_event = redact_sensitive_fields(event, mode='masked_default')
         payload = {
-            'event': event,
+            'event': safe_event,
             'sourcetype': 'jdcloud:audit',
             'index': 'security'
         }
@@ -197,28 +219,24 @@ def export_to_splunk(events, splunk_hec_url, splunk_token):
 ```python
 import requests
 
-def notify_slack(webhook_url, message):
+def notify_slack(webhook_url, event_id, severity, masked_summary, evidence_link):
+    """只发送 eventId / severity / masked summary / link；禁止发送完整事件或 raw message。
+
+    webhook_url 必须来自 Secret Manager/env，发送前需确认频道 allowlist 与审批记录。
+    """
+    safe_message = mask_sensitive(
+        f"*Audit Alert* severity={severity} eventId={event_id}\n{masked_summary}\nEvidence: {evidence_link}",
+        mode='masked_default'
+    )
     payload = {
-        'text': message,
+        'text': safe_message,
         'blocks': [
-            {
-                'type': 'header',
-                'text': {
-                    'type': 'plain_text',
-                    'text': 'Audit Alert'
-                }
-            },
-            {
-                'type': 'section',
-                'text': {
-                    'type': 'mrkdwn',
-                    'text': message
-                }
-            }
+            {'type': 'header', 'text': {'type': 'plain_text', 'text': 'Audit Alert'}},
+            {'type': 'section', 'text': {'type': 'mrkdwn', 'text': safe_message}}
         ]
     }
-    
-    requests.post(webhook_url, json=payload)
+
+    requests.post(webhook_url, json=payload, timeout=10)
 ```
 
 ### Email Notification
@@ -227,13 +245,22 @@ def notify_slack(webhook_url, message):
 import smtplib
 from email.mime.text import MIMEText
 
-def send_email_alert(smtp_server, from_addr, to_addrs, subject, body):
-    msg = MIMEText(body)
-    msg['Subject'] = subject
+def send_email_alert(smtp_server, from_addr, to_addrs, subject, body, allowed_recipients):
+    """Email 只发送脱敏摘要；禁止发送 raw event / raw requestParameters / raw responseElements。
+
+    要求：收件人 allowlist、TLS、审批记录、保留期策略。完整证据放受控系统，仅邮件发送链接。
+    """
+    unexpected = set(to_addrs) - set(allowed_recipients)
+    if unexpected:
+        raise ValueError(f"recipient not allowed: {sorted(unexpected)}")
+
+    safe_body = mask_sensitive(body, mode='masked_default')
+    msg = MIMEText(safe_body)
+    msg['Subject'] = mask_sensitive(subject, mode='masked_default')
     msg['From'] = from_addr
     msg['To'] = ', '.join(to_addrs)
-    
-    with smtplib.SMTP(smtp_server) as server:
+
+    with smtplib.SMTP_SSL(smtp_server) as server:
         server.send_message(msg)
 ```
 
@@ -246,7 +273,7 @@ def query_all_regions(start_time, end_time):
     all_events = []
     
     for region in regions:
-        client = AuditClient(credential, region)
+        # client = AuditClient(credential, region)  # 当前模块不可用，需确认服务名
         events = query_events(client, region, start_time, end_time)
         all_events.extend(events)
     
@@ -260,13 +287,18 @@ import schedule
 import time
 
 def daily_audit_export():
-    """Export yesterday's audit events"""
+    """Export yesterday's audit events.
+
+    ⚠️ 展示件必须脱敏；如合规要求保存 raw archive，则必须加密、最小权限、限定保留期并记录审批。
+    """
     yesterday = datetime.now() - timedelta(days=1)
     start_time = yesterday.strftime('%Y-%m-%dT00:00:00+08:00')
     end_time = yesterday.strftime('%Y-%m-%dT23:59:59+08:00')
     
     events = query_all_events(start_time, end_time)
-    export_to_storage(events, f'audit-{yesterday.strftime("%Y%m%d")}.json')
+    safe_events = redact_sensitive_fields(events, mode='masked_default')
+    export_to_storage(safe_events, f'audit-{yesterday.strftime("%Y%m%d")}-masked.json')
+    # 如必须保存 raw archive：export_encrypted_archive(events, kms_key_id, retention_days=30, approval_id='SEC-CHANGE-XXXX')
 
 # Schedule daily at 1 AM
 schedule.every().day.at("01:00").do(daily_audit_export)

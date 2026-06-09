@@ -128,6 +128,7 @@ Example workflow:
 
 ```bash
 # 1. Query audit events
+# NOTE: jdc audit 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
 jdc --output json audit describe-events \
   --region-id cn-north-1 \
   --start-time "$(date -v-5M +%Y-%m-%dT%H:%M:%S+08:00)" \
@@ -138,6 +139,8 @@ jdc --output json audit describe-events \
 
 # 3. Cloud Monitor triggers alerts based on thresholds
 ```
+
+> **⚠️ 脱敏提醒**：导出审计事件到 Cloud Monitor 或任何外部系统前，必须对 `requestParameters` / `responseElements` 中的敏感字段进行脱敏（password、secretKey、accessKey 等）。
 
 ## Log Retention Monitoring
 

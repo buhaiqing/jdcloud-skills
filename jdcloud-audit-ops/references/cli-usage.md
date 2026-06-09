@@ -1,5 +1,7 @@
 # CLI — Audit Log (`jdc audit`)
 
+> **⚠️ 当前状态**：`jdc audit` 命令在当前锁定版本 (`jdcloud_cli==1.2.12`) 中不可用（返回 `invalid choice: 'audit'`）。以下所有 CLI 命令均为**期望语法示例**，实际执行前请确认 CLI 版本支持。
+
 ## Install and config
 
 - Install: see [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)
@@ -16,18 +18,18 @@
 
 | Operation (API / SDK) | Available via `jdc`? | Notes |
 |------------------------|---------------------|-------|
-| Describe Events | Yes | `jdc audit describe-events` |
-| Describe Event Detail | Yes | `jdc audit describe-event-detail` |
-| Describe Trails | Yes | `jdc audit describe-trails` |
+| Describe Events | 未验证 (期望语法) | `jdc audit describe-events` |
+| Describe Event Detail | 未验证 (期望语法) | `jdc audit describe-event-detail` |
+| Describe Trails | 未验证 (期望语法) | `jdc audit describe-trails` |
 
 ## Command map
 
 | Goal | Example `jdc` invocation | Notes |
 |------|--------------------------|-------|
-| List Events | `jdc --output json audit describe-events --region-id cn-north-1 --start-time "2026-06-01T00:00:00+08:00" --end-time "2026-06-03T23:59:59+08:00"` | `--output json` BEFORE subcommand |
-| List Events (Filtered) | `jdc --output json audit describe-events --region-id cn-north-1 --start-time ... --end-time ... --event-name CreateInstances --username admin` | Add filters as needed |
-| Event Detail | `jdc --output json audit describe-event-detail --region-id cn-north-1 --event-id evt-xxx` | Get full event details |
-| List Trails | `jdc --output json audit describe-trails --region-id cn-north-1` | List configured audit trails |
+| List Events | <code># NOTE: 期望语法示例<br>jdc --output json audit describe-events --region-id cn-north-1 --start-time "2026-06-01T00:00:00+08:00" --end-time "2026-06-03T23:59:59+08:00"</code> | `--output json` BEFORE subcommand |
+| List Events (Filtered) | <code># NOTE: 期望语法示例<br>jdc --output json audit describe-events --region-id cn-north-1 --start-time ... --end-time ... --event-name CreateInstances --username admin</code> | Add filters as needed |
+| Event Detail | <code># NOTE: 期望语法示例<br>jdc --output json audit describe-event-detail --region-id cn-north-1 --event-id evt-xxx</code> | Get full event details |
+| List Trails | <code># NOTE: 期望语法示例<br>jdc --output json audit describe-trails --region-id cn-north-1</code> | List configured audit trails |
 
 ## JSON Path Reference
 
