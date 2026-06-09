@@ -276,7 +276,7 @@ class RdsMysqlAnalyzer(BaseAnalyzer):
 
         return advice_list
 
-    def query_metrics(self, client) -> None:
+    def query_metrics(self, client, hours: int = 6) -> None:
         """Query slow logs for discovered instances.
 
         Note: JD Cloud RDS API does not expose slow query logs via standard API.

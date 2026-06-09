@@ -28,7 +28,7 @@ class RedisAnalyzer(BaseAnalyzer):
         self.resources = [r for r in all_redis if get_tag(r, "客户") == customer]
         return self.resources
 
-    def query_metrics(self, client) -> dict:
+    def query_metrics(self, client, hours: int = 6) -> dict:
         # Redis monitor metrics from JD Cloud:
         # - redis.memory.usage  (内存使用率 %)
         # - redis.hit_rate      (缓存命中率 %)
@@ -41,8 +41,9 @@ class RedisAnalyzer(BaseAnalyzer):
             if not rid:
                 continue
             try:
-                pts = client.get_metrics_batch(rid, redis_metrics, hours=6,
-                                               region=client.region)
+                pts = client.get_metrics_batch(rid, redis_metrics, hours=hours,
+                                               region=client.region,
+                                               service_code="redis")
                 if pts:
                     self.metrics[rid] = pts
             except Exception:

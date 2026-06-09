@@ -29,7 +29,7 @@ class BaseAnalyzer(ABC):
         ...
 
     @abstractmethod
-    def query_metrics(self, client) -> dict:
+    def query_metrics(self, client, hours: int = 6) -> dict:
         ...
 
     @abstractmethod

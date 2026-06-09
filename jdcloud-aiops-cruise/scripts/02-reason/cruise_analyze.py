@@ -65,7 +65,7 @@ def main():
                 continue
 
             print(f"  🔄 {svc}: 发现 {len(resources)} 个资源，采集监控...")
-            analyzer.query_metrics(client)
+            analyzer.query_metrics(client, hours=args.hours)
             findings = analyzer.analyze()
             report = analyzer.report()
             all_reports.append(report)

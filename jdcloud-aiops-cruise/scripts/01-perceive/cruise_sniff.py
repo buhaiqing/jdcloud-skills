@@ -11,12 +11,13 @@ Output:
     - If resources need confirmation, exits with needs_confirmation flag
 """
 
-import sys, os, json, argparse
+import sys, json, argparse
+from pathlib import Path
 from datetime import datetime
 
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-_project_dir = os.path.join(_scripts_dir, "..")
-sys.path.insert(0, _project_dir)
+_scripts_dir = Path(__file__).parent
+_project_dir = _scripts_dir.parent
+sys.path.insert(0, str(_project_dir))
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources
@@ -34,7 +35,7 @@ def main():
     client = JdcClient()
     regions = args.region
     customer = args.customer
-    output_dir = args.output_dir or os.path.join(_scripts_dir, "..", "..", "reports", "output")
+    output_dir = args.output_dir or str(_project_dir.parent / "reports" / "output")
 
     print(f"\n🔍 嗅探阶段: 客户={customer}, 区域={regions or '全部'}")
     print("=" * 60)
@@ -77,11 +78,11 @@ def main():
         exit_code = 0
 
     # ── Save JSON ──
-    os.makedirs(output_dir, exist_ok=True)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_path = os.path.join(output_dir, f"sniff-{customer}-{date_str}.json")
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2, default=str)
+    out_path = output_path / f"sniff-{customer}-{date_str}.json"
+    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     print(f"\n💾 JSON 已保存: {out_path}")
 
     return exit_code

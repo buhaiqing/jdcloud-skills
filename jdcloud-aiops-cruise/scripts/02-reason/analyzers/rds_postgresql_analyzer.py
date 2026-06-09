@@ -105,7 +105,7 @@ class RdsPostgresqlAnalyzer(BaseAnalyzer):
 
         return self.resources
 
-    def query_metrics(self, client) -> None:
+    def query_metrics(self, client, hours: int = 6) -> None:
         """Query CloudMonitor metrics for PostgreSQL instances.
         
         Note: Detailed PostgreSQL metrics (pg_stat_statements, pg_stat_activity)

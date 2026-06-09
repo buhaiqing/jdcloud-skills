@@ -65,7 +65,7 @@ class K8sAnalyzer(BaseAnalyzer):
 
         return self.resources
 
-    def query_metrics(self, client) -> dict:
+    def query_metrics(self, client, hours: int = 6) -> dict:
         """Collect cluster info via kubernetes API (best-effort)."""
         try:
             clusters = client.list_clusters()

@@ -78,14 +78,15 @@ class VmAnalyzer(BaseAnalyzer):
         ]
         return self.resources
 
-    def query_metrics(self, client) -> dict:
+    def query_metrics(self, client, hours: int = 6) -> dict:
         """Collect metrics for all discovered VMs (last 6 hours)."""
         for vm in self.resources:
             rid = vm.get("instanceId")
             if not rid:
                 continue
             try:
-                points = client.get_metrics_batch(rid, self.METRICS, hours=6)
+                points = client.get_metrics_batch(rid, self.METRICS, hours=hours,
+                                                  service_code="vm")
                 if points:
                     self.metrics[rid] = points
             except Exception:
@@ -236,26 +237,6 @@ class VmAnalyzer(BaseAnalyzer):
             expire = charge.get("chargeExpiredTime", "")
             if expire:
                 v_find("info", f"到期时间: {expire}", "通过 jdcloud-vm-ops 续费", "jdcloud-vm-ops")
-            if ld:
-                avg_load = sum(v for _, v in ld) / len(ld)
-                # Use instance type to estimate vCPU count
-                vcpu = self._estimate_vcpu(instance_type)
-                if vcpu > 0 and avg_load / vcpu > 6.0:
-                    self._add_finding("warning",
-                        f"系统负载(5min)平均{avg_load:.2f} (vCPU={vcpu}, ratio={avg_load/vcpu:.2f})",
-                        "检查是否有异常进程或流量突增",
-                        name)
-
-            # ── TCP connections ──
-            tcp = metrics.get("vm.netstat.tcp.established", [])
-            if tcp:
-                avg_tcp = sum(v for _, v in tcp) / len(tcp)
-                max_conn = limits.get("max_conn", 9999999)
-                if max_conn < 9999999 and avg_tcp > max_conn * 0.8:
-                    self._add_finding("warning",
-                        f"TCP连接数平均{avg_tcp:.0f} 已达规格上限{max_conn}的{avg_tcp/max_conn*100:.0f}%",
-                        "检查连接泄漏或考虑升配",
-                        name)
 
         return self.findings
 

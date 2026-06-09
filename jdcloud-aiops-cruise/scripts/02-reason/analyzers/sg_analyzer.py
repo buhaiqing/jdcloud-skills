@@ -55,7 +55,7 @@ class SgAnalyzer(BaseAnalyzer):
                     break
         return self.resources
 
-    def query_metrics(self, client) -> dict:
+    def query_metrics(self, client, hours: int = 6) -> dict:
         return {}  # No metrics for SGs
 
     def analyze(self) -> list:

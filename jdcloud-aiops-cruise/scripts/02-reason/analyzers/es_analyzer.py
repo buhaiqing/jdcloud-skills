@@ -26,7 +26,7 @@ class EsAnalyzer(BaseAnalyzer):
         self.resources = [e for e in all_es if get_tag(e, "客户") == customer]
         return self.resources
 
-    def query_metrics(self, client) -> dict:
+    def query_metrics(self, client, hours: int = 6) -> dict:
         # ES monitoring metrics may not be available via vm serviceCode
         # Best-effort: try common monitor metrics
         es_metrics = ["cpu_util", "memory.usage", "vm.disk.dev.used"]
@@ -35,8 +35,9 @@ class EsAnalyzer(BaseAnalyzer):
             if not rid:
                 continue
             try:
-                pts = client.get_metrics_batch(rid, es_metrics, hours=6,
-                                               region=client.region)
+                pts = client.get_metrics_batch(rid, es_metrics, hours=hours,
+                                               region=client.region,
+                                               service_code="es")
                 if pts:
                     self.metrics[rid] = pts
             except Exception:

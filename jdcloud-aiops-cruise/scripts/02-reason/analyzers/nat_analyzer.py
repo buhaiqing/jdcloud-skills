@@ -26,7 +26,7 @@ class NatAnalyzer(BaseAnalyzer):
         self.resources = [n for n in all_nats if get_tag(n, "客户") == customer]
         return self.resources
 
-    def query_metrics(self, client) -> dict:
+    def query_metrics(self, client, hours: int = 6) -> dict:
         for nat in self.resources:
             rid = nat.get("natGatewayId") or nat.get("id")
             if not rid:
@@ -34,7 +34,7 @@ class NatAnalyzer(BaseAnalyzer):
             try:
                 pts = client.get_metrics_batch(rid,
                     ["nat.connections", "nat.bandwidth.in", "nat.bandwidth.out"],
-                    hours=6, region=client.region)
+                    hours=hours, region=client.region, service_code="nat")
                 if pts:
                     self.metrics[rid] = pts
             except Exception:
