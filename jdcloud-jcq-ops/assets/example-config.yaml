@@ -1,0 +1,57 @@
+# JD Cloud JCQ (消息队列服务) Example Configuration
+# Placeholder values use the skill's variable convention:
+#   {{env.*}}  — resolved from environment at runtime
+#   {{user.*}} — collected from the user interactively
+
+region: "{{user.region}}"
+topic_name: "{{user.topic_name}}"
+consumer_group_name: "{{user.consumer_group_name}}"
+description: "{{user.description}}"
+
+# Topic configuration
+topic:
+  name: "{{user.topic_name}}"
+  regionId: "{{user.region}}"
+  description: "Example JCQ topic for {{user.project_name}}"
+
+# Consumer group configuration
+consumer_group:
+  consumerGroupId: "{{user.consumer_group_name}}"
+  topicName: "{{user.topic_name}}"
+  regionId: "{{user.region}}"
+  description: "Consumer group for {{user.application_name}}"
+
+# Message configuration
+message:
+  topicName: "{{user.topic_name}}"
+  regionId: "{{user.region}}"
+  body: "{{user.message_body}}"
+  tag: "{{user.message_tag}}"
+
+# Receive configuration
+receive:
+  topicName: "{{user.topic_name}}"
+  regionId: "{{user.region}}"
+  consumerGroupId: "{{user.consumer_group_name}}"
+  tag: "{{user.message_tag}}"
+  maxMessages: 10
+
+# Query configuration
+describe_messages:
+  topicName: "{{user.topic_name}}"
+  regionId: "{{user.region}}"
+  startTime: "2026-06-01T00:00:00+08:00"
+  endTime: "2026-06-08T23:59:59+08:00"
+  pageNumber: 1
+  pageSize: 20
+
+# SDK endpoint configuration
+sdk:
+  endpoint: "jcq.jdcloud-api.com"
+  scheme: "https"
+  timeout: 20
+
+# Credentials (resolved from environment at runtime)
+credentials:
+  access_key: "{{env.JDC_ACCESS_KEY}}"
+  secret_key: "{{env.JDC_SECRET_KEY}}"

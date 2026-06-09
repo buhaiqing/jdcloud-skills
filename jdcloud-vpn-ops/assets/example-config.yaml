@@ -1,0 +1,66 @@
+# Example VPN Configuration for JD Cloud VPN
+# Product: VPN Gateway / VPN Connection / Customer Gateway
+# Reference: https://vpn.jdcloud-api.com/v1
+
+---
+# VPN Gateway — JD Cloud-side endpoint
+vpnGateway:
+  name: "prod-vpn-gateway-beijing"
+  region: "cn-north-1"
+  vpcId: "vpc-xxxxxxxx"
+  description: "Production VPN gateway for Beijing office"
+  # Optional: bandwidth in Mbps (check quota)
+  bandwidthMbps: 100
+
+---
+# Customer Gateway — Remote-side endpoint
+customerGateway:
+  name: "beijing-office-cgw"
+  region: "cn-north-1"
+  ipAddress: "203.0.113.10"
+  description: "Beijing office edge router public IP"
+
+---
+# VPN Connection — IPsec tunnel between VpnGateway and CustomerGateway
+vpnConnection:
+  name: "prod-beijing-tunnel"
+  region: "cn-north-1"
+  vpnGatewayId: "vpngw-xxxxxxxx"
+  customerGatewayId: "cgw-xxxxxxxx"
+  # Pre-shared key (PSK) — MUST be strong and kept secret
+  psk: "{{env.VPN_PSK}}"
+  # IKE version: v1 or v2 (v2 recommended)
+  ikeVersion: "v2"
+  # Subnets on JD Cloud side to advertise
+  localSubnets:
+    - "10.0.0.0/16"
+    - "172.16.0.0/12"
+  # Subnets on remote side to route to
+  remoteSubnets:
+    - "192.168.0.0/16"
+  # IPSec configuration (optional — defaults apply if omitted)
+  ipsecConfig:
+    # Encryption algorithm: aes128, aes192, aes256
+    encryptAlgo: "aes256"
+    # Integrity algorithm: sha1, sha256, sha384
+    integrityAlgo: "sha256"
+    # DH group: group2, group5, group14, group24
+    dhGroup: "group14"
+    # IKE lifetime in seconds
+    ikeLifetime: 28800
+    # IPSec lifetime in seconds
+    ipsecLifetime: 3600
+    # DPD (Dead Peer Detection) interval in seconds
+    dpdInterval: 10
+    # DPD retry count
+    dpdRetries: 3
+
+---
+# Route table update reminder
+# After creating the VPN connection, update the VPC route table to route
+# remote subnet traffic through the VPN gateway:
+routes:
+  - destination: "192.168.0.0/16"
+    nextHopType: "vpn_gateway"
+    nextHopId: "vpngw-xxxxxxxx"
+    description: "Route to Beijing office via VPN"

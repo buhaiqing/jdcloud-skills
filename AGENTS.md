@@ -20,7 +20,11 @@ jdcloud-skills/
 ├── jdcloud-iam-ops/               # IAM — users, groups, roles, policies
 ├── jdcloud-kms-ops/               # KMS — key management, encryption
 ├── jdcloud-clb-ops/               # CLB — load balancer management
+├── jdcloud-disk-ops/              # Cloud Disk — data disks, snapshots
+├── jdcloud-fc-ops/                # Function Compute — serverless functions
+├── jdcloud-waf-ops/               # WAF — Web Application Firewall
 ├── jdcloud-alert-intelligence/    # Alert post-processing (aggregation, suppression, reporting)
+├── jdcloud-routines-ops/         # Routine ops — expiry cruise, billing analysis, resource inventory
 ├── .env.example / pyproject.toml / uv.lock
 └── AGENTS.md                      # ← this file
 ```
@@ -231,7 +235,11 @@ When a user's request spans multiple JD Cloud products:
 | OSS bucket/object CRUD, storage management | `jdcloud-oss-ops` |
 | NAT gateway/SNAT/DNAT rules | `jdcloud-nat-ops` |
 | Kubernetes cluster/node group mgmt | `jdcloud-kubernetes-ops` |
+| Cloud Disk CRUD, attach/detach, snapshot | `jdcloud-disk-ops` |
+| Function Compute service/function/trigger | `jdcloud-fc-ops` |
+| Web Application Firewall instance/domain/rule | `jdcloud-waf-ops` |
 | Generate a new product skill | `jdcloud-skill-generator` |
+| Routine operations (expiry cruise, billing analysis, resource inventory) | `jdcloud-routines-ops` |
 
 - `jdcloud-alert-intelligence` is **read-only** — it analyzes alerts but delegates alarm rule changes back to `jdcloud-cloudmonitor-ops`.
 - Each skill's `SHOULD NOT Use` section lists exactly where to route.
@@ -451,6 +459,9 @@ Return strict JSON:
 | `jdcloud-audit-ops` | optional | 5 | read-only |
 | `jdcloud-tag-audit-ops` | optional | 5 | read-only |
 | `jdcloud-skill-generator` | optional | 3 | meta operation |
+| `jdcloud-disk-ops` | **required** | 2 | delete disk = data loss; resize is expansion-only |
+| `jdcloud-fc-ops` | recommended | 3 | delete service cascades functions; throttling risk |
+| `jdcloud-waf-ops` | recommended | 3 | delete instance breaks all domain protection |
 
 Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate`).
 
@@ -492,6 +503,9 @@ Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate
 | 1.6.2 | 2026-06-04 | `jdcloud-tag-audit-ops` rollout (optional, max_iter=5): rubric + prompts cover audit + report + DOPS ticket creation; DOPS ticket payload completeness + duplicate-ticket idempotency check |
 | 1.6.3 | 2026-06-04 | `jdcloud-skill-generator` rollout (optional, max_iter=3, meta): rubric + prompts cover generation steps; secret-leak guard, OpenSpec + 2-round self-review enforcement, jdc CLI / SDK cross-validation |
 | 1.7.0 | 2026-06-08 | `jdcloud-oss-ops` rollout: SDK-only SKILL.md (OSS not exposed via `jdc` CLI); rubric + prompts cover bucket CRUD, object CRUD, ACL, lifecycle, versioning, CRR, presigned URL; safety gates for delete bucket/object, public ACL on prod |
+| 1.8.0 | 2026-06-08 | `jdcloud-disk-ops` rollout (required, max_iter=2): dual-path SKILL.md; rubric + prompts cover disk CRUD, attach/detach, resize, snapshot, backup policy; safety gates for delete disk with in-use check, resize shrink prevention, system disk detach guard |
+| 1.8.1 | 2026-06-08 | `jdcloud-fc-ops` rollout (recommended, max_iter=3): SDK-only SKILL.md (FC not exposed via `jdc` CLI); rubric + prompts cover service/function CRUD, invoke, version/alias, triggers; safety gates for delete service cascade, prod invoke confirm, runtime/handler validation |
+| 1.8.2 | 2026-06-08 | `jdcloud-waf-ops` rollout (recommended, max_iter=3): dual-path SKILL.md; rubric + prompts cover WAF instance/domain/rule CRUD, SSL cert, bot management, attack logs; safety gates for delete instance with domain check, disable domain origin-exposure warning, cert-domain mismatch guard |
 
 ### 12. See also
 

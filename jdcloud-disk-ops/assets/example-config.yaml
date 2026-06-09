@@ -1,0 +1,23 @@
+# 云硬盘配置示例
+# Cloud Disk Configuration Example
+
+disk:
+  region_id: cn-north-1
+  az: cn-north-1a
+  name: my-data-disk
+  description: Data disk for application storage
+  disk_type: ssd  # ssd, premium-hdd, standard-hdd
+  disk_size_gb: 100
+  charge_spec:
+    charge_mode: postpaid_by_usage  # or prepaid_by_duration
+
+# 挂载配置
+attachment:
+  instance_id: i-xxxxxxxx
+  device: vdb  # vdb, vdc, vdd, etc.
+
+# 快照配置
+snapshot:
+  name: daily-backup
+  description: Automated daily backup
+  retention_days: 7

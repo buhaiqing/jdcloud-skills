@@ -1,0 +1,127 @@
+# JD Cloud API Gateway Example Configuration
+# This file demonstrates a complete API Gateway setup with:
+# - API Group
+# - APIs with different backend types
+# - Throttling policies
+# - Stage configurations
+
+api_gateway:
+  region: cn-north-1
+  
+  # API Groups
+  api_groups:
+    - group_name: ecommerce-api-v1
+      description: E-commerce API Group v1
+      apis:
+        - api_name: get-product
+          description: Get product details
+          request_config:
+            request_path: /products/{productId}
+            request_method: GET
+            request_protocol: HTTP
+          service_config:
+            service_protocol: HTTP
+            service_address: http://ecommerce-backend.internal
+            service_path: /api/v1/products/{productId}
+            service_method: GET
+            service_timeout: 5000
+          auth_type: app_auth  # no_auth | app_auth | jdcloud_auth
+          
+        - api_name: create-order
+          description: Create a new order
+          request_config:
+            request_path: /orders
+            request_method: POST
+            request_protocol: HTTPS
+          service_config:
+            service_protocol: HTTP
+            service_address: http://ecommerce-backend.internal
+            service_path: /api/v1/orders
+            service_method: POST
+            service_timeout: 10000
+          auth_type: app_auth
+          
+        - api_name: health-check
+          description: Health check endpoint
+          request_config:
+            request_path: /health
+            request_method: GET
+            request_protocol: HTTP
+          service_config:
+            service_protocol: MOCK
+            mock_result: '{"status":"ok","timestamp":"2026-06-08T00:00:00Z"}'
+            mock_status_code: 200
+          auth_type: no_auth
+
+    - group_name: webhook-api
+      description: Webhook receiver API Group
+      apis:
+        - api_name: receive-webhook
+          description: Receive external webhooks
+          request_config:
+            request_path: /webhooks/{provider}
+            request_method: POST
+            request_protocol: HTTPS
+          service_config:
+            service_protocol: HTTP
+            service_address: http://webhook-processor.internal
+            service_path: /process/{provider}
+            service_method: POST
+            service_timeout: 30000
+          auth_type: no_auth
+
+  # Throttling Policies
+  throttling_policies:
+    - policy_name: standard-limit
+      description: Standard API rate limiting
+      throttle_config:
+        apiThrottleConfig:
+          unit: minute
+          apiLimit: 10000
+          appLimit: 1000
+      bindings:
+        - api_name: get-product
+          stage_name: prod
+        - api_name: create-order
+          stage_name: prod
+          
+    - policy_name: webhook-limit
+      description: Webhook API rate limiting
+      throttle_config:
+        apiThrottleConfig:
+          unit: second
+          apiLimit: 100
+          appLimit: 10
+      bindings:
+        - api_name: receive-webhook
+          stage_name: prod
+
+  # Deployment stages
+  stages:
+    - name: test
+      description: Test environment
+    - name: pre
+      description: Pre-production environment
+    - name: prod
+      description: Production environment
+
+  # Deployment plan
+  deployments:
+    - group_name: ecommerce-api-v1
+      stage: test
+      apis:
+        - get-product
+        - create-order
+        - health-check
+      
+    - group_name: ecommerce-api-v1
+      stage: prod
+      apis:
+        - get-product
+        - create-order
+        - health-check
+      
+    - group_name: webhook-api
+      stage: prod
+      apis:
+        - receive-webhook

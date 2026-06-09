@@ -1,0 +1,53 @@
+# JD Cloud LogService Example Configuration
+# Placeholder values use {{env.*}} and {{user.*}} conventions
+
+logservice:
+  region: "{{user.region}}"
+  endpoint: "https://logs.jdcloud-api.com"
+
+  credentials:
+    access_key: "{{env.JDC_ACCESS_KEY}}"
+    secret_key: "{{env.JDC_SECRET_KEY}}"
+
+  # LogSet configuration
+  logset:
+    name: "{{user.logset_name}}"
+    description: "Production application logs"
+    retention_days: 30
+
+  # LogTopic configuration
+  logtopic:
+    name: "{{user.logtopic_name}}"
+    description: "Web server access logs"
+    logset_uid: "{{user.logset_uid}}"
+    collection:
+      type: "cloud_vm"
+      paths:
+        - "/var/log/nginx/access.log"
+        - "/var/log/nginx/error.log"
+      filters:
+        - "*.log"
+      exclude_patterns:
+        - "*.gz"
+        - "*.tmp"
+
+  # Index configuration for fast search
+  index:
+    enabled: true
+    fields:
+      - name: "timestamp"
+        type: "date"
+      - name: "level"
+        type: "keyword"
+      - name: "service"
+        type: "keyword"
+      - name: "status"
+        type: "long"
+      - name: "message"
+        type: "text"
+
+  # Search defaults
+  search:
+    default_page_size: 100
+    max_page_size: 1000
+    default_time_range_hours: 1

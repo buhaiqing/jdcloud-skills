@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.2.0"
-  last_updated: "2026-06-05"
+  version: "1.3.0"
+  last_updated: "2026-06-08"
   runtime: Harness AI Agent
   api_profile: "JD Cloud RDS PostgreSQL API v1 - https://rds.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -159,6 +159,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2026-06-08 | **Enhanced slow query capabilities**: (1) **Automated Perception**: Added CloudMonitor alarm integration for automatic slow query detection and alert-triggered analysis. (2) **Scheduled Audit**: Added `scheduled_pg_slowquery_audit` for daily/weekly automated patrol with trend analysis, optimization tracking, and PG-specific autovacuum health checks. (3) **PG-specific enhancements**: Enhanced `analyzeSlowQueries` with 9 root cause patterns (including PG-specific: Sequential Scan, Autovacuum/Bloat, Work Mem/Temp, Inefficient Nested Loop, Parameter Tuning). |
 | 1.2.0 | 2026-06-05 | **Added Describe Slow Logs operations**: (1) `describeSlowLogs` — query slow query summaries by time range for single instance. (2) `describeSlowLogsByTags` — two-phase composite operation: filter instances by tags, then parallel query slow logs across all matching instances. Both support pagination, filtering (account/keyword), sorting (execution metrics), with safety guards (max_instances limit, parallel execution control). |
 | 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DDL/DML paths, PG-specific rules for `VACUUM FULL`, `DROP SCHEMA`, sequence reset) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, DDL `DROP`/`TRUNCATE`, DML `UPDATE`/`DELETE` without WHERE. |
 | 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
@@ -1425,7 +1426,192 @@ def generate_optimization_advice_pg(findings: list, log: dict) -> list:
 
 | 错误模式 | 重试 | Agent 行动 |
 |---------|:----:|-----------|
-| 慢日志数据为空 | 0 |URRENTLY idx_orders_created ON orders(created_at);\n   │   预期效果: Seq Scan → Index Scan，预计降至 ~50ms\n   └─ 🎯 添加 LIMIT:\n       SELECT * FROM orders WHERE created_at > ? LIMIT 100;\n\n🟡 重点关注 (Major) — 建议近期优化\n─────────────────────────────────────\n2. UPDATE inventory SET stock = stock - ? WHERE sku = ?\n   执行次数: 85 | 平均耗时: 800ms | 总耗时: 68000ms\n\n   分析结果:\n   ├─ 🔒 Lock Contention: 锁等待时间 22000ms，占 32%\n   └─ 🧹 Autovacuum / Bloat: UPDATE 频繁，死元组可能影响性能\n\n   优化建议:\n   ├─ 🎯 检查 autovacuum 状态:\n   │   SELECT relname, n_dead_tup, n_live_tup, last_autovacuum\n   │   FROM pg_stat_user_tables WHERE relname = 'inventory';\n   └─ 🎯 缩短事务范围，批量提交\n\n📊 根因分布汇总 (按总耗时排序)\n─────────────────────────────────────\n   🏷️ Missing Index:       5 条 (45.0%)\n   📊 Sequential Scan:     3 条 (28.0%)\n   💾 Work Mem / Temp:     2 条 (18.0%)\n   🧹 Autovacuum / Bloat:  2 条 (20.0%)\n   🔒 Lock Contention:     2 条 (12.0%)\n   🔗 Inefficient Nested:  1 条 (9.5%)\n   ⏰ Frequent Query:      1 条 (18.0%)\n\n🏆 Quick Wins（低投入高回报）\n──────────────────────────────\n1. [Missing Index] 为 orders.created_at 添加 CONCURRENTLY 索引\n   → 消除 #1 慢查询，预计降低总慢查询耗时 30%\n\n2. [Work Mem] 检查 work_mem 设置，ORDER BY 查询溢出到 temp 文件\n   → 修改 postgresql.conf: work_mem = '64MB'（当前可能仅 4MB）\n\n3. [Bloat] 监视 inventory 表的死元组比例\n   → VACUUM VERBOSE inventory; 或设置更积极的 autovacuum\n```\n\n#### Failure Recovery\n\n| 错误模式 | 重试 | Agent 行动 |\n|---------|:----:|-----------|\n| 慢日志数据为空 | 0 | 报告"该时段无慢查询"; 建议缩小时间范围或检查 `log_min_duration_statement` 配置 |\n| SQL 文本过短(截断) | 0 | 基于可用的执行指标进行分析; 提示用户通过 `pg_stat_statements` 获取完整 SQL |\n| 指标数据缺失(如 lockTime) | 0 | 基于已有指标进行分析; 标注"部分分析因数据缺失受限" |\n| 实例不存在 | 0 | HALT; 提示检查实例 ID |\n\n#### 与 describeSlowLogs 的关系\n\n| 方面 | describeSlowLogs | analyzeSlowQueries（本操作） |\n|------|-----------------|---------------------------|\n| 输出 | 原始慢日志数据 | 结构化分析报告 + 优化建议 |\n| 目的 | 数据查询 | 智能诊断 |\n| 是否调用 API | 是（必须） | 否（纯计算层，基于 API 返回数据） |\n| 依赖 | 无 | 依赖 describeSlowLogs 的返回数据 |\n| 可组合性 | 独立使用 | 先 query → 后 analyze |\n\n> **组合使用建议：** 推荐先执行 `describeSlowLogs` 获取数据，再将结果输入本分析操作。\n> 当用户问"慢查询怎么办"时，应该：感知 → 分析 → 优化，三步联动。\n\n---\n\n### Operation: Describe PostgreSQL Instance"}]
+| 慢日志数据为空 | 0 | 报告"该时段无慢查询"; 建议缩小时间范围或检查 `log_min_duration_statement` 配置 |
+| SQL 文本过短(截断) | 0 | 基于可用的执行指标进行分析; 提示用户通过 `pg_stat_statements` 获取完整 SQL |
+| 指标数据缺失(如 lockTime) | 0 | 基于已有指标进行分析; 标注"部分分析因数据缺失受限" |
+| 实例不存在 | 0 | HALT; 提示检查实例 ID |
+
+#### PostgreSQL 慢查询感知自动化（监控联动）
+
+将 PostgreSQL 慢查询分析与 CloudMonitor 告警联动，实现自动化的慢查询感知：
+
+**Step 1: 配置慢查询告警规则**（通过 `jdcloud-cloudmonitor-ops`）
+```bash
+# 当慢查询数量超过阈值时触发告警
+jdc --output json cm create-alarm-rule \
+  --region-id "{{user.region}}" \
+  --alarm-rule-name "postgresql-slow-query-alert" \
+  --metric-name "SlowQueries" \
+  --resource-type "rds" \
+  --resource-id "{{user.instance_id}}" \
+  --threshold "10" \
+  --comparison-operator "GreaterThan" \
+  --evaluation-periods "2" \
+  --period "300"
+```
+
+**Step 2: 告警响应自动分析**（告警回调触发）
+```python
+# 告警回调接收到的信息
+alert_payload = {
+    "instance_id": "pg-xxxx",
+    "metric": "SlowQueries",
+    "current_value": 15,
+    "threshold": 10,
+    "timestamp": "2026-06-08T10:30:00+08:00"
+}
+
+# 自动触发慢日志查询（告警触发前15分钟窗口）
+auto_start_time = alert_timestamp - timedelta(minutes=15)
+auto_end_time = alert_timestamp
+
+# 调用 describeSlowLogs 获取告警时段慢日志
+# 调用 analyzeSlowQueries 生成分析报告（含 PG 特有根因：Autovacuum/Bloat/Work Mem）
+# 发送分析报告到指定渠道（钉钉/邮件/短信）
+```
+
+**Step 3: 分析报告输出格式（PG 专用）**
+```
+🚨 PostgreSQL 慢查询告警自动分析报告
+═══════════════════════════════════════
+告警实例: pg-xxxx
+告警时间: 2026-06-08 10:30:00
+触发条件: 慢查询数 15 > 阈值 10
+
+📊 告警时段慢查询概况 (10:15:00 ~ 10:30:00)
+───────────────────────────────────────
+慢查询模式数: 3 条
+Critical: 1 条 | Major: 2 条
+
+🔴 Critical 问题
+────────────────
+SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at
+执行次数: 8 | 平均耗时: 3200ms | 总耗时: 25600ms
+
+根因: 🏷️ Missing Index + 💾 Work Mem / Temp File
+建议: CREATE INDEX CONCURRENTLY idx_orders_status_created ON orders(status, created_at)
+PG 专用: 检查 work_mem 设置，当前可能不足导致排序溢出到磁盘
+预期收益: 降低查询时间 ~95%
+
+完整报告: [查看详情]
+```
+
+#### PostgreSQL 慢查询定期巡检（Scheduled Audit）
+
+**使用场景**: 每日/每周自动巡检生产环境 PostgreSQL 慢查询，生成趋势报告。
+
+**Execution Flow**:
+```python
+def scheduled_pg_slowquery_audit(tag_filters, time_window_hours=24):
+    """
+    PostgreSQL 定期慢查询巡检
+    
+    Args:
+        tag_filters: 标签过滤，如 [{"name": "tag:环境", "values": ["生产"]}]
+        time_window_hours: 巡检时间窗口，默认24小时
+    """
+    end_time = datetime.now()
+    start_time = end_time - timedelta(hours=time_window_hours)
+    
+    # Phase 1: 按标签查询所有 PostgreSQL 实例慢日志
+    slowlog_results = query_slowlogs_by_tags(
+        tag_filters=tag_filters,
+        start_time=start_time.strftime("%Y-%m-%d %H:%M:%S"),
+        end_time=end_time.strftime("%Y-%m-%d %H:%M:%S"),
+        max_instances=50,
+        engine="PostgreSQL"  # 关键：只查 PostgreSQL 引擎
+    )
+    
+    # Phase 2: 分析所有实例的慢查询（PG 特有根因分析）
+    analysis_results = []
+    for instance_result in slowlog_results["results"]:
+        if instance_result["total_count"] > 0:
+            analysis = analyze_pg_slow_queries_batch(
+                instance_id=instance_result["instance_id"],
+                slow_logs=instance_result["slow_logs"]
+            )
+            # PG 特有：检查 autovacuum 状态
+            analysis["autovacuum_status"] = check_autovacuum_status(
+                instance_result["instance_id"]
+            )
+            analysis_results.append(analysis)
+    
+    # Phase 3: 生成趋势报告
+    trend_report = generate_pg_trend_report(analysis_results)
+    
+    return {
+        "audit_time": end_time.isoformat(),
+        "time_window": f"{time_window_hours}h",
+        "instances_audited": len(slowlog_results["results"]),
+        "instances_with_issues": len(analysis_results),
+        "trend_report": trend_report,
+        "top_priorities": extract_pg_top_priorities(analysis_results, top_n=5),
+        "autovacuum_recommendations": generate_autovacuum_recommendations(
+            analysis_results
+        )
+    }
+```
+
+**输出示例（PG 专用）**:
+```
+📋 PostgreSQL 慢查询巡检报告 (2026-06-08)
+═══════════════════════════════════════════
+巡检时间范围: 过去 24 小时
+巡检实例数: 8 个 (标签: 环境=生产)
+存在慢查询实例: 3 个
+
+📈 趋势对比 (vs 昨日)
+─────────────────────
+慢查询模式总数: 38 → 32 (-15.8%) ✅
+Critical 级别: 2 → 1 (-50.0%) ✅
+总执行耗时: 980,000ms → 750,000ms (-23.5%) ✅
+🧹 Autovacuum 延迟实例: 2 → 1 (-50%) ✅
+
+🔥 Top 5 优化优先级
+───────────────────
+1. [pg-prod-01] orders 表缺少索引 (impact: 高)
+   SQL: SELECT * FROM orders WHERE user_id = ?
+   建议: CREATE INDEX CONCURRENTLY idx_orders_user_id ON orders(user_id)
+   预计收益: 减少 ~380s 日累计耗时
+
+2. [pg-prod-03] inventory UPDATE 锁竞争 + 表膨胀 (impact: 高)
+   根因: 🧹 Autovacuum / Bloat: n_dead_tup/n_live_tup = 35%
+   建议: 
+   ├─ 立即: VACUUM VERBOSE inventory;
+   └─ 长期: 调整 autovacuum_vacuum_scale_threshold = 0.1
+
+3. [pg-prod-02] 复杂 JOIN 溢出到 temp 文件 (impact: 中)
+   根因: 💾 Work Mem / Temp: ORDER BY + GROUP BY 溢出
+   建议: 增加 work_mem = '64MB'（当前 4MB）
+
+4. [pg-prod-01] products 表 Sequential Scan (impact: 中)
+   建议: 为 WHERE category_id = ? 添加索引
+
+5. [pg-prod-05] 分页查询深翻页 (impact: 低)
+   建议: 使用 keyset pagination 替代 OFFSET
+
+📊 根因分布 (PG 特有)
+───────────
+🏷️ Missing Index:         12 条 (40%)
+📊 Sequential Scan:        8 条 (26%)
+🧹 Autovacuum / Bloat:     4 条 (13%) ⚠️ PG 特有
+💾 Work Mem / Temp:        3 条 (10%) ⚠️ PG 特有
+🔒 Lock Contention:        2 条 (7%)
+🔗 Inefficient Nested:     1 条 (3%)
+
+🧹 Autovacuum 健康检查
+──────────────────────
+pg-prod-03: 表 inventory 死元组比例 35% > 20%阈值 ⚠️
+pg-prod-07: 表 logs 超过 24 小时未 autovacuum ⚠️
+
+✅ 已优化确认
+─────────────
+昨日建议 #1 (pg-prod-02): 已添加 CONCURRENTLY 索引 ✅
+昨日建议 #2 (pg-prod-01): 已调整 work_mem 64MB ✅
+```
+
+#### Failure Recovery
+#### Failure Recovery\n\n| 错误模式 | 重试 | Agent 行动 |\n|---------|:----:|-----------|\n| 慢日志数据为空 | 0 | 报告"该时段无慢查询"; 建议缩小时间范围或检查 `log_min_duration_statement` 配置 |\n| SQL 文本过短(截断) | 0 | 基于可用的执行指标进行分析; 提示用户通过 `pg_stat_statements` 获取完整 SQL |\n| 指标数据缺失(如 lockTime) | 0 | 基于已有指标进行分析; 标注"部分分析因数据缺失受限" |\n| 实例不存在 | 0 | HALT; 提示检查实例 ID |\n\n#### 与 describeSlowLogs 的关系\n\n| 方面 | describeSlowLogs | analyzeSlowQueries（本操作） |\n|------|-----------------|---------------------------|\n| 输出 | 原始慢日志数据 | 结构化分析报告 + 优化建议 |\n| 目的 | 数据查询 | 智能诊断 |\n| 是否调用 API | 是（必须） | 否（纯计算层，基于 API 返回数据） |\n| 依赖 | 无 | 依赖 describeSlowLogs 的返回数据 |\n| 可组合性 | 独立使用 | 先 query → 后 analyze |\n\n> **组合使用建议：** 推荐先执行 `describeSlowLogs` 获取数据，再将结果输入本分析操作。\n> 当用户问"慢查询怎么办"时，应该：感知 → 分析 → 优化，三步联动。\n\n---\n\n### Operation: Describe PostgreSQL Instance"}]
 
 #### Execution (CLI) [Primary Path]
 

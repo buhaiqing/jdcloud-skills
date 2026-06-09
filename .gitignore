@@ -226,6 +226,10 @@ __marimo__/
 
 reports/
 
+# Routines Ops 输出物
+jdcloud-routines-ops/outputs/
+~/.jdcloud-routines-ops/
+
 # Project-specific ignores
 
 # GCL (Generator-Critic-Loop) runtime output

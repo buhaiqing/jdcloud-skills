@@ -26,6 +26,9 @@
 | `describe-instance` / `list` | Correctness, Traceability | Safety & Idempotency are N/A; score 1.0 by default |
 | `describe-slow-logs` | Correctness, Traceability | Read-only query; Safety = 1.0 by default. Must validate `startTime` and `endTime` are within 7-day window |
 | `describe-slow-logs-by-tags` | Correctness, Traceability, **Spec Compliance** | Composite operation; Safety = 1.0 by default. Must validate: (1) tag_filters format, (2) time window ≤ 7 days, (3) engine filter = PostgreSQL, (4) max_instances respected or user confirmed |
+| `analyze-slow-queries` | Correctness, Traceability | Analysis-only operation; Safety = 1.0 by default. Must validate: (1) severity classification rules applied, (2) root cause analysis covers 9 pattern types (PG-specific: Sequential Scan, Autovacuum/Bloat, Work Mem/Temp, Inefficient Nested Loop, Parameter Tuning), (3) optimization advice includes actionable SQL with CONCURRENTLY option, (4) impact estimation provided |
+| `scheduled-pg-slowquery-audit` | Correctness, Traceability, **Spec Compliance** | Composite scheduled operation; Safety = 1.0 by default. Must validate: (1) tag-based instance discovery with engine=PostgreSQL, (2) cross-instance aggregation, (3) trend comparison vs previous period, (4) top priority extraction, (5) autovacuum health check included |
+| `pg-slowquery-alarm-integration` | Correctness, Traceability | Alarm-triggered analysis; Safety = 1.0 by default. Must validate: (1) alarm payload parsing, (2) automatic time window calculation (alarm-15min to alarm), (3) PG-specific analysis (Autovacuum/Bloat/Work Mem), (4) report generation and delivery |
 
 ### Composite operation specific rules (describe-slow-logs-by-tags)
 
@@ -97,4 +100,5 @@ via the SDK low-level `psycopg2` / `psycopg` path. This is an
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial rubric for `jdcloud-postgresql-ops` GCL rollout (covers instance + DDL/DML paths; PG-specific rules for `VACUUM FULL`, `DROP SCHEMA`, sequence reset) |
+| 1.2.0 | 2026-06-08 | Added scoring rules for `analyze-slow-queries` (9 root cause patterns including PG-specific), `scheduled-pg-slowquery-audit` (with autovacuum health check), and `pg-slowquery-alarm-integration` (PG-specific analysis) |
 | 1.1.0 | 2026-06-05 | Added `describe-slow-logs` and `describe-slow-logs-by-tags` operations with composite operation scoring rules |

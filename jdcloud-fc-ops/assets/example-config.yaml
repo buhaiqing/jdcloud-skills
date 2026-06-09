@@ -1,0 +1,41 @@
+# 函数计算配置示例
+# Function Compute Configuration Example
+
+service:
+  name: my-app-service
+  description: Application backend services
+  region_id: cn-north-1
+
+function:
+  name: process-data
+  runtime: python3.10  # python3.10, nodejs18, java11, go1.x, etc.
+  handler: index.handler
+  memory_size: 512  # MB
+  timeout: 30  # seconds
+  environment_variables:
+    DB_HOST: mydb.example.com
+    DB_PORT: "3306"
+    LOG_LEVEL: INFO
+  vpc_config:
+    vpc_id: vpc-xxxxxxxx
+    subnet_id: subnet-xxxxxxxx
+    security_group_id: sg-xxxxxxxx
+
+# 触发器配置
+trigger:
+  http:
+    name: http-trigger
+    auth_type: anonymous  # or function
+    methods:
+      - GET
+      - POST
+  timer:
+    name: daily-job
+    cron: "0 0 * * * *"  # Every hour at minute 0
+    enable: true
+
+# 版本和别名
+alias:
+  name: prod
+  version: "1"
+  description: Production environment

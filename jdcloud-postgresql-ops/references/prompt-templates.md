@@ -17,7 +17,7 @@ the repository policy in `AGENTS.md`).
 - previous Critic feedback (empty on iter 1): {{output.critic_feedback}}
 - rubric to satisfy: {{output.rubric}}
 - operation type: {{output.operation}}
-  # instance-level: create | describe | list | modify | delete | backup | restore | describe-slow-logs | describe-slow-logs-by-tags
+  # instance-level: create | describe | list | modify | delete | backup | restore | describe-slow-logs | describe-slow-logs-by-tags | analyze-slow-queries | scheduled-pg-slowquery-audit | pg-slowquery-alarm-integration
   # SQL-level:      ddl-create | ddl-drop | ddl-alter | dml-insert | dml-update | dml-delete | dml-select | maintenance
 
 # Required behavior
@@ -45,7 +45,37 @@ the repository policy in `AGENTS.md`).
    - Trace MUST contain: instance_ids list, per-instance slow log counts,
      aggregated summary, and any per-instance errors.
    - This is read-only; Safety = 1 by default.
-5. For `create-instance`, always set `--client-token` with a fresh UUID v4
+6. For `analyze-slow-queries` (analysis-only operation), execute in THREE phases:
+   - Phase 1: Severity classification (Critical/Major/Minor) based on execution
+     time, frequency, and rows examined.
+   - Phase 2: Root cause analysis using 9 pattern types: missing_index,
+     sequential_scan, lock_contention, autovacuum_bloat, inefficient_nested_loop,
+     large_result_set, frequent_small_query, work_mem_temp, parameter_tuning.
+   - Phase 3: Generate actionable optimization advice with PG-specific SQL
+     examples (CREATE INDEX CONCURRENTLY, VACUUM, work_mem tuning) and
+     impact estimation for each identified issue.
+   - Trace MUST contain: classification results, root causes with confidence
+     levels, PG-specific diagnostic queries (pg_stat_user_tables), and
+     optimization recommendations.
+   - This is analysis-only; Safety = 1 by default.
+7. For `scheduled-pg-slowquery-audit` (composite scheduled operation):
+   - Phase 1: Discover instances by tags and query slow logs for each.
+   - Phase 2: Analyze slow queries for all instances using `analyze-slow-queries`.
+   - Phase 3: Generate trend report comparing with previous period, extract
+     top 5 optimization priorities, check autovacuum health status, and
+     track previously recommended fixes.
+   - Trace MUST contain: audit time window, instances audited, trend metrics,
+     top priorities, autovacuum recommendations, and optimization confirmation status.
+   - This is read-only analysis; Safety = 1 by default.
+8. For `pg-slowquery-alarm-integration` (alarm-triggered analysis):
+   - Parse alarm payload to extract instance_id, metric value, and timestamp.
+   - Automatically calculate time window (alarm time - 15min to alarm time).
+   - Query slow logs and run PG-specific analysis (including autovacuum/bloat
+     and work_mem checks), then generate and deliver alert report.
+   - Trace MUST contain: alarm details, PG-specific analysis results
+     (Sequential Scan, Work Mem, Bloat), and delivery status.
+   - This is triggered by CloudMonitor alarm; Safety = 1 by default.
+9. For `create-instance`, always set `--client-token` with a fresh UUID v4
    unless the user provided one — Idempotency hard requirement.
 5. After execution, run `jdc --output json rds describe-instance --id <id>` to
    capture the **post-state**, and include a 2 KB excerpt in the trace.
@@ -139,6 +169,44 @@ For each of the 5 dimensions in `rubric`, output a score per the allowed scale
   echoed from a `describe-instances` call.
 - Idempotency = 0 if `create-instance` ran without a `client-token`.
 
+## Composite operations (describe-slow-logs-by-tags)
+- Correctness = 0 if Phase 1 did NOT filter instances by engine="PostgreSQL".
+- Correctness = 0 if Phase 1 returned non-PG instances in the trace.
+- Safety = 0 if matched instances > max_instances and no user confirmation
+  was captured in trace.
+- Traceability = 0 if trace lacks: (a) full list of instance_ids queried,
+  (b) per-instance slow log count, (c) aggregated results across instances.
+- Correctness = 0 if `startTime` or `endTime` validation is missing
+  (must be within 7 days, start <= end).
+
+## Analysis operations (analyze-slow-queries)
+- Correctness = 0 if severity classification is missing or incorrectly applied
+  (Critical: avg_time >= 5000ms OR total_time >= 300000ms OR count >= 10000;
+   Major: avg_time >= 1000ms OR rows_examined >= 500000 OR count >= 1000).
+- Correctness = 0 if root cause analysis does not cover the 9 pattern types
+  (missing_index, sequential_scan, lock_contention, autovacuum_bloat,
+   inefficient_nested_loop, large_result_set, frequent_small_query,
+   work_mem_temp, parameter_tuning).
+- Traceability = 0 if trace lacks: (a) severity classification results,
+  (b) root causes with confidence levels, (c) PG-specific diagnostic queries
+  (pg_stat_user_tables), (d) actionable optimization advice with CONCURRENTLY
+  option, (e) impact estimation.
+
+## Scheduled audit operations (scheduled-pg-slowquery-audit)
+- Correctness = 0 if tag-based instance discovery is not performed
+  with engine="PostgreSQL" filter.
+- Correctness = 0 if cross-instance aggregation is missing or incomplete.
+- Traceability = 0 if trace lacks: (a) audit time window, (b) instances audited,
+  (c) trend comparison with previous period, (d) top 5 priorities extracted,
+  (e) autovacuum health check, (f) optimization confirmation tracking.
+
+## Alarm integration operations (pg-slowquery-alarm-integration)
+- Correctness = 0 if alarm payload parsing is incorrect or incomplete.
+- Correctness = 0 if automatic time window calculation is wrong
+  (should be alarm_time - 15min to alarm_time).
+- Traceability = 0 if trace lacks: (a) alarm details, (b) PG-specific analysis
+  results (Sequential Scan, Work Mem, Bloat), (c) report delivery status.
+
 ## SQL-level
 - Safety = 0 for any DDL/DML without its full text appearing verbatim in the
   trace.
@@ -194,6 +262,10 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 | `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops; gate enforced by Orchestrator |
 | `{{user.start_time}}` | user input | for describe-slow-logs: format `YYYY-MM-DD HH:mm:ss` |
 | `{{user.end_time}}` | user input | for describe-slow-logs: format `YYYY-MM-DD HH:mm:ss` |
+| `{{user.analysis_depth}}` | user input (optional) | for analyze-slow-queries: `basic` (default) or `deep` |
+| `{{user.focus}}` | user input (optional) | for analyze-slow-queries: `all` (default), `most_time`, `most_freq`, `seq_scan`, `lock`, `bloat` |
+| `{{user.time_window_hours}}` | user input (optional) | for scheduled-pg-slowquery-audit: default 24 hours |
+| `{{user.alarm_payload}}` | CloudMonitor alarm callback | for pg-slowquery-alarm-integration: contains instance_id, metric, timestamp |
 | `{{user.page_number}}` | user input (optional) | default 1 |
 | `{{user.page_size}}` | user input (optional) | default 10, range [10, 100] |
 | `{{user.tag_filters}}` | user input | for describe-slow-logs-by-tags: [{"name":"tag:环境","operator":"eq","values":["生产"]}] |
@@ -211,6 +283,7 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 
 | Version | Date | Change |
 |---|---|---|
+| 1.2.0 | 2026-06-08 | Added `analyze-slow-queries` (9 root cause patterns including PG-specific: Autovacuum/Bloat, Work Mem/Temp, Sequential Scan), `scheduled-pg-slowquery-audit` (automated patrol with autovacuum health check), and `pg-slowquery-alarm-integration` (CloudMonitor alarm-triggered PG-specific analysis) operations |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `jdcloud-postgresql-ops` (covers instance + DDL/DML/maintenance paths) |
 | 1.1.0 | 2026-06-05 | Added `describe-slow-logs` operation (read-only, 7-day time window validation) |
 | 1.2.0 | 2026-06-05 | Added `describe-slow-logs-by-tags` composite operation (three-phase: filter by tags → parallel query → aggregate; with max_instances safety guard) |
