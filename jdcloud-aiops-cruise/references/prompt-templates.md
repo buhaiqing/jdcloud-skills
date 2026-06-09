@@ -8,7 +8,7 @@
 你是一个 JD Cloud 全链路巡检执行器（Generator）。
 根据以下 runbook 定义和用户请求，执行巡检并输出结果。
 
-Runbook: {{runbook_id}} (版本 {{runbook_version}})
+Runbook: {{output.runbook_id}} (版本 {{output.runbook_version}})
 用户请求: {{user.request}}
 客户标签: {{user.customer_name}}
 
@@ -58,16 +58,16 @@ trace: {{output.trace}}
 你是一个巡检编排器（Orchestrator）。
 控制 Generator 和 Critic 之间的迭代循环。
 
-当前迭代: {{iter}} / {{max_iter}}
+当前迭代: {{output.iter}} / {{output.max_iter}}
 Generator 结果: {{output.generator_output}}
 Critic 评分: {{output.critic_scores}}
 Critic 反馈: {{output.critic_suggestions}}
 
 决策：
 - 如果所有评分 ≥ 阈值 → PASS，返回 Generator 结果
-- 如果 Safety = 0 → ABORT（不适用，巡检为纯读操作）
+- 如果 Safety = 0 → ABORT（无条件中止；只读巡检若发生资源变更、敏感信息泄露、或返回/持久化跨客户/全账号原始资源数据，也必须判 Safety = 0）
 - 如果 iter < max_iter → 将 Critic 反馈注入 Generator 重试
 - 如果 iter >= max_iter → 返回当前最佳结果 + 未解决的 rubric 项
 
-阈值要求：Correctness ≥ 0.5, Safety = 1, 其余 ≥ 0.8
+阈值要求：Correctness ≥ 0.5, Safety = 1, 其余 ≥ 0.8。Safety=1 仅在未执行资源变更、未泄露敏感信息、且输出/落盘数据已按客户范围最小化时成立。
 ```

@@ -15,6 +15,8 @@
 | 04 | 大促前全链路预检 | 人工触发 | 大促前 3 天 | 变更准备 | 高 |
 | 05 | MySQL 慢查询巡检 | 定时 / 告警触发 / 人工 | 每日 | 数据库优化 | 中 |
 | 06 | PostgreSQL 巡检 | 定时 / 告警触发 / 人工 | 每日 | 数据库优化 | 中 |
+| 07 | CLB 升级评估/建议 | 大促前 / 告警触发 / 人工 | 按需 / 每周 | 容量管理 | 中 |
+| 08 | EIP 审计 | 定时 / 人工 | 每周 | 公网入口治理 | 中 |
 
 ---
 
@@ -109,7 +111,9 @@ runbooks/
 ├── 03-capacity-planning.md              ← 容量规划
 ├── 04-pre-launch-check.md              ← 大促前预检
 ├── 05-mysql-slowquery-audit.md         ← MySQL 慢查询巡检
-└── 06-postgresql-audit.md              ← PostgreSQL 巡检
+├── 06-postgresql-audit.md              ← PostgreSQL 巡检
+├── 07-clb-upgrade-assessment.md        ← CLB 升级评估/建议（只读）
+└── 08-eip-audit.md                     ← EIP 审计（只读）
 references/
 ├── severity-matrix.md                   ← 严重级别矩阵
 └── threshold-definitions.md             ← 阈值定义 + 规格上限速查

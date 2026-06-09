@@ -8,6 +8,14 @@ Read-only: never applies or modifies cloud state.
 > 京东云**无官方 Terraform Provider**。本 skill 导出的 HCL **不可 apply**,
 > 仅供架构文档化与代码评审用途。manifest.json 中 `provider_version` 字段为 `"n/a"`。
 
+> **Template Safety Contract**: 本模块遵循 SKILL.md 中定义的模板安全契约：
+> - C1: FieldMapper 负责输入字段的类型断言和映射
+> - C2: HCL 输出通过 `terraform validate` 校验（仅文档用途）
+> - C3: 校验失败 → exit 1
+> - C4: 不可用时 WARNING + 跳过
+>
+> 详见 SKILL.md → Template Safety Contract 及 references/mermaid-pitfalls.md。
+
 Usage:
     python export-hcl.py --scope all --output-dir ./hcl-export/
     python export-hcl.py --scope vpc-3p9mkq2v3a --output-dir ./hcl-export/ --assume-role jdcloud:ram::...

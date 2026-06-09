@@ -1,0 +1,13 @@
+{
+  "name": "mermaid-lint",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mermaid syntax linter for jdcloud-topo-discovery reports",
+  "type": "commonjs",
+  "dependencies": {
+    "dompurify": "^2.5.8",
+    "glob": "^11.0.3",
+    "jsdom": "^26.1.0",
+    "mermaid": "^11.15.0"
+  }
+}

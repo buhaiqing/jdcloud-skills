@@ -146,6 +146,37 @@ TOPO_TMP_DIR="$TMP_DATA_DIR" python3 ./topo-render.py \
   "$OUTPUT_DIR" "$REPORT_MODE" "$SCAN_TIMESTAMP" "$REGION_ID" \
   $FORMAT_ARGS $HEALTH_ARGS
 
+# ---- Phase 3.5: Mermaid Lint Gate (hard gate) ----
+echo -e "\n🔍 Phase 3.5: Mermaid Lint Gate..."
+LINT_DIR="$SCRIPT_DIR/mermaid-lint"
+LINT_SCRIPT="$LINT_DIR/lint.mjs"
+
+if [ -f "$LINT_SCRIPT" ] && [ -d "$LINT_DIR/node_modules" ]; then
+    # Collect generated report files for linting
+    LINT_TARGETS=""
+    for f in "$OUTPUT_DIR/report.md" "$OUTPUT_DIR/topology.mermaid.md"; do
+        [ -f "$f" ] && LINT_TARGETS="$LINT_TARGETS $f"
+    done
+    if [ -n "$LINT_TARGETS" ]; then
+        if node "$LINT_SCRIPT" $LINT_TARGETS; then
+            echo -e "\n✅ Mermaid Lint Gate: PASSED"
+        else
+            echo -e "\n🚨 MERMAID LINT GATE FAILED"
+            echo "   The generated report contains invalid Mermaid diagrams." >&2
+            echo "   Check the errors above, fix topo-render.py, and re-run." >&2
+            # Cleanup temp dir on failure
+            if [ -z "${TOPO_TMP_EXTERNAL:-}" ]; then
+                rm -rf "$TMP_DATA_DIR" 2>/dev/null || true
+            fi
+            exit 1
+        fi
+    else
+        echo "[INFO] No report files found for linting, skipping"
+    fi
+else
+    echo "[WARN] mermaid-lint not set up (run 'npm install' in $LINT_DIR), skipping lint gate"
+fi
+
 # Cleanup: only if we created the tmp dir (no explicit --tmp-dir)
 if [ -z "${TOPO_TMP_EXTERNAL:-}" ]; then
     rm -rf "$TMP_DATA_DIR" 2>/dev/null || true

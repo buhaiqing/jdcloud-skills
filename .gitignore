@@ -16,6 +16,10 @@ eggs/
 .eggs/
 lib/
 lib64/
+
+# But un-ignore the aiops-cruise lib directory which contains shared source code
+!jdcloud-aiops-cruise/scripts/lib/
+!jdcloud-aiops-cruise/scripts/lib/*.py
 parts/
 sdist/
 var/
@@ -247,3 +251,5 @@ audit-results/
 # GitHub PRs. It is **not** source code and should not be
 # pushed to the repo. See `.prs/README.md` for the workflow.
 .prs/
+
+node_modules/

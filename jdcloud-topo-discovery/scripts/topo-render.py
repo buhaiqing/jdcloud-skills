@@ -15,7 +15,18 @@ Usage:
   python3 topo-render.py <output_dir> <mode:brief|detailed> <timestamp> <region> [--format ascii|mermaid|both] [--health-json path]
 """
 
-import json, sys, os, argparse
+import json, sys, os, argparse, subprocess
+
+# ── Safe rendering utilities ──
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib'))
+from mermaid_safe import (
+    mermaid_escape,
+    mermaid_safe_id,
+    mermaid_safe_label,
+    mermaid_extract_str,
+    mermaid_safe_subgraph_label,
+    mermaid_safe_vpc_label,
+)
 
 # ── Config ──
 MERMAID_MAX_NODES = 50  # collapse if any Subnet has more than this
@@ -136,11 +147,13 @@ for v in vms:
 # CLBs: loadBalancer.subnetId
 for l in clbs:
     sn = l.get('subnetId', '')
+    priv_ip = mermaid_extract_str(l, 'privateIp.privateIpAddress')
+    eip_addr = mermaid_extract_str(l, 'privateIp.elasticIpAddress')
     subnet_map.get(sn, {}).setdefault('clbs', []).append({
         'name': l.get('loadBalancerName', ''),
         'id': l.get('loadBalancerId', ''),
-        'ip': l.get('privateIp', ''),
-        'eip': l.get('elasticIpAddress', '')
+        'ip': priv_ip,
+        'eip': eip_addr
     })
 
 # RDS: dbInstance.subnetId
@@ -275,12 +288,14 @@ def render_mermaid():
     lines = []
     lines.append("```mermaid")
     lines.append("graph TB")
-    lines.append(f"    subgraph VPC[{vpc_name} ({vpc_id})]")
+    vpc_label = mermaid_safe_vpc_label(vpc_name, vpc_id)
+    lines.append(f"    subgraph VPC[{vpc_label}]")
     lines.append(f"        style VPC fill:#e8f4fd,stroke:#3b82f6")
 
     for sid, sn in subnet_map.items():
-        safe_sn = f"sub_{sid.replace('-','_')[:20]}"
-        lines.append(f"    subgraph {safe_sn}[{sn['name']} | {sn['cidr']} ~ {sn['az']}]")
+        safe_sn = mermaid_safe_id(f"sub_{sid}")
+        sn_label = mermaid_safe_subgraph_label(sn['name'], sn['cidr'], sn.get('az', ''))
+        lines.append(f"    subgraph {safe_sn}[{sn_label}]")
         items = sn.get('vms', []) + sn.get('clbs', []) + sn.get('rds', []) + sn.get('redis', [])
 
         if large_scale and len(items) > MERMAID_MAX_NODES:
@@ -290,30 +305,31 @@ def render_mermaid():
             if sn.get('clbs'): parts.append(f"CLB x{len(sn['clbs'])}")
             if sn.get('rds'): parts.append(f"RDS x{len(sn['rds'])}")
             if sn.get('redis'): parts.append(f"Redis x{len(sn['redis'])}")
-            label = " | ".join(parts) if parts else "(预留)"
-            safe_id = f"agg_{sid.replace('-','_')[:20]}"
-            lines.append(f"        {safe_id}[\"{label}\"]")
+            label = mermaid_safe_label(" | ".join(parts) if parts else "(预留)")
+            safe_id = mermaid_safe_id(f"agg_{sid}")
+            lines.append(f"        {safe_id}[{label}]")
         else:
             for it in items:
-                safe_id = f"res_{it.get('id','').replace('-','_')[:20] or it['name'][:20]}"
-                label = f"{get_health(it.get('id',''),'✅')} {it['name']}"
+                safe_id = mermaid_safe_id(f"res_{it.get('id','') or it['name']}")
+                label = f"{get_health(it.get('id',''),'✅')} {mermaid_escape(it['name'])}"
                 if 'ip' in it and it['ip']:
-                    label += f"\\n{it['ip']}"
+                    label += f"<br/>{mermaid_escape(it['ip'])}"
                 elif 'domain' in it:
-                    label += f"\\n{it.get('domain','')}"
+                    label += f"<br/>{mermaid_escape(it.get('domain',''))}"
+                label = mermaid_safe_label(label)
                 lines.append(f"        {safe_id}[{label}]")
             if not items:
-                lines.append(f"        empty_spot[(\"(预留)\")]")
+                lines.append(f"        empty_spot[&#40;预留&#41;]")
         lines.append("    end")
 
     # EIP → CLB connections
     for l in clbs:
         clb_id = l.get('loadBalancerId', '')
-        eip_addr = l.get('elasticIpAddress', '')
+        eip_addr = mermaid_extract_str(l, 'privateIp.elasticIpAddress')
         if eip_addr:
-            safe_eip = f"eip_{eip_addr.replace('.','_')}"
-            safe_clb = f"res_{clb_id.replace('-','_')[:20] or l.get('loadBalancerName','')[:20]}"
-            lines.append(f"    {safe_eip}((\"{eip_addr}\")) --> {safe_clb}")
+            safe_eip = mermaid_safe_id(f"eip_{eip_addr}")
+            safe_clb = mermaid_safe_id(f"res_{clb_id or l.get('loadBalancerName','')}")
+            lines.append(f"    {safe_eip}((&#34;{eip_addr}&#34;)) --> {safe_clb}")
 
     lines.append("    end")
     lines.append("```")
@@ -347,3 +363,43 @@ if output_format in ('mermaid',):
     with open(path, 'w') as f:
         f.write(mermaid_content)
     print(f"✅ Mermaid: {path} ({os.path.getsize(path)} bytes)")
+
+# ── Mermaid Lint Gate ──
+LINT_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mermaid-lint', 'lint.mjs')
+LINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mermaid-lint')
+
+def run_mermaid_lint(file_path):
+    """Run mermaid-lint on a file. Returns (passed: bool, output: str)."""
+    if not os.path.exists(LINT_SCRIPT):
+        print(f"[WARN] mermaid-lint not found at {LINT_SCRIPT}, skipping lint gate")
+        return True, ""
+    if not os.path.exists(os.path.join(LINT_DIR, 'node_modules')):
+        print(f"[WARN] mermaid-lint deps not installed (run 'npm install' in {LINT_DIR}), skipping")
+        return True, ""
+    try:
+        result = subprocess.run(
+            ['node', LINT_SCRIPT, file_path],
+            capture_output=True, text=True, timeout=30,
+            cwd=LINT_DIR
+        )
+        if result.returncode == 0:
+            print(f"[LINT] ✅ Mermaid syntax valid: {file_path}")
+            return True, result.stdout
+        else:
+            print(f"[LINT] ❌ Mermaid syntax errors in {file_path}:")
+            print(result.stderr or result.stdout)
+            return False, result.stderr or result.stdout
+    except subprocess.TimeoutExpired:
+        print(f"[WARN] mermaid-lint timed out on {file_path}, skipping")
+        return True, ""
+    except Exception as e:
+        print(f"[WARN] mermaid-lint error: {e}, skipping")
+        return True, ""
+
+# Run lint gate on generated files
+for f in [os.path.join(output_dir, 'report.md'), os.path.join(output_dir, 'topology.mermaid.md')]:
+    if os.path.exists(f):
+        passed, _ = run_mermaid_lint(f)
+        if not passed:
+            print("\n🚨 MERMAID LINT GATE FAILED — report may contain invalid diagrams.")
+            print("   Fix the syntax errors above and re-run topo-render.py.")

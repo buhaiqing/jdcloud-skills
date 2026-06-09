@@ -292,6 +292,135 @@ wait
 
 > 旧有模板文件 `templates/vpc-topology.md` 保留作参考。完整渲染逻辑由 `topo-render.py` 实现。
 
+### Phase 3.5: Mermaid Lint Gate (硬性门禁)
+
+> **🚨 不可跳过** — 所有包含 Mermaid 图的报告文件必须通过语法校验，否则 HALT。
+
+**执行时机**: `topo-render.py` 生成输出文件后立即执行。
+
+**校验工具**: `scripts/mermaid-lint/lint.mjs`
+
+**前置条件**:
+```bash
+cd scripts/mermaid-lint && npm install
+```
+
+**执行方式**:
+
+方式一（自动，集成在 `topo-render.py` 中）:
+```python
+# topo-render.py 在生成 report.md / topology.mermaid.md 后自动调用:
+from scripts.mermaid_lint import run_mermaid_lint
+passed, output = run_mermaid_lint(output_path)
+if not passed:
+    print("🚨 MERMAID LINT GATE FAILED")
+    exit(1)
+```
+
+方式二（手动，通过 `topo-scan.sh`）:
+```bash
+# topo-scan.sh 在 Phase 3 后自动执行:
+node scripts/mermaid-lint/lint.mjs "reports/*.md"
+```
+
+方式三（独立运行）:
+```bash
+node scripts/mermaid-lint/lint.mjs "reports/report.md"
+```
+
+**校验内容**:
+1. 提取 Markdown 文件中所有 ` ```mermaid ` 代码块
+2. 调用官方 `mermaid.parse()` API 逐块解析
+3. 任何解析失败 → 输出错误位置（文件 + 行号）+ 错误原因 → **exit 1**
+
+**失败处理**:
+
+| 错误类型 | 处理方式 |
+|----------|----------|
+| 语法错误（如括号不匹配、节点定义错误） | HALT，输出错误行号和详情，要求修复后重跑 |
+| `mermaid-lint` 未安装依赖 | WARNING + 跳过（不阻塞） |
+| `mermaid-lint` 超时 | WARNING + 跳过（不阻塞） |
+
+**集成到 CI/CD**:
+```bash
+# 在 CI pipeline 中作为独立步骤
+npm install --prefix scripts/mermaid-lint
+node scripts/mermaid-lint/lint.mjs "reports/*.md"
+```
+
+---
+
+## Template Safety Contract (模板安全契约)
+
+> **适用范围**: 所有生成 Mermaid / Markdown / HCL 的模板代码（`topo-render.py`、`export-hcl.py` 等）。
+
+任何模板渲染代码必须满足以下 4 条契约：
+
+### C1: 输入校验 (Input Validation)
+
+所有外部数据（API 返回值、用户输入）在进入模板前必须做类型断言。
+
+```python
+# ❌ 错误: 直接取嵌套字段，dict 被当作字符串
+ip = data.get('privateIp', '')
+
+# ✅ 正确: 使用 mermaid_extract_str() 安全提取
+from lib.mermaid_safe import mermaid_extract_str
+ip = mermaid_extract_str(data, 'privateIp.privateIpAddress')
+```
+
+### C2: 输出校验 (Output Validation)
+
+生成后必须通过对应的 Linter：
+
+| 输出格式 | Linter | 命令 |
+|----------|--------|------|
+| Mermaid 图 | `mermaid-lint` | `node scripts/mermaid-lint/lint.mjs "*.md"` |
+| Markdown | `markdownlint` | `markdownlint "*.md"` |
+| HCL | `terraform validate` | `terraform validate` (仅文档用途) |
+
+### C3: 失败阻断 (Fail-Fast)
+
+Lint 失败 = 报告不完整，必须 **HALT**（exit 1）。不允许静默降级。
+
+```python
+passed, output = run_mermaid_lint(output_path)
+if not passed:
+    print("🚨 MERMAID LINT GATE FAILED")
+    sys.exit(1)
+```
+
+### C4: 回退策略 (Graceful Degradation)
+
+Linter 不可用时（未安装、超时）→ **WARNING + 跳过**，不阻塞流程。
+
+```python
+try:
+    passed, _ = run_mermaid_lint(f)
+except Exception as e:
+    print(f"[WARN] mermaid-lint error: {e}, skipping")
+```
+
+### 契约检查清单
+
+在修改任何模板代码后，必须确认：
+
+- [ ] 所有外部数据字段都做了 `isinstance(x, str)` 或 `mermaid_extract_str()` 检查
+- [ ] 所有标签/ID 都通过了 `mermaid_escape()` / `mermaid_safe_id()` 转义
+- [ ] 生成后自动调用了对应的 Linter
+- [ ] Lint 失败时正确 exit 1
+- [ ] Linter 不可用时输出 WARNING 而非崩溃
+
+### 相关模块
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| `mermaid_safe` | `scripts/lib/mermaid_safe.py` | Mermaid 安全渲染工具（转义、ID 安全、字段提取） |
+| `mermaid-lint` | `scripts/mermaid-lint/lint.mjs` | Mermaid 语法校验 CLI |
+| `sensitive_masker` | `scripts/lib/sensitive_masker.py` | 敏感字段掩码（HCL 导出用） |
+
+---
+
 ### Phase 4: Report Compilation
 
 **Single File Mode:**
@@ -339,6 +468,8 @@ wait
 
 3. Verify read-only compliance (meta-check, no commands executed):
    - Confirm no write commands were in the execution log
+
+4. ✅ Mermaid Lint Gate 已在 Phase 3.5 通过（如有 Mermaid 图生成）
 
 ## Failure Recovery
 
