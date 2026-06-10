@@ -1,6 +1,6 @@
 ---
 name: jdcloud-routines-ops
-version: "1.0.0"
+version: "1.1.0"
 metadata:
   displayName: 京东云日常运维
   description: 京东云日常运维场景集：资源到期巡检、账单分析、资源盘点等
@@ -13,7 +13,9 @@ metadata:
 
 ## Overview
 
-`jdcloud-routines-ops` 是京东云日常运维场景的集 Skill，提供资源到期巡检、资源盘点等常用运维能力。
+`jdcloud-routines-ops` 是京东云日常运维场景的集 Skill，提供**静态 / 周期类**
+巡检能力：资源到期巡检、资源盘点、账单分析。所有场景遵循"读-only / 排程
+驱动 / 快照输出"的设计原则。
 
 ### 支持场景
 
@@ -22,6 +24,80 @@ metadata:
 | [资源到期巡检](#资源到期巡检) | 巡检VM/云盘/EIP/Redis/RDS/CLB/MongoDB/Elasticsearch/SSL证书等资源到期情况 | ✅ 可用 |
 | [资源账单分析](#资源账单分析) | 分析各客户的资源费用支出 | 🔜规划中 |
 | [资源盘点报告](#资源盘点报告) | 生成客户资源使用汇总报告 | 🔜 规划中 |
+
+---
+
+## Trigger & Scope
+
+### SHOULD Use
+
+- 需要按周期（cron / 周报 / 月报）巡检资源到期情况时
+- 需要按客户维度汇总账单 / 资源使用情况时
+- 需要在大促 / 续费窗口前一次性扫描即将到期资源时
+- 需要把"即将到期"信号传递给 `jdcloud-cloudmonitor-ops` 触发告警时
+
+### SHOULD NOT Use
+
+| 需求 | 委托 |
+|---|---|
+| 排查线上故障 / 实时性能 / 根因分析 | `jdcloud-aiops-cruise` |
+| 修改变更 / 续费 / 删除具体资源 | 对应产品的 ops skill（如 `jdcloud-vm-ops`） |
+| 告警聚合 / 抑制 / 降档 | `jdcloud-alert-intelligence` |
+| 标签审计 / 标签合规 | `jdcloud-tag-audit-ops` |
+
+### Cross-Skill Delegation
+
+| 本 skill 的需求 | 委托 |
+|---|---|
+| Cloud Monitor 指标查询 | `jdcloud-cloudmonitor-ops` |
+| 续费前健康检查（针对 routines-ops 发现的即将到期 prod 资源） | `jdcloud-aiops-cruise` |
+| 周期性告警压制规则 | `jdcloud-alert-intelligence` |
+| 资源标签合规审计 | `jdcloud-tag-audit-ops` |
+| VM / Redis / RDS 等资源续费 / 删除 | 对应产品的 ops skill（`jdcloud-vm-ops` 等） |
+
+---
+
+## 职责边界（Responsibility Boundary）
+
+> ⚠️ **本节是本 skill 与 `jdcloud-aiops-cruise` 的关键区分**。两者都属于
+> "巡检类" skill，但服务完全不同的运维场景。
+
+### 一句话总结
+
+- **`jdcloud-routines-ops` = 静态 / 周期类巡检**（到期、账单、盘点）
+- **`jdcloud-aiops-cruise` = 动态 / 事件类巡检**（健康、根因、容量）
+
+### 对照表
+
+| 维度 | `jdcloud-routines-ops`（本 skill） | `jdcloud-aiops-cruise` |
+|---|---|---|
+| **触发方式** | 排程（cron / 周 / 月 / 续费窗口） | 事件驱动 / 按需（告警、工单、人工） |
+| **时间视角** | 面向未来 — "未来 N 天 / 下个月 / 本季度" | 面向当下 — "现在正在发生什么" |
+| **时间窗** | 天 → 月（ahead-of-time） | 实时 → 分钟级（back / now） |
+| **输出形态** | 静态快照报告（JSON + 控制台汇总） | 流式诊断 + 根因候选 + 监控指标 |
+| **典型问题** | "哪些资源 14 天内到期？" "5 月账单多少？" "本周资源用量如何？" | "CLB 5xx 飙升" "VM CPU 100% 自 14:02 起" "MySQL 慢查询突发" |
+| **数据来源** | `describe-*` 列表 + `charge` 元数据 | Cloud Monitor 指标 + 告警历史 + 链路拓扑 |
+| **是否触发执行** | ❌ 绝不执行变更 | ❌ 不执行变更（只出建议） |
+| **下一步交接** | "建议在某日前续费 / 处置" → 交给对应 ops skill | "建议升配 / 重启 / 切流" → 交给对应 ops skill |
+
+### 决策启发式
+
+> - "**这件事**正在发生 / 已经发生了吗？" → `jdcloud-aiops-cruise`
+> - "**这件事**将要发生 / 何时到期？" → `jdcloud-routines-ops`
+
+### 互补场景（同一资源可能同时被两者覆盖）
+
+- **到期 + 健康**：routines-ops 发现 prod-VM 7 天后到期 → aiops-cruise 做一次
+  续费前健康检查，决定续费还是替换。
+- **账单 + 告警**：routines-ops 输出月度账单异常 → alert-intelligence 把
+  "账单突增"作为非业务告警的输入信号。
+
+### 不重叠的红线
+
+- 本 skill **绝不**发起任何 `delete-*` / `stop-*` / `reboot-*` / `modify-*` 调用。
+- 本 skill **绝不**写 Cloud Monitor 告警规则（委托 `jdcloud-cloudmonitor-ops`）。
+- 本 skill **绝不**调用实时监控指标（委托 `jdcloud-aiops-cruise` 或
+  `jdcloud-cloudmonitor-ops`）。
 
 ---
 
@@ -39,7 +115,8 @@ metadata:
 
 ### Description
 
-巡检当前账号下所有区域的资源（VM、云盘、EIP、Redis、RDS、CLB、MongoDB、Elasticsearch、SSL证书等）的到期情况，按客户分组展示。
+巡检当前账号下所有区域的资源（VM、云盘、EIP、Redis、RDS、CLB、MongoDB、
+Elasticsearch、SSL证书等）的到期情况，按客户分组展示。
 
 ### Parameters
 
@@ -57,11 +134,11 @@ metadata:
 1. Pre-flight
    ├── 激活 .venv (Python 3.10)
    ├── 解析参数（warning-days, regions, types）
-   └── 确认 jdc CLI凭证可用
+   └── 确认 jdc CLI凭证可用（~/.jdc/config）
 
-2. Execute (jdc primary)
+2. Execute (jdc primary, SDK fallback)
    ├── 遍历指定区域
-   │ ├── vm describe-instances
+   │   ├── vm describe-instances
    │   ├── redis describe-cache-instances
    │   ├── disk describe-disks
    │   ├── vpc describe-eips
@@ -75,7 +152,7 @@ metadata:
 
 3. Output
    ├── 控制台彩色输出汇总
-   ├── JSON 详细报告 → outputs/expiry/YYYYMMDD-HHMMSS.json
+   ├── JSON 详细报告 → outputs/expiry/expiry-report-YYYYMMDD-HHMMSS.json
    └── 返回0 (有到期资源) 或 1 (无到期资源)
 ```
 
@@ -167,10 +244,68 @@ find ~/.jdcloud-routines-ops/outputs -type f -mtime +30 -delete
 
 ---
 
+## Quality Gate (GCL)
+
+> **本 skill 采用 optional GCL**：排程驱动的常规巡检不需要走 GCL 循环；
+> 但 on-demand 操作员触发的巡检、以及"续费决策前置"巡检，**建议 / 必须**
+> 走 GCL。
+
+### GCL 触发条件
+
+| 触发场景 | GCL 要求 |
+|---|---|
+| 排程（cron / 周报） | **跳过**（输出直接落盘） |
+| 操作员 on-demand 调用 | **推荐** |
+| 续费 / 替换决策前置巡检 | **必须** |
+
+### Rubric（5 维 + 安全门）
+
+| 维度 | 阈值 | 说明 |
+|---|---|---|
+| **Correctness** | ≥ 0.5 | `summary.total_expiring == len(details)`；`days_left` 数学正确 |
+| **Safety** | = 1 | 纯读-only；不打印 `JDC_SECRET_KEY`；报告不外泄跨客户数据 |
+| **Idempotency** | ≥ 0.5 | 重跑得到相同 schema / 相同 summary（modulo `days_left`） |
+| **Traceability** | ≥ 0.5 | 报告含 `report_time` / `warning_days` / `regions_checked` / `types_checked` / `customer_filter` / `summary` / `details[]` |
+| **Spec Compliance** | ≥ 0.5 | jdc-first with SDK fallback；Python 3.10；无 `--no-interactive`；`sys.path` 合规 |
+
+> **Safety = 0 必须无条件 ABORT**。即使巡检为只读，只要出现变更调用、
+> 敏感信息泄露、或报告路径外泄，Safety 即为 0。
+
+### 循环参数
+
+| 参数 | 值 | 来源 |
+|---|---|---|
+| `max_iterations` | **3** | AGENTS.md §8 default for `jdcloud-routines-ops` |
+| Trace 路径 | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | AGENTS.md §6 |
+| Rubric 版本 | `v1` | `references/rubric.md` |
+| Prompt 模板 | `references/prompt-templates.md` | — |
+
+详见 [`references/rubric.md`](references/rubric.md) 与
+[`references/prompt-templates.md`](references/prompt-templates.md)。
+
+---
+
+## Safety Gates（安全铁律）
+
+> **本 Skill 是纯读（Read-Only）巡检，不执行任何写操作。**
+> 任何要求变更资源的结论，只输出"建议"，具体操作必须由人工确认后通过
+> 对应 ops skill 执行。
+
+| 操作 | 要求 |
+|---|---|
+| 资源到期巡检触发 | jdc CLI 默认 + SDK fallback；不发起任何 mutation |
+| 报告输出 | 报告 JSON 写入 `~/.jdcloud-routines-ops/outputs/`；GCL 审计追踪写入仓库级 `audit-results/` |
+| 敏感信息 | 隐藏 AK/SK/密码等敏感字段（显示 `<masked>`） |
+| 删除 / 停止 / 规格变更 / 续费 | ❌ 不允许自动执行，报告只出建议 |
+| 跨客户数据 | `--customer` 过滤后的报告**严禁**混入其他客户数据 |
+
+---
+
 ## Changelog
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.1.0 | 2026-06-10 | 8/8 refs 补齐（新增 core-concepts / cli-usage / api-sdk-usage / monitoring / integration / troubleshooting / rubric / prompt-templates）；新增职责边界章节（vs `jdcloud-aiops-cruise`）；新增 GCL（optional, max_iter=3）章节；Cross-Skill Delegation 表更新；scripts 校验报告见 deliverable |
 | 1.5.0 | 2026-06-09 | 添加 MongoDB 和 Elasticsearch 到期巡检；默认 types 增加 mongodb,elasticsearch |
 | 1.4.0 | 2026-06-09 | 添加 CLB 负载均衡到期巡检；默认 types 增加 clb |
 | 1.3.0 | 2026-06-09 | 添加 SSL 证书到期巡检；汇总报告增加区域统计 |

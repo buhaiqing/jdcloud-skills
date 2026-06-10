@@ -179,62 +179,6 @@ response = client.putMetricData(request)
 print("Metric data uploaded successfully")
 ```
 
-### Java SDK 集成
-
-#### Maven 依赖
-
-```xml
-<dependency>
-    <groupId>com.jdcloud.sdk</groupId>
-    <artifactId>monitor</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-#### SDK 初始化
-
-```java
-import com.jdcloud.sdk.JdcloudSdkException;
-import com.jdcloud.sdk.client.CredentialProvider;
-import com.jdcloud.sdk.client.JdcloudClient;
-import com.jdcloud.sdk.service.monitor.client.MonitorClient;
-import com.jdcloud.sdk.service.monitor.model.*;
-
-public class MonitorExample {
-    public static void main(String[] args) {
-        // 配置凭证
-        CredentialProvider credential = new CredentialProvider(
-            System.getenv("JDC_ACCESS_KEY"),
-            System.getenv("JDC_SECRET_KEY")
-        );
-        
-        // 创建客户端
-        MonitorClient client = MonitorClient.builder()
-            .credentialsProvider(credential)
-            .regionId("cn-north-1")
-            .build();
-    }
-}
-```
-
-#### 查询监控数据
-
-```java
-DescribeMetricDataRequest request = new DescribeMetricDataRequest();
-request.setRegionId("cn-north-1");
-request.setMetric("vm.cpu.util");
-request.setServiceCode("vm");
-request.setResourceId("i-xxx");
-request.setStartTime("2024-01-01T00:00:00Z");
-request.setEndTime("2024-01-01T23:59:59Z");
-request.setAggrType("avg");
-
-DescribeMetricDataResponse response = client.describeMetricData(request);
-for (MetricData data : response.getResult().getMetricDatas()) {
-    System.out.println("Time: " + data.getTimestamp() + ", Value: " + data.getValue());
-}
-```
-
 ## OpenAPI 集成
 
 ### API 认证
@@ -461,114 +405,12 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
 ```
 
-## Terraform 集成
+## 其他集成方式
 
-### 配置 Provider
-
-```hcl
-provider "jdcloud" {
-  access_key = var.access_key
-  secret_key = var.secret_key
-  region     = "cn-north-1"
-}
-```
-
-### 创建告警规则
-
-```hcl
-resource "jdcloud_monitor_alarm" "high_cpu" {
-  region_id           = "cn-north-1"
-  alarm_name          = "HighCPUAlarm"
-  service_code        = "vm"
-  resource_id         = "i-xxx"
-  metric_name         = "vm.cpu.util"
-  comparison_operator = "gt"
-  threshold           = 80
-  period              = 300
-  evaluation_periods  = 2
-  contact_group_id    = 1
-  notice_type         = "sms,email"
-}
-```
-
-## CI/CD 集成
-
-### GitHub Actions 示例
-
-```yaml
-name: Monitor Deployment
-
-on:
-  deployment:
-    environments: [production]
-
-jobs:
-  monitor:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup JDCloud CLI
-        run: |
-          pip install jdcloud_cli
-          jdc config init --access-key ${{ secrets.JDC_ACCESS_KEY }} --secret-key ${{ secrets.JDC_SECRET_KEY }} --region cn-north-1
-      
-      - name: Check Resource Status
-        run: |
-          jdc monitor last-downsample \
-            --region-id cn-north-1 \
-            --service-code vm \
-            --resource-id ${{ secrets.VM_RESOURCE_ID }} \
-            --metrics '["vm.cpu.util","vm.memory.util"]'
-      
-      - name: Create Temporary Alarm
-        run: |
-          jdc monitor create-alarm \
-            --region-id cn-north-1 \
-            --alarm-name "Deploy-Monitor-${{ github.run_id }}" \
-            --service-code vm \
-            --resource-id ${{ secrets.VM_RESOURCE_ID }} \
-            --metric-name "vm.cpu.util" \
-            --comparison-operator "gt" \
-            --threshold 70 \
-            --period 60 \
-            --evaluation-periods 1 \
-            --notice-type "callback" \
-            --callback-url "${{ secrets.WEBHOOK_URL }}"
-```
-
-### Jenkins Pipeline 示例
-
-```groovy
-pipeline {
-    agent any
-    
-    environment {
-        JDC_ACCESS_KEY = credentials('jdc-access-key')
-        JDC_SECRET_KEY = credentials('jdc-secret-key')
-    }
-    
-    stages {
-        stage('Monitor Check') {
-            steps {
-                script {
-                    sh '''
-                        pip install jdcloud_cli
-                        export JDC_ACCESS_KEY=$JDC_ACCESS_KEY
-                        export JDC_SECRET_KEY=$JDC_SECRET_KEY
-                        
-                        jdc monitor describe-metric-data \
-                            --region-id cn-north-1 \
-                            --metric vm.cpu.util \
-                            --service-code vm \
-                            --resource-id i-xxx \
-                            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ) \
-                            --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ)
-                    '''
-                }
-            }
-        }
-    }
-}
-```
+| 集成方式 | 参考文档 |
+|---------|---------|
+| Java SDK | [integration-java.md](integration-java.md) |
+| Terraform & CI/CD (GitHub Actions / Jenkins) | [integration-iac.md](integration-iac.md) |
 
 ## 最佳实践
 

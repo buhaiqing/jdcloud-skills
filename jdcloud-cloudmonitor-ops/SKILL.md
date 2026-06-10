@@ -15,8 +15,8 @@ compatibility: >-
   to JD Cloud endpoints, and official JD Cloud CLI (jdc) for this product.
 metadata:
   author: buhaiqing
-  version: "1.4.0"
-  last_updated: "2026-06-04"
+  version: "1.5.0"
+  last_updated: "2026-06-10"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
@@ -25,6 +25,15 @@ metadata:
   cli_support_evidence: >-
     Official jdc supports monitor product. Verified via `jdc monitor --help`
     and official CLI documentation at https://github.com/jdcloud-api/jdcloud-cli
+  parent_skill: null
+  ecosystem_skills:
+    - jdcloud-alert-intelligence
+    - jdcloud-vm-ops
+    - jdcloud-clb-ops
+    - jdcloud-redis-ops
+    - jdcloud-rds-ops
+    - jdcloud-kms-ops
+    - jdcloud-iam-ops
   environment:
     - JDC_ACCESS_KEY
     - JDC_SECRET_KEY
@@ -41,13 +50,14 @@ metadata:
 
 ### CLI applicability (repository policy)
 
-- **`cli_applicability: jdc-first-with-fallback`:** 官方 `jdc` 支持云监控产品。Agent **必须**优先使用 `jdc` 作为主执行路径。若 `jdc` 安装或命令执行失败，Agent **必须**最多重试 **3 次**（指数退避：0s → 2s → 4s）。仅当 **3 次连续失败** 后，才降级到 **SDK/API**。两条路径均需记录。本 Skill **必须**提供 `references/cli-usage.md` 和 `references/api-sdk-usage.md`。
+- **`cli_applicability: jdc-first-with-fallback`:** 官方 `jdc` 支持云监控产品。Agent **必须**优先使用 `jdc` 作为主执行路径。若 `jdc` 安装或命令执行失败，Agent **必须**最多重试 **3 次**（指数退避：0s → 2s → 4s）。仅当 **3 次连续失败** 后，才降级到 **SDK/API**。两条路径均需记录。
 - **路径偏好**: 遵循 **jdc-first with SDK fallback** 策略。`jdc` 优先用于 CLI 操作；SDK 用于批量操作/集成测试（jdc 不可用时的降级路径）。
 
 ## Changelog
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| 1.5.0 | 2026-06-10 | **双向路由与 GCL 章节重构**：① frontmatter 增加 `parent_skill: null` + `ecosystem_skills`（包含 `jdcloud-alert-intelligence`）;② "不应使用本 Skill 的场景"表新增两条指向 `jdcloud-alert-intelligence` 的委派规则（告警后处理 / 告警历史趋势分析）；③ `## Quality Gate (GCL)` 章节原本被 `## Smart Fallback Strategy` 拆断（出现"continued"续接），本次将 loop diagram / Artifacts / Integration / Operation-specific behavior 完整整合进 GCL 章节，删除续接；④ Reference 目录补充 `rubric.md` 与 `prompt-templates.md` 链接（达成 8/8 ref 校验）。 |
 | 1.4.0 | 2026-06-04 | **GCL 推广（recommended）**：新增 `## Quality Gate (GCL)` 章节，将本 skill 接入仓库级 Generator-Critic-Loop。新增 `references/rubric.md`（5 维 rubric，云监控特有的静默故障保护：删/禁告警规则的 `confirm=DELETE` / `confirm=DISABLE` 门、规则 7 天内曾触发需 `confirm=DELETE_AFTER_FIRING`、prod 标签双重确认、告警通道不能为空）和 `references/prompt-templates.md`（G/C/O prompt 模板）。`max_iterations=3`（按 `AGENTS.md` §8 recommended）。`safety_confirm_required=true` for `delete-alarm-rule`, `disable-alarm-rule`。 |
 | 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: 修复 `--output json` 定位（必须放在子命令之前）、删除不存在的 `--no-interactive` 标志、修正凭证文档说明（CLI 仅从 `~/.jdc/config` INI 读取，不支持环境变量）、增加了沙箱配置工作区 |
 | 1.2.0 | 2026-05-06 | **jdc-first 降级策略**：执行流程改为 `jdc` CLI 优先（主路径）+ SDK/API 降级（3次重试后）；前提条件更新为 `uv` 引导的 Phase 1 (jdc) / Phase 2 (SDK 降级)；路径偏好翻转；前置检查顺序调整 |
@@ -67,6 +77,8 @@ metadata:
 - 任务纯粹是云数据库(RDS)的管理 → 委派给 `jdcloud-rds-ops`
 - 任务纯粹是负载均衡(LB)的配置 → 委派给 `jdcloud-lb-ops`
 - 任务涉及账单/账户管理 → 委派给 `jdcloud-billing-ops`
+- 任务纯粹是**告警后处理**（聚合 / 分级 / 抑制 / 报告 / 告警疲劳统计 / 周报生成） → 委派给 `jdcloud-alert-intelligence`（只读分析 skill；本 skill 不做告警降噪或值班疲劳分析）
+- 任务需要分析**告警历史趋势**、**告警簇模式挖掘**、**P0/P1 自动分级建议** → 委派给 `jdcloud-alert-intelligence`（基于 `monitor describe-alarm-history` 的聚合报告）
 
 ### 委派规则
 - 若用户需要先确认某资源（如 VM）的监控数据，先用本 Skill 查询，再根据结果建议使用对应的资源管理 Skill
@@ -87,7 +99,6 @@ metadata:
 | `{{output.alarm_id}}` | 从 CLI JSON 输出捕获 | 从 `$.result.alarmId` 解析 |
 
 > 规则：`{{env.*}}` 占位符不得向用户暴露或索取。`{{user.*}}` 占位符须通过交互收集。
-
 > **安全警告：** **绝不**在控制台输出、调试信息或日志中记录、打印或暴露 `JDC_SECRET_KEY`（或任何密钥）。验证时仅检查存在性（如 `if os.environ.get('JDC_SECRET_KEY')`），不打印实际值。如需记录凭证状态，使用脱敏占位符如 `JDC_SECRET_KEY=<masked>` 或 `JDC_SECRET_KEY=***`。此规则适用于所有执行路径（SDK、CLI 及调试脚本）。
 
 ## 输出解析规则（Agent 可读）
@@ -127,205 +138,16 @@ metadata:
 - **自定义监控**: 上报和查询自定义业务指标
 - **Dashboard管理**: 监控面板和图表管理
 
-## 执行流程（Agent 可读）
+## 执行流程
 
 每个操作遵循：**前置检查 → 执行（jdc 主路径 / SDK 降级） → 后置验证 → 失败恢复**。Agent 不得跳过任何阶段。
 
-**jdc-first 策略：** Agent **必须**优先尝试 `jdc` CLI（主路径）。若 `jdc` 失败后（指数退避 **3 次重试**：0s → 2s → 4s），降级到 SDK/API。下方文档将 `jdc` 置于 SDK 之前以体现执行优先级。
+**jdc-first 策略：** Agent **必须**优先尝试 `jdc` CLI（主路径）。若 `jdc` 失败后（指数退避 **3 次重试**：0s → 2s → 4s），降级到 SDK/API。
 
-### 操作：创建告警规则
-
-#### 前置检查
-| 检查项 | 方法 | 期望 | 失败处理 |
-|--------|------|------|---------|
-| CLI 已安装 | `jdc --version` | exit code 0 | 最多重试 3 次，然后降级到 SDK |
-| SDK 已安装 | `python -c "import jdcloud_sdk"` | 无错误 | 引导安装（降级路径） |
-| 凭证有效 | `jdc --output json monitor describe-services --region-id cn-north-1` | `$.error == null` | 提示配置 CLI 凭证（`~/.jdc/config`）或 SDK 环境变量 |
-| 区域可用 | SDK/CLI 调用 describeServices | 返回服务列表非空 | 建议最近可用区域 |
-
-#### 执行 — CLI (`jdc`) [主路径]
-
-```bash
-jdc --output json monitor create-alarm \
-  --region-id {{user.region}} \
-  --alarm-name "{{user.alarm_name}}" \
-  --service-code {{user.service_code}} \
-  --resource-id {{user.resource_id}} \
-  --metric-name {{user.metric_name}} \
-  --comparison-operator {{user.comparison}} \
-  --threshold {{user.threshold}} \
-  --period {{user.period}} \
-  --evaluation-periods {{user.eval_periods}} \
-  --contact-group-id {{user.contact_group_id}} \
-  --notice-type "{{user.notice_type}}"
-```
-
-#### 执行 — SDK (降级路径 — 3 次 jdc 失败后)
-
-```python
-import os
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.monitor.client import MonitorClient
-from jdcloud_sdk.services.monitor.apis.CreateAlarmRequest import CreateAlarmRequest
-
-credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
-client = MonitorClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
-
-request = CreateAlarmRequest({
-    "regionId": "{{user.region}}",
-    "alarmName": "{{user.alarm_name}}",
-    "serviceCode": "{{user.service_code}}",
-    "resourceId": "{{user.resource_id}}",
-    "metricName": "{{user.metric_name}}",
-    "comparisonOperator": "{{user.comparison}}",
-    "threshold": {{user.threshold}},
-    "period": {{user.period}},
-    "evaluationPeriods": {{user.eval_periods}},
-    "contactGroupId": {{user.contact_group_id}},
-    "noticeType": "{{user.notice_type}}"
-})
-
-response = client.createAlarm(request)
-# JSON 路径: $.result.alarmId
-alarm_id = response.result.alarmId
-```
-
-#### 后置验证
-1. 从 CLI JSON `$.result.alarmId` 或 SDK `response.result.alarmId` 捕获 `{{output.alarm_id}}`
-2. 验证告警已创建（CLI 优先）：
-   ```bash
-   # CLI 验证（主路径）
-   jdc --output json monitor describe-alarm \
-     --region-id {{user.region}} \
-     --alarm-id {{output.alarm_id}} | jq -r '.result.alarm.status'
-   ```
-   ```python
-   # SDK 验证（降级路径）
-   from jdcloud_sdk.services.monitor.apis.DescribeAlarmRequest import DescribeAlarmRequest
-   req = DescribeAlarmRequest({"regionId": "{{user.region}}", "alarmId": "{{output.alarm_id}}"})
-   resp = client.describeAlarm(req)
-   status = resp.result.alarm.status  # ALARM/OK/INSUFFICIENT_DATA
-   ```
-3. 若返回有效状态 → 操作成功，向用户报告 `{{output.alarm_id}}`
-4. 若返回错误 → 捕获错误信息，进入失败恢复
-
-#### 失败恢复
-| 错误模式 (regex) | 最大重试 | 退避策略 | Agent 动作 |
-|-----------------|---------|---------|-----------|
-| `InvalidParameter` | 1 | - | 检查参数格式，修正后重试 |
-| `QuotaExceeded` | 0 | - | 停止。告知用户告警规则配额已满（每区域最多 500 条） |
-| `MetricNotFound` | 1 | - | 确认监控项名称，用 `describe-metrics` 查询可用项后重试 |
-| `ResourceAlreadyExists` | 0 | - | 告警名称已存在，询问用户是否复用或换名 |
-| `InternalError` | 3 | 2s, 4s, 8s | 指数退避重试。第 3 次失败后报告用户 |
-
-### 操作：查询监控数据
-
-#### 执行 — CLI (`jdc`) [主路径]
-
-```bash
-jdc --output json monitor describe-metric-data \
-  --region-id {{user.region}} \
-  --metric {{user.metric}} \
-  --service-code {{user.service_code}} \
-  --resource-id {{user.resource_id}} \
-  --start-time "{{user.start_time}}" \
-  --end-time "{{user.end_time}}" \
-  --aggr-type avg
-```
-
-#### 执行 — SDK (降级路径 — 3 次 jdc 失败后)
-
-```python
-import os
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.monitor.client import MonitorClient
-from jdcloud_sdk.services.monitor.apis.DescribeMetricDataRequest import DescribeMetricDataRequest
-
-credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
-client = MonitorClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
-
-request = DescribeMetricDataRequest({
-    "regionId": "{{user.region}}",
-    "metric": "{{user.metric}}",
-    "serviceCode": "{{user.service_code}}",
-    "resourceId": "{{user.resource_id}}",
-    "startTime": "{{user.start_time}}",
-    "endTime": "{{user.end_time}}",
-    "aggrType": "avg"
-})
-
-response = client.describeMetricData(request)
-# JSON 路径: $.result.metricDatas[*].value
-for data in response.result.metricDatas:
-    print(f"Time: {data.timestamp}, Value: {data.value}, Unit: {data.unit}")
-```
-
-#### 后置验证
-1. 检查 SDK `response.result.metricDatas` 或 CLI JSON `$.result.metricDatas` 是否非空
-2. 若为空 → 可能原因：资源刚创建无数据、时间范围错误、监控项名错误
-3. 以表格形式展示：时间戳 | 数值 | 单位
-
-#### 失败恢复
-| 错误模式 (regex) | 最大重试 | 退避策略 | Agent 动作 |
-|-----------------|---------|---------|-----------|
-| `RateLimitExceeded` | 3 | 2s, 4s, 8s | 降低频率重试 |
-| `ResourceNotFound` | 0 | - | 停止。告知用户资源 ID 不存在 |
-| `MetricNotFound` | 1 | - | 用 `describe-metrics` 确认名称后重试 |
-
-### 操作：删除告警规则
-
-#### 前置检查（安全门）
-- **必须**询问用户："确认删除告警规则 `{{user.alarm_name}}` ({{user.alarm_id}})？此操作不可撤销。"
-- **必须**等待用户明确回复"确认"或"yes"后才继续（SDK 和 CLI 路径均需此安全门）
-
-#### 执行 — CLI (`jdc`) [主路径]
-
-```bash
-jdc --output json monitor delete-alarms \
-  --region-id {{env.JDC_REGION}} \
-  --alarm-ids '["{{user.alarm_id}}"]'
-```
-
-#### 执行 — SDK (降级路径 — 3 次 jdc 失败后)
-
-```python
-import os
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.monitor.client import MonitorClient
-from jdcloud_sdk.services.monitor.apis.DeleteAlarmsRequest import DeleteAlarmsRequest
-
-credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
-client = MonitorClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
-
-request = DeleteAlarmsRequest({
-    "regionId": "{{env.JDC_REGION}}",
-    "alarmIds": ["{{user.alarm_id}}"]
-})
-
-response = client.deleteAlarms(request)
-# 返回 requestId 表示成功
-print(f"Delete request accepted: {response.requestId}")
-```
-
-#### 后置验证
-1. 再次查询确认不存在（CLI 优先）：
-   ```bash
-   # CLI 验证（主路径）
-   jdc --output json monitor describe-alarm \
-     --region-id {{env.JDC_REGION}} \
-     --alarm-id {{user.alarm_id}} 2>&1
-   ```
-   ```python
-   # SDK 验证（降级路径）
-   from jdcloud_sdk.services.monitor.apis.DescribeAlarmRequest import DescribeAlarmRequest
-   req = DescribeAlarmRequest({"regionId": "{{env.JDC_REGION}}", "alarmId": "{{user.alarm_id}}"})
-   try:
-       client.describeAlarm(req)
-   except Exception as e:
-       if "AlarmNotFound" in str(e) or "ResourceNotFound" in str(e):
-           print("Alarm deleted successfully")
-   ```
-2. 期望返回 `AlarmNotFound` 错误 → 删除成功
+> 详细执行流程（创建告警规则 / 查询监控数据 / 删除告警规则）见 [references/operations.md](references/operations.md)。
+> 智能降级策略（错误分类 / CLI Bug 绕过 / SDK 引用陷阱 / 静默失败）见 [references/fallback-strategy.md](references/fallback-strategy.md)。
+> 前提条件与环境配置见 [references/prerequisites.md](references/prerequisites.md)。
+> CLI 命令速查见 [references/cli-commands.md](references/cli-commands.md)。
 
 ## Quality Gate (GCL)
 
@@ -357,118 +179,6 @@ User request
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
    │
-
----
-
-## Smart Fallback Strategy (智能降级策略)
-
-> **适用范围**: 所有 `jdc-first-with-fallback` 执行路径。
->
-> 详见 [references/monitor-pitfalls.md](references/monitor-pitfalls.md) 陷阱 7。
-
-### 核心原则
-
-**不是所有 CLI 错误都值得重试。** 确定性错误（参数解析 bug、认证失败）
-重试 3 次只是浪费时间，应立即降级到 SDK。
-
-### 错误分类
-
-| 错误类型 | 可重试？ | 退避策略 | 示例 |
-|----------|:------:|----------|------|
-| 网络超时 | ✅ 是 | 指数退避 0s/2s/4s | `ConnectionError`, `Timeout` |
-| API 限流 | ✅ 是 | 指数退避 2s/4s/8s | `Throttling`, `429` |
-| 服务端错误 | ✅ 是 | 固定 2s | `InternalError`, `5xx` |
-| **参数解析错误** | **❌ 否** | **立即降级** | `unrecognized arguments`, `ValueError` |
-| **认证失败** | **❌ 否** | **HALT** | `InvalidAccessKeyId`, `SignatureDoesNotMatch` |
-| **权限不足** | **❌ 否** | **HALT** | `Forbidden.RAM` |
-
-### 执行伪代码
-
-```python
-def call_jdc_or_sdk(command, sdk_fn):
-    result = run_jdc(command)
-    if result.success:
-        return result
-
-    # 确定性错误 → 立即降级，不重试
-    if is_deterministic_error(result.stderr):
-        print(f"[INFO] CLI deterministic error, falling back to SDK")
-        return sdk_fn()
-
-    # 可重试错误 → 重试 3 次
-    for i in range(3):
-        time.sleep(2 ** i)
-        result = run_jdc(command)
-        if result.success:
-            return result
-
-    # 最终降级
-    print(f"[INFO] CLI failed after 3 retries, falling back to SDK")
-    return sdk_fn()
-```
-
-### CLI Bug 绕过技巧
-
-`jdc_cli==1.2.12` 的 `monitor` 子命令存在已知的参数解析 bug。
-使用 `--input-json` 传参可绕过：
-
-```bash
-# ❌ 直接传参（可能触发 CLI bug）
-jdc --output json monitor describe-metric-data \
-  --service-code vm --resource-id i-xxx --metric cpu_util ...
-
-# ✅ 使用 --input-json 绕过
-jdc --output json monitor describe-metric-data --input-json '{
-  "serviceCode": "vm",
-  "resourceId": "i-xxx",
-  "metric": "vm.cpu_util",
-  "startTime": "2026-06-09T00:00:00Z",
-  "endTime": "2026-06-09T12:00:00Z",
-  "timeInterval": "1h"
-}'
-```
-
-### SDK 引用陷阱
-
-`jdcloud_sdk` 的 client 模块导出的是 module 而非 class：
-
-```python
-# ❌ 错误
-from jdcloud_sdk.services.monitor.client import MonitorClient
-client = MonitorClient(cred, region)  # TypeError: not callable
-
-# ✅ 正确
-from jdcloud_sdk.services.monitor.client import MonitorClient
-from jdcloud_sdk.core.config import Config
-cfg = Config(endpoint='monitor.jdcloud-api.com', scheme='https', timeout=30)
-client = MonitorClient.MonitorClient(cred, region, cfg)
-```
-
-### 监控数据静默失败
-
-API 返回 `error: null` + `data: null` 是**静默失败**——表示资源无监控数据
-（通常因为未安装云监控 agent），而非 API 调用失败。
-
-**每次查询后必须检查 `data` 字段**：
-
-```python
-items = resp.result.get('metricDatas', [])
-for item in items:
-    if item.get('data') is None:
-        print(f"[WARN] {item['metric']['metric']}: 无监控数据（可能未安装 agent）")
-        continue
-```
-
-### 相关文档
-
-| 文档 | 路径 | 说明 |
-|------|------|------|
-| 监控陷阱库 | `references/monitor-pitfalls.md` | 7 个已知陷阱 + 修复模式 |
-| 模板安全契约 | `../jdcloud-topo-discovery/SKILL.md` → Template Safety Contract | 跨 skill 通用约束 |
-
----
-
-## Quality Gate (GCL) — continued
    ▼
 [3] Orchestrator decider
    ├─ Safety=0 / blocking   → ABORT
@@ -485,7 +195,7 @@ for item in items:
 ### Integration with existing flows
 
 The GCL **wraps** the jdc-first / SDK-fallback flow defined under
-`## 执行流程（Agent 可读）` above. The Generator (G) IS the existing
+`## 执行流程` above. The Generator (G) IS the existing
 jdc-or-SDK executor. The Critic (C) is a new, read-only role with no
 `jdc` / SDK access. The Orchestrator (O) owns the loop and persists the
 GCL trace.
@@ -508,287 +218,23 @@ GCL trace.
   additional `confirm=DELETE_PROD`. Must include pre-delete snapshot of
   rule definition + recent alert history.
 
-## 前提条件
-
-环境配置遵循 **jdc-first 降级策略**：
-
-1. **通过 `uv` 尝试安装 `jdc` CLI**（主路径）
-2. 失败后**最多重试 3 次**（指数退避：0s → 2s → 4s）
-3. **3 次连续失败后**，降级到 **仅 SDK** 环境
-
-### Python 运行时 (uv)
-
-`jdc` CLI 和 JD Cloud Python SDK 都需要 Python 运行时。使用 **`uv`** 进行本地隔离的幂等环境管理。
-
-**安装 uv（系统级，每台机器只需一次）：**
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# 或通过 Homebrew: brew install uv
-# Windows (PowerShell)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-### 阶段 1：jdc CLI 安装（主路径）
-
-> **Python 3.10 是必需的，不能使用 3.12。** `jdcloud_cli==1.2.12` 使用了在 Python 3.12 中已移除的 `SafeConfigParser`。请始终使用 `uv venv --python 3.10`。
-
-```bash
-uv venv --python 3.10
-source .venv/bin/activate
-uv pip install jdcloud_cli jdcloud_sdk
-jdc --version
-python -c "import jdcloud_sdk; print('SDK OK')"
-```
-
-#### 重试逻辑（最多 3 次）
-
-若 `jdc --version` 或任何 `jdc` 命令失败：
-
-```bash
-# 重试 1
-uv pip install jdcloud_cli jdcloud_sdk
-jdc --version && echo "OK" || echo "FAIL"
-
-# 重试 2（等待 2 秒）
-sleep 2
-uv pip install --force-reinstall jdcloud_cli
-jdc --version && echo "OK" || echo "FAIL"
-
-# 重试 3（等待 4 秒）
-sleep 4
-uv pip install --force-reinstall jdcloud_cli jdcloud_sdk
-jdc --version && echo "OK" || echo "FAIL"
-```
-
-若全部 **3 次重试**均失败，进入**阶段 2：SDK 降级**。
-
-### 阶段 2：SDK 降级（3 次 jdc 失败后）
-
-> **Python 3.10 是必需的，不能使用 3.12。** `jdcloud_cli==1.2.12` 使用了在 Python 3.12 中已移除的 `SafeConfigParser`。
-
-```bash
-uv venv --python 3.10
-source .venv/bin/activate
-uv pip install jdcloud_sdk
-python -c "import jdcloud_sdk; print('SDK OK')"
-```
-
-### 配置凭证
-
-> **CRITICAL:** The `jdc` CLI reads credentials **only** from `~/.jdc/config` INI file. Environment variables (`JDC_ACCESS_KEY`, `JDC_SECRET_KEY`) are **ignored** by the CLI. The SDK mode reads from environment variables. Use the appropriate method below.
-
-**方式 A：配置 SDK 凭证（环境变量）**
-Agent 运行时必须设置以下环境变量，对应本 Skill 中的 `{{env.*}}` 占位符：
-```bash
-export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-export JDC_REGION="cn-north-1"
-```
-
-**方式 B：配置 CLI 凭证（`~/.jdc/config` INI 文件）**
-```bash
-# 沙箱环境需将 HOME 重定向到可写目录
-export HOME=/tmp/jdc-home
-mkdir -p /tmp/jdc-home/.jdc
-cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
-[default]
-access_key = {{env.JDC_ACCESS_KEY}}
-secret_key = {{env.JDC_SECRET_KEY}}
-region_id = {{env.JDC_REGION}}
-endpoint = monitor.jdcloud-api.com
-scheme = https
-timeout = 20
-CONFIGEOF
-# 关键：~/.jdc/current 必须包含 "default" 且不能有尾随换行符
-printf "%s" "default" > /tmp/jdc-home/.jdc/current
-```
-
-## 支持的云产品监控
-
-| 类别 | 产品 |
-|------|------|
-| 计算 | 云主机 CVM、轻量云主机、原生容器、Kubernetes 集群、函数计算 |
-| 网络 | 负载均衡、NAT 网关、弹性公网 IP、共享带宽包、专线服务 |
-| 存储 | 云硬盘、对象存储、云文件服务 |
-| 数据库 | RDS、MongoDB、Redis、Memcached、TiDB、ClickHouse |
-| 中间件 | 消息队列 JCQ/RabbitMQ/Kafka/RocketMQ、Zookeeper |
-| 其他 | CDN、Elasticsearch、DTS、堡垒机等 |
-
-## 常用 CLI 命令
-
-### 查询监控服务列表
-```bash
-jdc --output json monitor describe-services --region-id cn-north-1
-```
-
-### 查询指定产品的监控项
-```bash
-jdc --output json monitor describe-metrics \
-  --region-id cn-north-1 \
-  --service-code vm \
-  --resource-id i-xxx
-```
-
-### 查询监控数据
-```bash
-jdc --output json monitor describe-metric-data \
-  --region-id cn-north-1 \
-  --metric vm.cpu.util \
-  --service-code vm \
-  --resource-id i-xxx \
-  --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-01T23:59:59Z"
-```
-
-### 查询最新监控数据（降采样）
-```bash
-jdc --output json monitor last-downsample \
-  --region-id cn-north-1 \
-  --service-code vm \
-  --resource-id i-xxx \
-  --metrics '["vm.cpu.util","vm.memory.util"]'
-```
-
-### 创建告警规则
-```bash
-jdc --output json monitor create-alarm \
-  --region-id cn-north-1 \
-  --alarm-name "HighCPUAlarm" \
-  --service-code vm \
-  --resource-id i-xxx \
-  --metric-name "vm.cpu.util" \
-  --comparison-operator "gt" \
-  --threshold 80 \
-  --period 300 \
-  --evaluation-periods 2 \
-  --contact-group-id 1 \
-  --notice-type "sms,email"
-```
-
-### 查询告警规则列表
-```bash
-jdc --output json monitor describe-alarms \
-  --region-id cn-north-1 \
-  --page-number 1 \
-  --page-size 20
-```
-
-### 启用/禁用告警规则
-```bash
-# 启用告警
-jdc --output json monitor enable-alarm \
-  --region-id cn-north-1 \
-  --alarm-id alarm-xxx \
-  --enabled true
-
-# 禁用告警
-jdc --output json monitor enable-alarm \
-  --region-id cn-north-1 \
-  --alarm-id alarm-xxx \
-  --enabled false
-```
-
-### 查询告警历史
-```bash
-jdc --output json monitor describe-alarm-history \
-  --region-id cn-north-1 \
-  --alarm-id alarm-xxx \
-  --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-31T23:59:59Z"
-```
-
-### 上报自定义监控数据
-```bash
-jdc --output json monitor put-metric-data \
-  --region-id cn-north-1 \
-  --namespace custom-namespace \
-  --metric-name custom-metric \
-  --value 100 \
-  --dimensions '{"instance":"app-server-01"}'
-```
-
-### 查询自定义监控数据
-```bash
-jdc --output json monitor describe-custom-metric-data \
-  --region-id cn-north-1 \
-  --namespace custom-namespace \
-  --metric-name custom-metric \
-  --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-01T23:59:59Z"
-```
-
 ## Reference 目录
 
-- [核心概念](references/core-concepts.md) - 云监控核心概念和术语
-- [API & SDK 使用](references/api-sdk-usage.md) - SDK 操作映射、请求/响应字段、错误处理
-- [CLI 使用指南](references/cli-usage.md) - 详细的 CLI 命令说明、CLI vs API 覆盖对比
-- [故障排查指南](references/troubleshooting.md) - 常见问题及解决方案
-- [监控与告警](references/monitoring.md) - 监控指标和告警配置
-- [集成指南](references/integration.md) - SDK 和 MCP 集成
-
-## 运维最佳实践
-
-### 1. 监控覆盖策略
-- **核心资源**: 对生产环境所有云资源启用基础监控
-- **关键指标**: CPU、内存、磁盘、网络四大黄金指标必配告警
-- **业务指标**: 通过自定义监控上报业务关键指标
-
-### 2. 告警规则配置
-- **阈值设置**: 根据业务特点设置合理的告警阈值，避免告警风暴
-- **通知策略**: 配置多渠道通知（短信+邮件+回调），设置通知周期避免重复打扰
-- **分级告警**: 区分 P0/P1/P2 级别，配置不同的通知策略和响应时间
-
-### 3. Dashboard 管理
-- **业务视角**: 按业务系统组织监控面板
-- **关键指标置顶**: 将最重要的指标放在面板顶部
-- **模板变量**: 使用模板变量实现资源的快速切换
-
-### 4. 成本优化
-- **存储周期**: 根据数据重要性设置不同的数据存储周期
-- **采集频率**: 非关键资源可适当降低监控数据采集频率
-
-## 常用监控指标
-
-### 云主机(VM)常用指标
-| 指标名称 | 说明 | 单位 |
-|---------|------|------|
-| vm.cpu.util | CPU 使用率 | % |
-| vm.memory.util | 内存使用率 | % |
-| vm.disk.read | 磁盘读速率 | Bps |
-| vm.disk.write | 磁盘写速率 | Bps |
-| vm.network.in | 内网入速率 | bps |
-| vm.network.out | 内网出速率 | bps |
-
-### 云数据库 RDS 常用指标
-| 指标名称 | 说明 | 单位 |
-|---------|------|------|
-| rds.cpu.util | CPU 使用率 | % |
-| rds.memory.util | 内存使用率 | % |
-| rds.connection.util | 连接数使用率 | % |
-| rds.qps | 每秒查询数 | 次/秒 |
-| rds.tps | 每秒事务数 | 次/秒 |
-
-### 负载均衡常用指标
-| 指标名称 | 说明 | 单位 |
-|---------|------|------|
-| lb.newconnection | 新建连接数 | 个/秒 |
-| lb.activeconnection | 活跃连接数 | 个 |
-| lb.traffic.in | 入流量 | bps |
-| lb.traffic.out | 出流量 | bps |
-
-## API 限制说明
-
-| 限制项 | 说明 |
-|--------|------|
-| 查询频率 | 监控数据查询接口默认 QPS 限制为 100 |
-| 数据保留 | 原始监控数据保留 15 天，聚合数据保留 30 天 |
-| 告警规则 | 每个区域最多可创建 500 条告警规则 |
-| 自定义指标 | 每个命名空间最多支持 1000 个自定义指标 |
-
-## 相关链接
-
-- [京东云云监控产品页](https://www.jdcloud.com/cn/products/monitoring)
-- [云监控文档中心](https://docs.jdcloud.com/cn/monitoring/learning)
-- [云监控 API 文档](https://docs.jdcloud.com/cn/monitoring/api/overview)
-- [京东云 CLI](https://github.com/jdcloud-api/jdcloud-cli)
+| 路径 | 用途 |
+|------|------|
+| [references/core-concepts.md](references/core-concepts.md) | 云监控核心概念和术语 |
+| [references/api-sdk-usage.md](references/api-sdk-usage.md) | SDK 操作映射、请求/响应字段、错误处理 |
+| [references/cli-usage.md](references/cli-usage.md) | 详细的 CLI 命令说明、CLI vs API 覆盖对比 |
+| [references/troubleshooting.md](references/troubleshooting.md) | 常见问题及解决方案 |
+| [references/monitoring.md](references/monitoring.md) | 监控指标和告警配置 |
+| [references/integration.md](references/integration.md) | SDK、OpenAPI、Prometheus、Grafana、Webhook 集成 |
+| [references/integration-java.md](references/integration-java.md) | Java SDK 集成 |
+| [references/integration-iac.md](references/integration-iac.md) | Terraform & CI/CD 集成 |
+| [references/rubric.md](references/rubric.md) | GCL Critic 评分规则（5 维 rubric + 静默故障保护） |
+| [references/prompt-templates.md](references/prompt-templates.md) | Generator / Critic / Orchestrator prompt 骨架 |
+| [references/operations.md](references/operations.md) | 核心操作执行流程（创建告警 / 查询监控 / 删除告警） |
+| [references/fallback-strategy.md](references/fallback-strategy.md) | 智能降级策略（错误分类 / CLI Bug 绕过 / SDK 陷阱） |
+| [references/prerequisites.md](references/prerequisites.md) | 前提条件与环境配置（uv / jdc / SDK 安装） |
+| [references/cli-commands.md](references/cli-commands.md) | CLI 命令速查（常用 jdc monitor 命令） |
+| [references/best-practices.md](references/best-practices.md) | 运维最佳实践、监控指标、API 限制 |
+| [references/monitor-pitfalls.md](references/monitor-pitfalls.md) | 监控陷阱库（7 个已知陷阱 + 修复模式） |

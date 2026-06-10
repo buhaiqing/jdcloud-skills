@@ -223,14 +223,20 @@ When a user's request spans multiple JD Cloud products:
 
 | If they ask about | Delegate to |
 |---|---|
+| Full-link inspection / topology discovery / root-cause across services | `jdcloud-aiops-cruise` |
 | VM create/stop/delete | `jdcloud-vm-ops` |
 | Redis instance CRUD | `jdcloud-redis-ops` |
+| MySQL instance CRUD, slow query, backup/restore | `jdcloud-mysql-ops` |
+| PostgreSQL instance CRUD, slow query, backup/restore | `jdcloud-postgresql-ops` |
+| MongoDB instance CRUD | `jdcloud-mongodb-ops` |
+| Elasticsearch cluster/index CRUD | `jdcloud-elasticsearch-ops` |
 | VPC/Subnet/Security Group/Route Table/ACL management | `jdcloud-vpc-ops` |
 | Architecture review / WAF assessment / Recommendation | `jdcloud-arch-advisor` |
 | Monitoring metrics, alarm rules | `jdcloud-cloudmonitor-ops` |
 | Alert analysis, suppression, reporting | `jdcloud-alert-intelligence` |
 | IAM users, policies, keys | `jdcloud-iam-ops` |
 | Key management, encryption | `jdcloud-kms-ops` |
+| EIP allocate/associate/release | `jdcloud-eip-ops` |
 | Load balancer config | `jdcloud-clb-ops` |
 | OSS bucket/object CRUD, storage management | `jdcloud-oss-ops` |
 | NAT gateway/SNAT/DNAT rules | `jdcloud-nat-ops` |
@@ -238,10 +244,23 @@ When a user's request spans multiple JD Cloud products:
 | Cloud Disk CRUD, attach/detach, snapshot | `jdcloud-disk-ops` |
 | Function Compute service/function/trigger | `jdcloud-fc-ops` |
 | Web Application Firewall instance/domain/rule | `jdcloud-waf-ops` |
+| API Gateway instance/API/consumer | `jdcloud-apigateway-ops` |
+| Tag audit / untagged resource detection / DOPS ticket | `jdcloud-tag-audit-ops` |
+| Audit event query / trail lookup | `jdcloud-audit-ops` |
+| VPN tunnel/routing config | `jdcloud-vpn-ops` |
+| Topology graph rendering (visual layer over aiops-cruise output) | `jdcloud-topo-discovery` |
+| Log service / LogQL / index config | `jdcloud-logservice-ops` |
+| Message queue / topic / consumer group | `jdcloud-jcq-ops` |
 | Generate a new product skill | `jdcloud-skill-generator` |
 | Routine operations (expiry cruise, billing analysis, resource inventory) | `jdcloud-routines-ops` |
 
-- `jdcloud-alert-intelligence` is **read-only** — it analyzes alerts but delegates alarm rule changes back to `jdcloud-cloudmonitor-ops`.
+**Cross-skill routing rules (read-only delegation chains):**
+
+- `jdcloud-aiops-cruise` is **read-only** — it produces findings and recommends changes but delegates ALL mutations to product-specific ops skills (vm/redis/mysql/postgresql/clb/eip/nat/k8s/waf/etc.).
+- `jdcloud-alert-intelligence` is **read-only** — it analyzes alerts but delegates alarm rule changes back to `jdcloud-cloudmonitor-ops` and delegates product fixes to product-specific ops skills.
+- `jdcloud-routines-ops` is **read-only** for its core flows (expiry cruise / inventory / billing analysis); any renewal or modification is delegated to product ops skills.
+- `jdcloud-tag-audit-ops` is **read-only** for tag inspection; tag changes are delegated to product ops skills.
+- `jdcloud-audit-ops` is **read-only** — it queries audit events but does not modify them.
 - Each skill's `SHOULD NOT Use` section lists exactly where to route.
 
 ## Validation
@@ -462,6 +481,12 @@ Return strict JSON:
 | `jdcloud-disk-ops` | **required** | 2 | delete disk = data loss; resize is expansion-only |
 | `jdcloud-fc-ops` | recommended | 3 | delete service cascades functions; throttling risk |
 | `jdcloud-waf-ops` | recommended | 3 | delete instance breaks all domain protection |
+| `jdcloud-aiops-cruise` | optional | 3 | read-only cruise; Phase 1 sniff + Phase 2 analyze + Phase 3 suggestions (no mutations) |
+| `jdcloud-routines-ops` | optional | 3 | read-only by default; on-demand GCL recommended; renewal flows must confirm |
+| `jdcloud-apigateway-ops` | recommended | 3 | API publish / unpublish / delete are reversible but affect live traffic |
+| `jdcloud-jcq-ops` | recommended | 3 | topic delete + consumer group reset can lose messages |
+| `jdcloud-logservice-ops` | recommended | 3 | index delete is irreversible (data loss); metric/config changes are recoverable |
+| `jdcloud-vpn-ops` | recommended | 3 | VPN tunnel delete breaks hybrid cloud connectivity |
 
 Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate`).
 
@@ -506,6 +531,7 @@ Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate
 | 1.8.0 | 2026-06-08 | `jdcloud-disk-ops` rollout (required, max_iter=2): dual-path SKILL.md; rubric + prompts cover disk CRUD, attach/detach, resize, snapshot, backup policy; safety gates for delete disk with in-use check, resize shrink prevention, system disk detach guard |
 | 1.8.1 | 2026-06-08 | `jdcloud-fc-ops` rollout (recommended, max_iter=3): SDK-only SKILL.md (FC not exposed via `jdc` CLI); rubric + prompts cover service/function CRUD, invoke, version/alias, triggers; safety gates for delete service cascade, prod invoke confirm, runtime/handler validation |
 | 1.8.2 | 2026-06-08 | `jdcloud-waf-ops` rollout (recommended, max_iter=3): dual-path SKILL.md; rubric + prompts cover WAF instance/domain/rule CRUD, SSL cert, bot management, attack logs; safety gates for delete instance with domain check, disable domain origin-exposure warning, cert-domain mismatch guard |
+| 1.9.0 | 2026-06-10 | **AI OPS 系统性评审批次**: `jdcloud-aiops-cruise` v1.4.0 → **v1.5.0** (optional/read-only, max_iter=3, 8/8 refs 补齐, Quality Gate GCL 章节 +56 行), `jdcloud-alert-intelligence` v0.2.0 → **v0.3.0** (optional, max_iter=5, R1/R2/R3 口径同步, 8/8 refs 补齐, +4 new refs), `jdcloud-cloudmonitor-ops` v1.4.0 → **v1.5.0** (recommended, max_iter=3, 9/9 refs 完整, GCL 章节整合, parent_skill/ecosystem_skills 元数据), `jdcloud-routines-ops` v1.0.0 → **v1.1.0** (optional, max_iter=3, 8/8 refs 补齐, 职责边界表 + Cross-Skill Delegation 表新增, GCL optional); Cross-Skill Delegation 表追加 aiops-cruise / alert-intelligence / routines-ops / eip-ops / disk-ops / fc-ops / waf-ops / apigateway-ops / tag-audit-ops / audit-ops / logservice-ops 入口; 新增 `tests/test_aiops_consistency.py` (dry-run 一致性检查) + `.github/workflows/aiops-audit.yml` (CI workflow 草案) |
 
 ### 12. See also
 

@@ -201,15 +201,32 @@ A structured Markdown document that guides AI Agents to complete specific tasks.
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | VM | VM lifecycle management, monitoring, troubleshooting, **Cloud Assistant batch command execution** | ✅ Available |
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | MySQL | MySQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | PostgreSQL | PostgreSQL instance management, **time-range slow log query**, **batch query by tags**, backup/recovery | ✅ Available |
+| [jdcloud-mongodb-ops](jdcloud-mongodb-ops/) | MongoDB | MongoDB instance management, slow query analysis, backup/recovery | ✅ Available |
 | [jdcloud-redis-ops](jdcloud-redis-ops/) | Redis | Redis instance management, performance analysis, backup/recovery | ✅ Available |
+| [jdcloud-elasticsearch-ops](jdcloud-elasticsearch-ops/) | Elasticsearch | ES cluster/index CRUD, performance tuning, slow query analysis | ✅ Available |
 | [jdcloud-oss-ops](jdcloud-oss-ops/) | Object Storage (OSS) | Bucket management, ACL policies, lifecycle configuration, object upload/download | ✅ Available |
 | [jdcloud-nat-ops](jdcloud-nat-ops/) | NAT Gateway | NAT gateway management, SNAT/DNAT rules, bandwidth monitoring | ✅ Available |
 | [jdcloud-kubernetes-ops](jdcloud-kubernetes-ops/) | Kubernetes | Cluster lifecycle, node group management, cluster upgrade, credential management | ✅ Available |
 | [jdcloud-cloudmonitor-ops](jdcloud-cloudmonitor-ops/) | Cloud Monitor | Alarm rule management, metric query, monitoring dashboard | ✅ Available |
+| [jdcloud-alert-intelligence](jdcloud-alert-intelligence/) | Alert Intelligence | Alert classification, aggregation, suppression, denoising, on-call fatigue stats (read-only) | ✅ Available |
+| [jdcloud-routines-ops](jdcloud-routines-ops/) | Routine Ops | Expiry cruise, billing analysis, resource inventory (read-only, cron-driven) | ✅ Available |
+| [jdcloud-clb-ops](jdcloud-clb-ops/) | CLB | Load balancer management, listener configuration | ✅ Available |
+| [jdcloud-eip-ops](jdcloud-eip-ops/) | Elastic IP | EIP allocate/associate/release/bandwidth adjust | ✅ Available |
+| [jdcloud-disk-ops](jdcloud-disk-ops/) | Cloud Disk | Disk CRUD, attach/detach, snapshot, backup policy | ✅ Available |
+| [jdcloud-fc-ops](jdcloud-fc-ops/) | Function Compute | Service/function CRUD, invoke, version/alias, trigger | ✅ Available |
+| [jdcloud-waf-ops](jdcloud-waf-ops/) | WAF | WAF instance/domain/rule CRUD, SSL cert, Bot management | ✅ Available |
 | [jdcloud-iam-ops](jdcloud-iam-ops/) | IAM | Sub-user, group, role, policy, AK/SK management | ✅ Available |
 | [jdcloud-kms-ops](jdcloud-kms-ops/) | KMS | Key management, encryption/decryption operations | ✅ Available |
-| [jdcloud-clb-ops](jdcloud-clb-ops/) | CLB | Load balancer management, listener configuration | ✅ Available |
+| [jdcloud-apigateway-ops](jdcloud-apigateway-ops/) | API Gateway | API publish/deprecate, consumer management, traffic control | ✅ Available |
+| [jdcloud-vpn-ops](jdcloud-vpn-ops/) | VPN | VPN Gateway/Customer Gateway/tunnel management | ✅ Available |
+| [jdcloud-logservice-ops](jdcloud-logservice-ops/) | Log Service | Log collection, indexing, query, alarm | ✅ Available |
+| [jdcloud-jcq-ops](jdcloud-jcq-ops/) | Message Queue JCQ | Topic, consumer group, message query | ✅ Available |
+| [jdcloud-audit-ops](jdcloud-audit-ops/) | Audit | Audit event query, trail listing (read-only) | ✅ Available |
+| [jdcloud-tag-audit-ops](jdcloud-tag-audit-ops/) | Tag Audit | Untagged resource detection, report generation, DOPS ticket | ✅ Available |
+| [jdcloud-topo-discovery](jdcloud-topo-discovery/) | Topology Discovery | Topology graph rendering (visual layer over aiops-cruise) | ✅ Available |
 | [jdcloud-skill-generator](jdcloud-skill-generator/) | Meta Skill | Auto-generate new product Skills | ✅ Available |
+
+> **Latest update (2026-06-10, v1.9.0 batch)**: 4 AI OPS skills synced to new versions — `jdcloud-aiops-cruise` 1.4.0 → 1.5.0, `jdcloud-alert-intelligence` 0.2.0 → 0.3.0, `jdcloud-cloudmonitor-ops` 1.4.0 → 1.5.0, `jdcloud-routines-ops` 1.0.0 → 1.1.0 (8/8 refs, GCL bidirectional routing, Cross-Skill Delegation table, §1.3 R1/R2/R3 sync, responsibility boundary). See `BACKLOG.md` Phase E and `progress.md`.
 
 ## JD Cloud CLI
 

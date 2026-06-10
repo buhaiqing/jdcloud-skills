@@ -14,8 +14,8 @@ compatibility: >-
   已配置 JDC_ACCESS_KEY / JDC_SECRET_KEY / JDC_REGION。
 metadata:
   author: buhaiqing
-  version: "0.2.0"
-  last_updated: "2026-06-04"
+  version: "0.3.0"
+  last_updated: "2026-06-10"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
@@ -57,7 +57,8 @@ metadata:
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| 0.2.0 | 2026-06-04 | **GCL 推广（optional）**：新增 `## Quality Gate (GCL)` 章节接入仓库级 GCL。新增 `references/rubric.md`（5 维 rubric，静默故障保护：报告不得建议删/禁/改告警规则、4-tuple 引用、P0/P1 需下一跳建议）和 `references/prompt-templates.md`（G/C/O prompt 模板）。`max_iterations=5`。`safety_confirm_required=false`（read-only by mandate）。 |
+| 0.3.0 | 2026-06-10 | **§1.3 联动 + 8/8 refs 补齐**：R1 两段式全面同步；R3 业务 tag 全局使用 `business=core/important/general/peripheral`；新增 4 个 ref：`api-sdk-usage.md` / `integration.md` / `monitoring.md` / `troubleshooting.md`。术语统一：抑制层用"降档 (demote)"，CLI/SDK 切换用"fallback"。 |
+| 0.2.0 | 2026-06-04 | **GCL 推广（optional）**：新增 `## Quality Gate (GCL)` 章节接入仓库级 GCL。新增 `references/rubric.md` 和 `references/prompt-templates.md`。`max_iterations=5`。`safety_confirm_required=false`（read-only by mandate）。 |
 | 0.1.0 | 2026-06-03 | 初版：聚合 / 分级 / 抑制 / 报告四件套；规则引擎实现，ML 留 v0.3 |
 
 ## 触发范围
@@ -179,10 +180,10 @@ jdc --output json monitor describe-alarm-history \
 
 ### Step 4 抑制
 
-**三类抑制源（命中则降级一档或过滤）：**
+**三类抑制源（命中则降档 / 跨级豁免到 P3，**不**做"过滤"）：**
 
 1. **维护窗口**：资源 tag 含 `maintenance_window=*` 或用户在本次分析中显式声明的维护期
-2. **已知周期性**：命中历史 7d 同时段（±30min）≥ 3 次的告警簇 → 降为 P3
+2. **已知周期性**：命中历史 7d 同时段（±30min）≥ 3 次的告警簇 → 降一档（P0→P1→P2→P3）
 3. **已知误报清单**：备份任务、批处理、滚动重启、CD 流量回切、镜像拉取 5 类常见 case
 
 完整规则与脚本见 [references/suppression-rules.md](./references/suppression-rules.md)。
@@ -238,20 +239,39 @@ jdc --output json monitor describe-alarm-history \
 - [ ] 每个 P0/P1 簇都有"下一跳建议"指向具体 jdcloud-*-ops
 - [ ] 报告未捏造任何数字（所有数字均可追溯到 jdc 响应）
 
-## 参考文档索引
+## 参考文档索引（8/8 + 5 playbooks/examples + 1 sync）
+
+> **8/8 标准 ref**（与 [`jdcloud-cloudmonitor-ops`](../jdcloud-cloudmonitor-ops/SKILL.md) / `jdcloud-vm-ops` 对齐）：
 
 | 路径 | 用途 |
 |------|------|
-| [references/core-concepts.md](./references/core-concepts.md) | 告警模型、聚合键、抑制术语、安全模型 |
+| [references/core-concepts.md](./references/core-concepts.md) | 告警模型、聚合键、抑制术语、安全模型（**R1/R2/R3 权威源 §1.4**）|
 | [references/cli-usage.md](./references/cli-usage.md) | jdc monitor 告警命令详解 + JSON 路径 |
-| [references/severity-matrix.md](./references/severity-matrix.md) | P0-P3 分级矩阵（20 判定单元） |
-| [references/suppression-rules.md](./references/suppression-rules.md) | 抑制规则清单 + 已知误报 5 类 |
+| [references/api-sdk-usage.md](./references/api-sdk-usage.md) | OpenAPI 规格 + Python SDK fallback 路径 |
+| [references/monitoring.md](./references/monitoring.md) | 监控指标与告警模式参考（v0.1 用到的子集）|
+| [references/integration.md](./references/integration.md) | 跨 Skill 集成 / IM 推送 / 编程接口契约 |
+| [references/troubleshooting.md](./references/troubleshooting.md) | 10 类故障排查 + 调试技巧 |
+| [references/rubric.md](./references/rubric.md) | GCL 5 维 rubric + 静默故障保护（optional）|
+| [references/prompt-templates.md](./references/prompt-templates.md) | Generator/Critic/Orchestrator prompt 模板 |
+
+> **5 个执行手册 + 端到端示例**（v0.1 业务核心）：
+
+| 路径 | 用途 |
+|------|------|
+| [references/severity-matrix.md](./references/severity-matrix.md) | P0-P3 分级矩阵（20 判定单元）|
+| [references/suppression-rules.md](./references/suppression-rules.md) | 抑制规则清单 + 已知误报 5 类（R1 两段式）|
 | [references/playbook-aggregate.md](./references/playbook-aggregate.md) | 聚合策略与伪代码 |
-| [references/playbook-classify.md](./references/playbook-classify.md) | 分级规则详解（含边界 case） |
+| [references/playbook-classify.md](./references/playbook-classify.md) | 分级规则详解（含边界 case）|
 | [references/playbook-suppress.md](./references/playbook-suppress.md) | 抑制规则脚本与示例 |
 | [references/examples.md](./references/examples.md) | 端到端示例 5+ |
 
-> ✅ v0.1.0 起 examples.md 已就绪，含 5 个端到端场景。
+> **R1/R2/R3 口径同步**（v0.3.0 决策记录）：
+
+| 路径 | 用途 |
+|------|------|
+| [references/r1-r2-r3-sync.md](./references/r1-r2-r3-sync.md) | R1/R2/R3 口径同步（v0.3.0 决策记录） |
+
+> ✅ v0.1.0 起 examples.md 已就绪，含 5 个端到端场景；v0.3.0 起 references 已达 8/8 + 5 playbook/examples。
 
 ## 核心约束
 
@@ -261,6 +281,12 @@ jdc --output json monitor describe-alarm-history \
 - 不消费告警回调 Webhook（v0.2 再加）
 - 不做跨云聚合（仅京东云内部）
 - 不依赖 ML / 异常检测算法（v0.3 再加）
+
+## R1 / R2 / R3 口径同步（v0.3.0 §1.3 联动）
+
+> 本节是 v0.3.0 与 `progress.md` Task1 §1.3 决策的同步说明。
+> 权威源：[`./references/core-concepts.md §1.4`](./references/core-concepts.md)。
+> 完整记录见 [references/r1-r2-r3-sync.md](./references/r1-r2-r3-sync.md)。
 
 ## Quality Gate (GCL)
 
@@ -308,7 +334,7 @@ User request
 ### Integration with existing flows
 
 The GCL **wraps** the 5-step **工作流** defined above. The Generator (G) IS
-the existing jdc-or-SDK executor that fetches alert data. The Critic (C)
+ the existing jdc-or-SDK executor that fetches alert data. The Critic (C)
 audits the produced report's citations and completeness. The Orchestrator
 (O) owns the loop and persists the GCL trace.
 

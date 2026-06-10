@@ -252,4 +252,8 @@ audit-results/
 # pushed to the repo. See `.prs/README.md` for the workflow.
 .prs/
 
+.opencode/
+.mavis/
+.lingma/
+
 node_modules/

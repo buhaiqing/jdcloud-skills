@@ -16,10 +16,15 @@
 | 🥈 | jdcloud-jcq-ops | 1 条 WAF 规则 | ~1500 行 |
 | 🥈 | jdcloud-billing-ops | Cost 支柱量化分析 | ~1500 行 |
 | 🥈 | jdcloud-auto-scaling-orch | Efficiency 支柱评估 | ~1500 行 |
-| 🥉 | aiops-cruise 模板对齐 | 与标准 8-ref 模板对齐 | ~1500 行 |
-| 🥉 | elasticsearch-ops 补 ref | 7/8 → 8/8 | ~200 行 |
-| 🥉 | tag-audit-ops 补 ref | 5/8 → 8/8 | ~600 行 |
-| 🥉 | alert-intelligence 补 ref | 4/8 → 8/8 | ~800 行 |
+| 🥈 | elasticsearch-ops 补 ref | 7/8 → 8/8 | ~200 行 |
+| 🥈 | tag-audit-ops 补 ref | 5/8 → 8/8 | ~600 行 |
+| ~~🥉~~ | ~~aiops-cruise 模板对齐~~ | ✅ **v1.5.0 完成** (2026-06-10) | done |
+| ~~🥉~~ | ~~alert-intelligence 补 ref~~ | ✅ **v0.3.0 完成** (2026-06-10) | done |
+
+> **说明**：v1.9.0 批 (2026-06-10) 完成了 4 个 AI OPS skill 的系统性评审,原优先级表中的
+> 🥉 项已收敛。剩余待办见下方 Phase E。
+
+---
 
 ---
 
@@ -90,10 +95,12 @@
 
 | Skill | 当前 ref 数 | 目标 ref 数 | 缺失 |
 |-------|:----------:|:----------:|------|
-| `jdcloud-aiops-cruise` | 4/8 (按标准) | 8/8 | core-concepts, cli-usage, api-sdk-usage, monitoring, rubric |
+| ✅ `jdcloud-aiops-cruise` | **8/8** | 8/8 | done (v1.5.0, 2026-06-10) |
 | `jdcloud-elasticsearch-ops` | 7/8 | 8/8 | monitoring.md |
 | `jdcloud-tag-audit-ops` | 5/8 | 8/8 | core-concepts, cli-usage, api-sdk-usage |
-| `jdcloud-alert-intelligence` | 4/8 | 8/8 | core-concepts, cli-usage, api-sdk-usage, monitoring |
+| ✅ `jdcloud-alert-intelligence` | **8/8 + 5 playbooks + examples** | 8/8 | done (v0.3.0, 2026-06-10) |
+| ✅ `jdcloud-cloudmonitor-ops` | **8/8 + monitor-pitfalls** | 8/8 | done (v1.5.0, 2026-06-10) |
+| ✅ `jdcloud-routines-ops` | **8/8 + regions** | 8/8 | done (v1.1.0, 2026-06-10) |
 
 ### 测试覆盖
 
@@ -101,15 +108,48 @@
 |-------|:-------:|---------|
 | `jdcloud-vpc-ops` | ✅ 23/23 | 基线已够 |
 | `jdcloud-topo-discovery` | ✅ 73/73 | 可补 sprint16/17/19 测试(3 个文件 ~500 行) |
+| ✅ `tests/test_aiops_consistency.py` | ✅ 新增 (v1.9.0) | dry-run 跨 skill 一致性 dry-run(frontmatter version / 8/8 refs / Cross-Skill Delegation 覆盖 / --no-interactive / SECRET_KEY) |
 | 其余 13 个 ops skill | ❌ 无 | 每个需要 conftest + smoke + test_rubric |
 
 ### 仓库级
 
 | 任务 | 说明 |
 |------|------|
-| 更新 AGENTS.md changelog | 补充 GCL v1.x 新技能的条目 |
+| ✅ 更新 AGENTS.md changelog | 1.9.0 批条目已写入 (2026-06-10) |
+| ✅ 新增 CI workflow | `.github/workflows/aiops-audit.yml` 草案 (v1.9.0, 2026-06-10) |
 | 更新 WAF 规则注释 | `data_source:` 处加版本号标注何时创建对应 skill |
-| 创建 CI workflow | GitHub Actions 自动运行 `pytest tests/` |
+
+---
+
+## Phase E — AI OPS 系统性评审（v1.9.0 批次，2026-06-10）
+
+### 评审范围
+
+4 个 AI OPS skill 同步升版本：
+
+| Skill | from → to | 8/8 refs | GCL | 关键变化 |
+|-------|-----------|:--------:|:---:|----------|
+| `jdcloud-aiops-cruise` | 1.4.0 → **1.5.0** | ✅ | optional, max_iter=3 | +5 refs、Quality Gate GCL 章节 +56 行、Safety 红线表、跨 Skill GCL 兼容性 |
+| `jdcloud-alert-intelligence` | 0.2.0 → **0.3.0** | ✅ | optional, max_iter=5 | R1/R2/R3 口径同步（§1.3 联动）+4 refs、术语统一 |
+| `jdcloud-cloudmonitor-ops` | 1.4.0 → **1.5.0** | ✅ | recommended, max_iter=3 | GCL 章节整合、双向路由修复（parent_skill / ecosystem_skills 元数据） |
+| `jdcloud-routines-ops` | 1.0.0 → **1.1.0** | ✅ | optional, max_iter=3 | +8 refs、职责边界表、Cross-Skill Delegation 表新增 |
+
+### 仓库级一致性产物
+
+- ✅ AGENTS.md changelog 1.9.0 条目（4 个 skill 升版本记录 + Cross-Skill Delegation 表追加 11 个 skill 入口）
+- ✅ BACKLOG.md（本文件）：Phase D 状态推进、优先级矩阵收敛
+- ✅ progress.md：「AI OPS 系统性评审与优化批次」section 已写入
+- ✅ tests/test_aiops_consistency.py：dry-run 一致性检查（frontmatter / refs / delegation / CLI / secret 五项）
+- ✅ .github/workflows/aiops-audit.yml：CI workflow 草案（pytest + markdownlint）
+
+### 下一批次建议（v1.10.0 候选）
+
+- **Token efficiency 优化**（详见 progress.md「Token efficiency 评估」section）
+  - `jdcloud-cloudmonitor-ops/SKILL.md` 805 行偏大，可下沉"操作：xxx"章节到 `references/cli-usage.md`
+  - `jdcloud-alert-intelligence/SKILL.md` 407 行，Step 1-5 工作流 sub-steps 可下沉
+  - `jdcloud-routines-ops/SKILL.md` 312 行，Example + Output Artifacts 可下沉
+- **AI OPS 集成测试**：在 `tests/test_aiops_consistency.py` 基础上加真实 `jdc` mock 调用
+- **`rds_mysql_analyzer` / `rds_postgresql_analyzer` 占位骨架升级**：等 `jdcloud-mysql-ops` / `jdcloud-postgresql-ops` 提供 slow_log API 后升级
 
 ---
 
@@ -128,5 +168,6 @@
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | **Phase E — AI OPS 系统性评审（v1.9.0）**: 4 个 skill 升版本（aiops-cruise 1.5.0 / alert-intelligence 0.3.0 / cloudmonitor-ops 1.5.0 / routines-ops 1.1.0）；8/8 refs 全部补齐；GCL 推广完整；Cross-Skill Delegation 表新增 11 个 skill 入口；新增 `tests/test_aiops_consistency.py` + `.github/workflows/aiops-audit.yml` 草案；BACKLOG 优先级矩阵收敛（原 🥉 项全部 done） |
 | 2026-06-08 | Phase B 完成: 创建 jdcloud-oss-ops、jdcloud-nat-ops、jdcloud-kubernetes-ops 三个 Skill (各 16 文件) |
 | 2026-06-08 | 创建 BACKLOG.md,从对话上下文迁移待办事项 |

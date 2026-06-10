@@ -189,12 +189,32 @@ jdcloud-skills/
 | [jdcloud-vm-ops](jdcloud-vm-ops/) | 云主机 (VM) | 云主机生命周期管理、监控、故障排查、**云助手批量执行命令** | ✅ 可用 |
 | [jdcloud-mysql-ops](jdcloud-mysql-ops/) | 云数据库 MySQL | MySQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
 | [jdcloud-postgresql-ops](jdcloud-postgresql-ops/) | 云数据库 PostgreSQL | PostgreSQL 实例管理、**指定时段慢日志查询**、**按标签批量查询**、备份恢复 | ✅ 可用 |
+| [jdcloud-mongodb-ops](jdcloud-mongodb-ops/) | 云数据库 MongoDB | MongoDB 实例管理、慢查询分析、备份恢复 | ✅ 可用 |
 | [jdcloud-redis-ops](jdcloud-redis-ops/) | 云缓存 Redis | Redis 实例管理、性能分析、备份恢复 | ✅ 可用 |
+| [jdcloud-elasticsearch-ops](jdcloud-elasticsearch-ops/) | Elasticsearch | ES 集群/索引 CRUD、性能调优、慢查询分析 | ✅ 可用 |
 | [jdcloud-oss-ops](jdcloud-oss-ops/) | 对象存储 (OSS) | Bucket 管理、ACL 策略、生命周期配置、对象上传/下载、版本控制 | ✅ 可用 |
 | [jdcloud-nat-ops](jdcloud-nat-ops/) | NAT 网关 | NAT 实例管理、SNAT/DNAT 规则配置、带宽监控 | ✅ 可用 |
 | [jdcloud-kubernetes-ops](jdcloud-kubernetes-ops/) | 容器服务 (K8s) | 集群生命周期、节点组管理、集群升级、凭据管理 | ✅ 可用 |
 | [jdcloud-cloudmonitor-ops](jdcloud-cloudmonitor-ops/) | 云监控 | 告警规则管理、指标查询、监控大盘 | ✅ 可用 |
+| [jdcloud-alert-intelligence](jdcloud-alert-intelligence/) | 告警智能助手 | 告警分级、聚合、抑制、降噪、值班疲劳统计（只读） | ✅ 可用 |
+| [jdcloud-routines-ops](jdcloud-routines-ops/) | 日常运维 | 资源到期巡检、账单分析、资源盘点（只读，周期驱动） | ✅ 可用 |
+| [jdcloud-clb-ops](jdcloud-clb-ops/) | 负载均衡 (CLB) | LB 实例、监听器、后端服务器管理 | ✅ 可用 |
+| [jdcloud-eip-ops](jdcloud-eip-ops/) | 弹性公网 IP | EIP 申请、绑定、释放、带宽调整 | ✅ 可用 |
+| [jdcloud-disk-ops](jdcloud-disk-ops/) | 云硬盘 | 数据盘 CRUD、挂载/卸载、快照、备份策略 | ✅ 可用 |
+| [jdcloud-fc-ops](jdcloud-fc-ops/) | 函数计算 | 服务/函数 CRUD、调用、版本/别名、触发器 | ✅ 可用 |
+| [jdcloud-waf-ops](jdcloud-waf-ops/) | Web 应用防火墙 | WAF 实例/域名/规则 CRUD、SSL 证书、Bot 管理 | ✅ 可用 |
+| [jdcloud-iam-ops](jdcloud-iam-ops/) | 身份认证与授权 | 子账号、组、角色、策略、AK/SK 管理 | ✅ 可用 |
+| [jdcloud-kms-ops](jdcloud-kms-ops/) | 密钥管理服务 | 密钥生命周期、加密/解密、凭据管理 | ✅ 可用 |
+| [jdcloud-apigateway-ops](jdcloud-apigateway-ops/) | API 网关 | API 发布/下线、消费者管理、流量控制 | ✅ 可用 |
+| [jdcloud-vpn-ops](jdcloud-vpn-ops/) | VPN 连接 | VPN 网关/客户网关/隧道管理 | ✅ 可用 |
+| [jdcloud-logservice-ops](jdcloud-logservice-ops/) | 日志服务 | 日志采集、索引、查询、告警 | ✅ 可用 |
+| [jdcloud-jcq-ops](jdcloud-jcq-ops/) | 消息队列 JCQ | Topic、消费者组、消息查询 | ✅ 可用 |
+| [jdcloud-audit-ops](jdcloud-audit-ops/) | 操作审计 | 审计事件查询、跟踪列表（只读） | ✅ 可用 |
+| [jdcloud-tag-audit-ops](jdcloud-tag-audit-ops/) | 标签审计 | 未打标资源检测、报告生成、DOPS 工单 | ✅ 可用 |
+| [jdcloud-topo-discovery](jdcloud-topo-discovery/) | 拓扑可视化 | 拓扑图渲染（aiops-cruise 输出可视化层） | ✅ 可用 |
 | [jdcloud-skill-generator](jdcloud-skill-generator/) | Meta Skill | 自动生成新产品 Skill | ✅ 可用 |
+
+> **最近更新（2026-06-10，v1.9.0 批次）**：4 个 AI OPS skill 同步升版本 — `jdcloud-aiops-cruise` 1.4.0 → 1.5.0、`jdcloud-alert-intelligence` 0.2.0 → 0.3.0、`jdcloud-cloudmonitor-ops` 1.4.0 → 1.5.0、`jdcloud-routines-ops` 1.0.0 → 1.1.0（8/8 refs、GCL 双向路由、Cross-Skill Delegation 表、§1.3 R1/R2/R3 口径同步、职责边界）。详见 `BACKLOG.md` Phase E 与 `progress.md`。
 
 ## JD Cloud CLI
 
