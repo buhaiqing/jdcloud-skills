@@ -245,9 +245,52 @@ python jdcloud-routines-ops/scripts/expiry_cruise.py --customer 烟台振华
 
 ## 资源盘点报告
 
-> 🔜 规划中
+> ✅ **Available** (v1.3 规范定型)
 
 生成客户资源使用汇总报告，包括VM规格、存储容量、网络配置等。
+
+### 报告格式规范（强制执行）
+
+基于 `jdcloud-routines-ops/outputs/customers/丹东鹏飞/部署结构分析报告-20260610.md` 从 v1.0 → v1.3 的三轮强化经验，制定以下 **P0/P1 规范**。所有资源盘点报告必须自检通过后方可提交。
+
+| 规则 | 级别 | 规范内容 | 正例 | 反例 |
+|---|---|---|---|---|
+| **R1 双标识规则** | P0 | 凡涉及**子网/VPC/安全组/路由表**等可引用资源，必须同时显示 **Name + ID**，缺一不可 | `鹏飞-ERP-DB / subnet-ue3wimfa0j` | `鹏飞-ERP-DB` ❌ 或 `subnet-ue3wimfa0j` ❌ |
+| **R2 操作性清单规则** | P0 | **续费/变更/删除**等可操作清单，每行必须含**具体实例 ID**（如 `i-9i22fdurlq`），不得仅以"12 台 VM"聚合 | `鹏飞-erp-prd-oracle / i-9i22fdurlq` | `12 台 VM 即将到期` ❌ |
+| **R3 归因责任矩阵** | P1 | 风险项描述必须区分**"云上资源客观状态"** vs **"Skill 自身问题"**。`jdcloud-aiops-cruise` 是 read-only，**不打标签、不改字段**，发现云上数据矛盾时应描述为"三方字段不一致"而非"Skill 标签错误" | `subnet-ru6zazmhqu 的 name/vpc/tag 三方矛盾（云上资源状态）` | `Skill 标签错误` ❌ |
+| **R4 执行者视角** | P1 | 每节必须自问：**"读者拿到这节要做什么？"** 如需操作资源，必须提供可直接使用的 ID/API 参数；如仅需了解，需提供可追溯的标识 | 续费清单含 YAML + 实例 ID，可直接粘贴执行 | 纯文字描述，需二次查询 ID ❌ |
+| **R5 章节自检清单** | P1 | 提交前必须对照《资源盘点报告自检清单》（见 `references/report-format.md` §3）逐项勾选 | 附录含"自检清单签名" | 无自检记录 ❌ |
+
+### 典型章节格式模板
+
+```markdown
+## 3. 业务系统划分(Business Workload Mapping)
+
+### 3.X [系统名](N 台 VM)
+
+| 主机名 | **实例 ID** | IP | 规格 | OS | 用途 | **子网名 + ID** | 计费到期 |
+|---|---|---|---|---|---|---|---|
+| 鹏飞-erp-prd-oracle | **i-9i22fdurlq** | 172.21.14.19 | c.n3.2xlarge | CentOS 7.9 | Oracle DB | **鹏飞-ERP-DB** / subnet-ue3wimfa0j | 2026-06-15 |
+
+## 5. 计费与生命周期(Billing & Lifecycle)
+
+### 5.2 到期资源完整清单(含实例 ID + 子网名 + 子网 ID)
+
+| # | 资源名 | **实例 ID** | IP | 规格 | **子网名 + ID** | 续费 Skill | 到期日 |
+|---|---|---|---|---|---|---|---|
+| 1 | 鹏飞-erp-prd-oracle | **i-9i22fdurlq** | 172.21.14.19 | c.n3.2xlarge | **鹏飞-ERP-DB** / subnet-ue3wimfa0j | jdcloud-vm-ops | 2026-06-15 |
+```
+
+### 违规处理
+
+- **P0 违规**（R1/R2）：GCL Critic 直接判定 `Correctness = 0`，必须修复后方可进入下一阶段
+- **P1 违规**（R3/R4/R5）：GCL Critic 判定 `Spec Compliance = 0.5`，建议修复，可讨论豁免
+
+### 参考文档
+
+- 详细规范与自检清单：`references/report-format.md`
+- 评分维度更新：`references/rubric.md` §Dimensions
+- 代码模式模板：`references/code-patterns.md` §模式 6
 
 ---
 
