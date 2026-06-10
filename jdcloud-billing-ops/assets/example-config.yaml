@@ -1,0 +1,24 @@
+# JD Cloud Billing Ops — 示例配置
+# 复制此文件为 config.yaml 并修改
+
+# SDK 连接配置
+sdk:
+  region: cn-north-1
+  timeout: 30  # 请求超时（秒）
+
+# 成本优化默认参数
+cost_optimization:
+  # 方案A: 代金券优先 — 到期预警天数
+  voucher_urgent_days: 30
+
+  # 方案B: 组合最优 — 余额缓冲比例（0.0 ~ 1.0）
+  # 0.2 = 保留 20% 余额作为缓冲
+  balance_buffer_ratio: 0.2
+
+  # 方案C: 预付费折扣 — 对比的时长（月）
+  prepaid_durations_months: [1, 3, 6, 12]
+
+# 报告输出
+output:
+  dir: ./outputs
+  format: json  # json | markdown

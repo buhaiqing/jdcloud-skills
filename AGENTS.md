@@ -24,7 +24,8 @@ jdcloud-skills/
 ├── jdcloud-fc-ops/                # Function Compute — serverless functions
 ├── jdcloud-waf-ops/               # WAF — Web Application Firewall
 ├── jdcloud-alert-intelligence/    # Alert post-processing (aggregation, suppression, reporting)
-├── jdcloud-routines-ops/         # Routine ops — expiry cruise, billing analysis, resource inventory
+├── jdcloud-billing-ops/          # Billing — balance, consumption, vouchers, cost estimation
+├── jdcloud-routines-ops/         # Routine ops — expiry cruise, resource inventory
 ├── jdcloud-dns-ops/               # DNS — domain/record management
 ├── jdcloud-cert-ops/              # SSL Certificate — certificate lifecycle
 ├── .env.example / pyproject.toml / uv.lock
@@ -261,13 +262,15 @@ When a user's request spans multiple JD Cloud products:
 | DNS domain/record CRUD, DNS monitoring, custom lines | `jdcloud-dns-ops` |
 | SSL certificate upload/query/download/delete, cert expiry cruise | `jdcloud-cert-ops` |
 | Generate a new product skill | `jdcloud-skill-generator` |
-| Routine operations (expiry cruise, billing analysis, resource inventory) | `jdcloud-routines-ops` |
+| Routine operations (expiry cruise, resource inventory) | `jdcloud-routines-ops` |
+| **Billing / cost / account balance / voucher / invoice** | **`jdcloud-billing-ops`** |
 
 **Cross-skill routing rules (read-only delegation chains):**
 
 - `jdcloud-aiops-cruise` is **read-only** — it produces findings and recommends changes but delegates ALL mutations to product-specific ops skills (vm/redis/mysql/postgresql/clb/eip/nat/k8s/waf/etc.).
 - `jdcloud-alert-intelligence` is **read-only** — it analyzes alerts but delegates alarm rule changes back to `jdcloud-cloudmonitor-ops` and delegates product fixes to product-specific ops skills.
-- `jdcloud-routines-ops` is **read-only** for its core flows (expiry cruise / inventory / billing analysis); any renewal or modification is delegated to product ops skills.
+- `jdcloud-routines-ops` is **read-only** for its core flows (expiry cruise / inventory); any renewal or modification is delegated to product ops skills.
+- `jdcloud-billing-ops` is **read-only** for billing queries; it delegates any account modifications (recharge) to the JD Cloud console.
 - `jdcloud-tag-audit-ops` is **read-only** for tag inspection; tag changes are delegated to product ops skills.
 - `jdcloud-audit-ops` is **read-only** — it queries audit events but does not modify them.
 - Each skill's `SHOULD NOT Use` section lists exactly where to route.
@@ -492,6 +495,7 @@ Return strict JSON:
 | `jdcloud-waf-ops` | recommended | 3 | delete instance breaks all domain protection |
 | `jdcloud-aiops-cruise` | optional | 3 | read-only cruise; Phase 1 sniff + Phase 2 analyze + Phase 3 suggestions (no mutations) |
 | `jdcloud-routines-ops` | optional | 3 | read-only by default; on-demand GCL recommended; renewal flows must confirm |
+| `jdcloud-billing-ops` | optional | 3 | read-only billing queries; SDK-only |
 | `jdcloud-apigateway-ops` | recommended | 3 | API publish / unpublish / delete are reversible but affect live traffic |
 | `jdcloud-jcq-ops` | recommended | 3 | topic delete + consumer group reset can lose messages |
 | `jdcloud-logservice-ops` | recommended | 3 | index delete is irreversible (data loss); metric/config changes are recoverable |
@@ -543,6 +547,7 @@ Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate
 | 1.8.0 | 2026-06-08 | `jdcloud-disk-ops` rollout (required, max_iter=2): dual-path SKILL.md; rubric + prompts cover disk CRUD, attach/detach, resize, snapshot, backup policy; safety gates for delete disk with in-use check, resize shrink prevention, system disk detach guard |
 | 1.8.1 | 2026-06-08 | `jdcloud-fc-ops` rollout (recommended, max_iter=3): SDK-only SKILL.md (FC not exposed via `jdc` CLI); rubric + prompts cover service/function CRUD, invoke, version/alias, triggers; safety gates for delete service cascade, prod invoke confirm, runtime/handler validation |
 | 1.8.2 | 2026-06-08 | `jdcloud-waf-ops` rollout (recommended, max_iter=3): dual-path SKILL.md; rubric + prompts cover WAF instance/domain/rule CRUD, SSL cert, bot management, attack logs; safety gates for delete instance with domain check, disable domain origin-exposure warning, cert-domain mismatch guard |
+| 1.9.1 | 2026-06-10 | Added `jdcloud-billing-ops` skill: balance, consumption, bill details, vouchers, cost estimation; SDK-only billing operations; updated `jdcloud-routines-ops` to delegate billing to billing-ops; updated AGENTS.md cross-skill delegation table |
 | 1.9.0 | 2026-06-10 | **AI OPS 系统性评审批次**: `jdcloud-aiops-cruise` v1.4.0 → **v1.5.0** (optional/read-only, max_iter=3, 8/8 refs 补齐, Quality Gate GCL 章节 +56 行), `jdcloud-alert-intelligence` v0.2.0 → **v0.3.0** (optional, max_iter=5, R1/R2/R3 口径同步, 8/8 refs 补齐, +4 new refs), `jdcloud-cloudmonitor-ops` v1.4.0 → **v1.5.0** (recommended, max_iter=3, 9/9 refs 完整, GCL 章节整合, parent_skill/ecosystem_skills 元数据), `jdcloud-routines-ops` v1.0.0 → **v1.1.0** (optional, max_iter=3, 8/8 refs 补齐, 职责边界表 + Cross-Skill Delegation 表新增, GCL optional); Cross-Skill Delegation 表追加 aiops-cruise / alert-intelligence / routines-ops / eip-ops / disk-ops / fc-ops / waf-ops / apigateway-ops / tag-audit-ops / audit-ops / logservice-ops 入口; 新增 `tests/test_aiops_consistency.py` (dry-run 一致性检查) + `.github/workflows/aiops-audit.yml` (CI workflow 草案) |
 
 ### 12. See also

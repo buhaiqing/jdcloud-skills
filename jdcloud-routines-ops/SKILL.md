@@ -1,9 +1,9 @@
 ---
 name: jdcloud-routines-ops
-version: "1.1.0"
+version: "1.3.0"
 metadata:
   displayName: 京东云日常运维
-  description: 京东云日常运维场景集：资源到期巡检、账单分析、资源盘点等
+  description: 京东云日常运维场景集：资源到期巡检、资源盘点（账单分析已委托给 jdcloud-billing-ops）
   icon: 🔧
   tags: [jdcloud, operations, routines, cruise, expiry]
   cli_applicability: jdc + SDK
@@ -14,15 +14,15 @@ metadata:
 ## Overview
 
 `jdcloud-routines-ops` 是京东云日常运维场景的集 Skill，提供**静态 / 周期类**
-巡检能力：资源到期巡检、资源盘点、账单分析。所有场景遵循"读-only / 排程
-驱动 / 快照输出"的设计原则。
+巡检能力：资源到期巡检、资源盘点。**账单分析已委托给 `jdcloud-billing-ops`**。
+所有场景遵循"读-only / 排程驱动 / 快照输出"的设计原则。
 
 ### 支持场景
 
 | 场景 | 说明 | 状态 |
 |------|------|------|
 | [资源到期巡检](#资源到期巡检) | 巡检VM/云盘/EIP/Redis/RDS/CLB/MongoDB/Elasticsearch/SSL证书等资源到期情况 | ✅ 可用 |
-| [资源账单分析](#资源账单分析) | 分析各客户的资源费用支出 | 🔜规划中 |
+| 资源账单分析 | **已委托** — 账户余额、消费记录、账单明细、代金券查询 | ↪️ `jdcloud-billing-ops` |
 | [资源盘点报告](#资源盘点报告) | 生成客户资源使用汇总报告 | 🔜 规划中 |
 
 ---
@@ -44,6 +44,7 @@ metadata:
 | 修改变更 / 续费 / 删除具体资源 | 对应产品的 ops skill（如 `jdcloud-vm-ops`） |
 | 告警聚合 / 抑制 / 降档 | `jdcloud-alert-intelligence` |
 | 标签审计 / 标签合规 | `jdcloud-tag-audit-ops` |
+| **账单查询 / 消费分析 / 余额查询 / 代金券** | **`jdcloud-billing-ops`** |
 
 ### Cross-Skill Delegation
 
@@ -54,6 +55,7 @@ metadata:
 | 周期性告警压制规则 | `jdcloud-alert-intelligence` |
 | 资源标签合规审计 | `jdcloud-tag-audit-ops` |
 | VM / Redis / RDS 等资源续费 / 删除 | 对应产品的 ops skill（`jdcloud-vm-ops` 等） |
+| **账单查询 / 消费记录 / 账户余额 / 代金券** | **`jdcloud-billing-ops`** |
 
 ---
 
@@ -206,66 +208,18 @@ python jdcloud-routines-ops/scripts/expiry_cruise.py --customer 烟台振华
 
 ## 资源账单分析
 
-### Description
-
-分析各客户的资源费用支出，支持按月汇总、按资源类型分组。
-
-### Prerequisites
-
-- 阅读 [Code Patterns — 模式 3](references/code-patterns.md#模式3多步骤依赖流程询价续费核心)
-  了解 `renewal.query-instance` → `billing.calculate-total-price` 的两步依赖流程
-- 阅读 [Code Patterns — 模式 2](references/code-patterns.md#模式2--input-json-复杂参数传递)
-  了解 `--input-json` 的正确用法
-
-### Execution Flow
-
-```yaml
-1. Pre-flight
-   ├── 激活 .venv
-   └── 确认 jdc CLI 凭证
-
-2. Execute (jdc primary, SDK fallback)
-   ├── 遍历指定区域和资源类型
-   │   ├── 调用 renewal query-instance 获取可续费实例
-   │   ├── 调用 billing calculate-total-price 询价（续费/1个月）
-   │   └── 解析 totalPrice / discountPrice / originalPrice
-   └── 聚合按客户/资源类型分组
-
-3. Output
-   ├── 控制台费用汇总
-   ├── JSON 报告 → outputs/billing/billing-report-YYYYMMDD-HHMMSS.json
-   └── 返回成本估算表格（可用于续费决策）
-```
-
-### Code Pattern
-
-```python
-# 基于 code-patterns.md 模式 3 的批量询价
-from lib.jdc_client import JdcClient
-
-client = JdcClient()
-
-# 1. 先获取到期巡检结果（expiry_cruise 输出）
-expiring_resources = load_expiry_report("expiry-report-xxx.json")
-
-# 2. 批量询价
-results = batch_price_inquiry(client, expiring_resources, renew_months=1)
-
-# 3. 输出报告
-output_report(
-    data=results,
-    output_dir=Path("outputs/billing"),
-    report_type="billing",
-    summary_extra={"total_price": sum(r["total_price"] for r in results)}
-)
-```
-
-### Output Artifacts
-
-| 文件 | 路径 | 说明 |
-|------|------|------|
-| 控制台摘要 | stdout | 按客户分组的续费成本估算 |
-| JSON 报告 | `outputs/billing/billing-report-YYYYMMDD-HHMMSS.json` | 含 original_price / discount_price |
+> ⚠️ **已委托给 `jdcloud-billing-ops`**
+>
+> 账单相关功能（账户余额查询、消费记录、账单明细、代金券管理、成本预估）
+> 已迁移至专门的 `jdcloud-billing-ops` Skill。
+>
+> **routines-ops 保留的能力**：到期资源**续费询价**（`--with-price` 模式）
+> 仍可在 [资源到期巡检](#资源到期巡检) 中使用，作为续费决策的辅助数据。
+>
+> **委托路径**：
+> - 账户余额、消费记录、账单明细查询 → `jdcloud-billing-ops`
+> - 代金券查询和管理 → `jdcloud-billing-ops`
+> - 成本预估（新购资源）→ `jdcloud-billing-ops`
 
 ---
 
@@ -385,9 +339,10 @@ find ~/.jdcloud-routines-ops/outputs -type f -mtime +30 -delete
 
 | Version | Date | Change |
 |---------|------|--------|
-| 1.2.0 | 2026-06-10 | 新增 [references/code-patterns.md](references/code-patterns.md) 提供 5 个脚本开发模式模板；重构 `expiry_cruise.py` 为配置驱动模式；更新 `lib/jdc_client.py` 增加 `--input-json` 和多步骤询价支持；完善"资源账单分析"章节 |
-| 1.5.0 | 2026-06-09 | 添加 MongoDB 和 Elasticsearch 到期巡检；默认 types 增加 mongodb,elasticsearch |
-| 1.4.0 | 2026-06-09 | 添加 CLB 负载均衡到期巡检；默认 types 增加 clb |
-| 1.3.0 | 2026-06-09 | 添加 SSL 证书到期巡检；汇总报告增加区域统计 |
-| 1.2.0 | 2026-06-09 | 添加 RDS 到期巡检（支持 MySQL/PostgreSQL/SQL Server） |
+| 1.3.0 | 2026-06-10 | **重构**：账单分析功能委托给 `jdcloud-billing-ops`；更新 description 和 Cross-Skill Delegation 表；本 skill 专注于资源到期巡检和资源盘点 |
+| 1.2.0 | 2026-06-10 | 新增 [references/code-patterns.md](references/code-patterns.md) 提供 5 个脚本开发模式模板；重构 `expiry_cruise.py` 为配置驱动模式；更新 `lib/jdc_client.py` 增加 `--input-json` 和多步骤询价支持 |
+| 1.1.0 | 2026-06-09 | 添加 MongoDB 和 Elasticsearch 到期巡检；默认 types 增加 mongodb,elasticsearch |
+| 1.0.3 | 2026-06-09 | 添加 CLB 负载均衡到期巡检；默认 types 增加 clb |
+| 1.0.2 | 2026-06-09 | 添加 SSL 证书到期巡检；汇总报告增加区域统计 |
+| 1.0.1 | 2026-06-09 | 添加 RDS 到期巡检（支持 MySQL/PostgreSQL/SQL Server） |
 | 1.0.0 | 2026-06-09 | Initial release with expiry cruise scenario |
