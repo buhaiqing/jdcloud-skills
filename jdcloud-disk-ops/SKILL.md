@@ -13,8 +13,8 @@ compatibility: >-
   disk operations support.
 metadata:
   author: buhaiqing
-  version: "1.0.0"
-  last_updated: "2026-06-08"
+  version: "1.1.0"
+  last_updated: "2026-06-10"
   runtime: Harness AI Agent
   api_profile: "Disk API v1.0 - https://docs.jdcloud.com/cn/cloud-disk-service/api"
   cli_applicability: dual-path
@@ -129,10 +129,21 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | Create Snapshot | — | `completed` | 5s | 600s |
 | Delete Disk | any | absent | 5s | 60s |
 
+## Runbooks (巡检 Runbook)
+
+This skill includes structured inspection runbooks for proactive cloud disk health monitoring and capacity planning:
+
+- [Runbook Index](runbooks/00-index.md) — overview of all runbooks
+- [01 - 日常健康巡检](runbooks/01-daily-health-check.md) — disk status, usage rate, IOPS/throughput, encryption, snapshot freshness
+- [02 - 容量预测与规划](runbooks/02-capacity-planning.md) — disk full prediction, IOPS trend, cost optimization, idle disk cleanup
+
+All runbooks follow the **Perceive → Reason → Execute** three-phase model. The Execute phase is **read-only** — it generates recommendations but delegates actual changes to the Execution Flows in this SKILL.md.
+
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-10 | **Runbooks added**: Added `runbooks/` directory with 2 runbooks (01-daily-health-check, 02-capacity-planning) covering proactive disk health monitoring and capacity prediction. Runbook index at `runbooks/00-index.md`. |
 | 1.0.0 | 2026-06-08 | Initial dual-path skill for JD Cloud Disk (jdc-first with SDK fallback) |
 
 ## Execution Flows (Agent-Readable)
@@ -593,6 +604,7 @@ jdc --output json disk create-disks \
 
 ## Reference Directory
 
+- [Runbook Index](runbooks/00-index.md)
 - [Core Concepts](references/core-concepts.md)
 - [API & SDK Usage](references/api-sdk-usage.md)
 - [CLI Usage](references/cli-usage.md)

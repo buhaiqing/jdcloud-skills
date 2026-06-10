@@ -179,6 +179,9 @@ python jdcloud-routines-ops/scripts/expiry_cruise.py
 # 7天紧急预警
 python jdcloud-routines-ops/scripts/expiry_cruise.py --warning-days 7
 
+# 询价模式：额外调用 billing API 获取续费价格（较慢但提供成本预估）
+python jdcloud-routines-ops/scripts/expiry_cruise.py --with-price
+
 # 只巡检华北区域和VM类型
 python jdcloud-routines-ops/scripts/expiry_cruise.py --regions cn-north-1 --types vm
 
@@ -203,9 +206,86 @@ python jdcloud-routines-ops/scripts/expiry_cruise.py --customer 烟台振华
 
 ## 资源账单分析
 
-> 🔜 规划中
+### Description
 
 分析各客户的资源费用支出，支持按月汇总、按资源类型分组。
+
+### Prerequisites
+
+- 阅读 [Code Patterns — 模式 3](references/code-patterns.md#模式3多步骤依赖流程询价续费核心)
+  了解 `renewal.query-instance` → `billing.calculate-total-price` 的两步依赖流程
+- 阅读 [Code Patterns — 模式 2](references/code-patterns.md#模式2--input-json-复杂参数传递)
+  了解 `--input-json` 的正确用法
+
+### Execution Flow
+
+```yaml
+1. Pre-flight
+   ├── 激活 .venv
+   └── 确认 jdc CLI 凭证
+
+2. Execute (jdc primary, SDK fallback)
+   ├── 遍历指定区域和资源类型
+   │   ├── 调用 renewal query-instance 获取可续费实例
+   │   ├── 调用 billing calculate-total-price 询价（续费/1个月）
+   │   └── 解析 totalPrice / discountPrice / originalPrice
+   └── 聚合按客户/资源类型分组
+
+3. Output
+   ├── 控制台费用汇总
+   ├── JSON 报告 → outputs/billing/billing-report-YYYYMMDD-HHMMSS.json
+   └── 返回成本估算表格（可用于续费决策）
+```
+
+### Code Pattern
+
+```python
+# 基于 code-patterns.md 模式 3 的批量询价
+from lib.jdc_client import JdcClient
+
+client = JdcClient()
+
+# 1. 先获取到期巡检结果（expiry_cruise 输出）
+expiring_resources = load_expiry_report("expiry-report-xxx.json")
+
+# 2. 批量询价
+results = batch_price_inquiry(client, expiring_resources, renew_months=1)
+
+# 3. 输出报告
+output_report(
+    data=results,
+    output_dir=Path("outputs/billing"),
+    report_type="billing",
+    summary_extra={"total_price": sum(r["total_price"] for r in results)}
+)
+```
+
+### Output Artifacts
+
+| 文件 | 路径 | 说明 |
+|------|------|------|
+| 控制台摘要 | stdout | 按客户分组的续费成本估算 |
+| JSON 报告 | `outputs/billing/billing-report-YYYYMMDD-HHMMSS.json` | 含 original_price / discount_price |
+
+---
+
+## Code Patterns 参考
+
+所有脚本开发应遵循 [references/code-patterns.md](references/code-patterns.md)
+提供的 5 个模式模板：
+
+| 模式 | 场景 | 关键收益 |
+|------|------|----------|
+| 模式 1 | 资源迭代通用 | 用配置表替代 8 个重复函数 |
+| 模式 2 | `--input-json` 复杂参数 | 避免 billing/renewal API 反复试错 |
+| 模式 3 | 多步骤依赖流程 | `query-instance` → `calculate-total-price` 询价核心 |
+| 模式 4 | jdc-first with SDK fallback | 统一重试和 fallback 逻辑 |
+| 模式 5 | 报告输出模板 | 统一控制台 + JSON 双输出 |
+
+**Agent 开发新脚本时**：
+1. 先阅读 `code-patterns.md` 找到匹配的模式
+2. 复制对应模板作为起点
+3. 修改 `RESOURCE_CONFIG` 或调整 `order_payload` 即可
 
 ---
 
@@ -305,7 +385,7 @@ find ~/.jdcloud-routines-ops/outputs -type f -mtime +30 -delete
 
 | Version | Date | Change |
 |---------|------|--------|
-| 1.1.0 | 2026-06-10 | 8/8 refs 补齐（新增 core-concepts / cli-usage / api-sdk-usage / monitoring / integration / troubleshooting / rubric / prompt-templates）；新增职责边界章节（vs `jdcloud-aiops-cruise`）；新增 GCL（optional, max_iter=3）章节；Cross-Skill Delegation 表更新；scripts 校验报告见 deliverable |
+| 1.2.0 | 2026-06-10 | 新增 [references/code-patterns.md](references/code-patterns.md) 提供 5 个脚本开发模式模板；重构 `expiry_cruise.py` 为配置驱动模式；更新 `lib/jdc_client.py` 增加 `--input-json` 和多步骤询价支持；完善"资源账单分析"章节 |
 | 1.5.0 | 2026-06-09 | 添加 MongoDB 和 Elasticsearch 到期巡检；默认 types 增加 mongodb,elasticsearch |
 | 1.4.0 | 2026-06-09 | 添加 CLB 负载均衡到期巡检；默认 types 增加 clb |
 | 1.3.0 | 2026-06-09 | 添加 SSL 证书到期巡检；汇总报告增加区域统计 |

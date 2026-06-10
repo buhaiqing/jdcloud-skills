@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.3.0"
-  last_updated: "2026-06-04"
+  version: "1.4.0"
+  last_updated: "2026-06-10"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Redis API v1 - https://redis.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -154,10 +154,21 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | Delete | `running`/`stopped` | (404 on describe) | 10s | 600s |
 | Backup | `running` | backup available | 10s | 300s |
 
+## Runbooks (巡检 Runbook)
+
+This skill includes structured inspection runbooks for proactive Redis health monitoring and resource optimization:
+
+- [Runbook Index](runbooks/00-index.md) — overview of all runbooks
+- [01 - 日常健康巡检](runbooks/01-daily-health-check.md) — memory, hit rate, connections, CPU, slow queries, big/hot key detection
+- [02 - 资源优化分析](runbooks/02-resource-optimization.md) — underutilization detection, spec mismatch, cost optimization, idle instance cleanup
+
+All runbooks follow the **Perceive → Reason → Execute** three-phase model. The Execute phase is **read-only** — it generates recommendations but delegates actual changes to the Execution Flows in this SKILL.md.
+
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-06-10 | **Runbooks added**: Added `runbooks/` directory with 2 runbooks (01-daily-health-check, 02-resource-optimization) covering proactive Redis health monitoring and cost optimization. Runbook index at `runbooks/00-index.md`. |
 | 1.3.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, op-specific overrides including spec-shrink and cross-instance restore) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, spec shrink, flush. |
 | 1.2.0 | 2026-05-06 | **Empirical CLI fixes**: Fixed `--output json` placement (must be top-level, before subcommand); removed `--no-interactive` (unsupported); fixed jdc credential config (must use `~/.jdc/config` INI file, env vars unsupported); fixed PermissionError via `HOME=/tmp/jdc-home`; fixed all SDK import paths (PascalCase module names) and API call patterns (Parameters objects + `client.send()`); fixed Backup parameters (requires `fileName`/`backupType`); fixed Restore parameter name (`baseId` not `backupId`) |
 | 1.1.0 | 2026-05-06 | **jdc-first with fallback strategy**: execution flows now prioritize `jdc` CLI (primary) with SDK/API fallback after 3 retries; Prerequisites updated to `uv`-based bootstrap with Phase 1 (jdc) / Phase 2 (SDK fallback); Path Preference flipped to jdc-first; pre-flight checks reordered |
@@ -672,6 +683,7 @@ export JDC_REGION="cn-north-1"
 
 ## Reference Directory
 
+- [Runbook Index](runbooks/00-index.md)
 - [Core Concepts](references/core-concepts.md)
 - [API & SDK Usage](references/api-sdk-usage.md)
 - [CLI Usage](references/cli-usage.md)

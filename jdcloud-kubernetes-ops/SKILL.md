@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.0.0"
-  last_updated: "2026-06-08"
+  version: "1.1.0"
+  last_updated: "2026-06-10"
   runtime: Harness AI Agent
   api_profile: "JD Cloud JCS for Kubernetes API - https://nc.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -190,10 +190,21 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | Delete Cluster | any stable state | (404 on describe) | 30s | 600s |
 | Delete Node Group | any stable state | (404 on describe) | 15s | 300s |
 
+## Runbooks (巡检 Runbook)
+
+This skill includes structured inspection runbooks for proactive Kubernetes cluster health monitoring and resource optimization:
+
+- [Runbook Index](runbooks/00-index.md) — overview of all runbooks
+- [01 - 集群健康巡检](runbooks/01-cluster-health-check.md) — cluster status, node health, pod distribution, ingress health, security posture
+- [02 - 资源配置优化](runbooks/02-resource-optimization.md) — CPU/Mem requests alignment, HPA reasonability, resource waste detection, node water-level analysis
+
+All runbooks follow the **Perceive → Reason → Execute** three-phase model. The Execute phase is **read-only** — it generates recommendations but delegates actual changes to the Execution Flows in this SKILL.md.
+
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-10 | **Runbooks added**: Added `runbooks/` directory with 2 runbooks (01-cluster-health-check, 02-resource-optimization) covering proactive K8s cluster health monitoring and resource optimization. Runbook index at `runbooks/00-index.md`. |
 | 1.0.0 | 2026-06-08 | Initial version with jdc-first execution and SDK fallback for Kubernetes operations. GCL rollout with rubric (required, max_iter=2). Cluster delete safety gate with workload dependency check via jdcloud-aiops-cruise. |
 
 ## Execution Flows (Agent-Readable)
@@ -769,6 +780,7 @@ User request
 
 ## Reference Directory
 
+- [Runbook Index](runbooks/00-index.md)
 - [Core Concepts](references/core-concepts.md)
 - [CLI Usage](references/cli-usage.md)
 - [API & SDK Usage](references/api-sdk-usage.md)

@@ -25,6 +25,8 @@ jdcloud-skills/
 ├── jdcloud-waf-ops/               # WAF — Web Application Firewall
 ├── jdcloud-alert-intelligence/    # Alert post-processing (aggregation, suppression, reporting)
 ├── jdcloud-routines-ops/         # Routine ops — expiry cruise, billing analysis, resource inventory
+├── jdcloud-dns-ops/               # DNS — domain/record management
+├── jdcloud-cert-ops/              # SSL Certificate — certificate lifecycle
 ├── .env.example / pyproject.toml / uv.lock
 └── AGENTS.md                      # ← this file
 ```
@@ -38,9 +40,14 @@ jdcloud-[product]-ops/
 └── references/
     ├── cli-usage.md
     ├── core-concepts.md
+    ├── api-sdk-usage.md
     ├── integration.md
     ├── monitoring.md
-    └── troubleshooting.md
+    ├── troubleshooting.md
+    ├── rubric.md
+    └── prompt-templates.md
+    ├── rubric.md
+    └── prompt-templates.md
 ```
 
 ## AIOps Cruise Skill Directory Structure (Three-Phase Model)
@@ -251,6 +258,8 @@ When a user's request spans multiple JD Cloud products:
 | Topology graph rendering (visual layer over aiops-cruise output) | `jdcloud-topo-discovery` |
 | Log service / LogQL / index config | `jdcloud-logservice-ops` |
 | Message queue / topic / consumer group | `jdcloud-jcq-ops` |
+| DNS domain/record CRUD, DNS monitoring, custom lines | `jdcloud-dns-ops` |
+| SSL certificate upload/query/download/delete, cert expiry cruise | `jdcloud-cert-ops` |
 | Generate a new product skill | `jdcloud-skill-generator` |
 | Routine operations (expiry cruise, billing analysis, resource inventory) | `jdcloud-routines-ops` |
 
@@ -487,6 +496,8 @@ Return strict JSON:
 | `jdcloud-jcq-ops` | recommended | 3 | topic delete + consumer group reset can lose messages |
 | `jdcloud-logservice-ops` | recommended | 3 | index delete is irreversible (data loss); metric/config changes are recoverable |
 | `jdcloud-vpn-ops` | recommended | 3 | VPN tunnel delete breaks hybrid cloud connectivity |
+| `jdcloud-dns-ops` | recommended | 3 | delete domain removes all records irreversibly; batch set can overwrite all records |
+| `jdcloud-cert-ops` | recommended | 3 | delete cert breaks HTTPS for bound CLB/CDN; update cert replaces content |
 
 Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate`).
 
@@ -512,6 +523,7 @@ Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate
 
 | Version | Date | Change |
 |---|---|---|
+| 1.9.1 | 2026-06-10 | Added `jdcloud-dns-ops` and `jdcloud-cert-ops` skills with full GCL support (recommended, max_iter=3). DNS covers domain/record CRUD, batch operations, monitoring. Cert covers certificate lifecycle and expiry cruise with CLB/CDN cross-service binding discovery. Updated repo layout template to include all 8 reference files. |
 | 1.0.0 | 2026-06-04 | Initial GCL specification added to AGENTS.md (Correctness threshold relaxed to ≥0.5; pilot scoped to `jdcloud-vm-ops`) |
 | 1.1.0 | 2026-06-04 | `jdcloud-redis-ops` rollout: added `references/rubric.md` and `references/prompt-templates.md`; `## Quality Gate (GCL)` chapter inserted; per-op Safety rules for spec-shrink and cross-instance restore |
 | 1.2.0 | 2026-06-04 | `jdcloud-mysql-ops` rollout: rubric expanded to cover DDL/DML paths (instance-level + SQL-level); WHERE-clause check and DDL confirm gates added; prompt templates include pre-check + transaction + affected_rows rules |
