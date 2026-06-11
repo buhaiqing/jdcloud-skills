@@ -7,7 +7,7 @@ Design decisions (learned from experience):
 - Uses urllib + manual JDCLOUD3-HMAC-SHA256 signing directly.
   Does NOT rely on jdcloud_sdk client classes (too many version compatibility issues).
 - Handles auto-pagination, retry with backoff, and unified error handling.
-- Supports all services needed for aiops-cruise: vm, lb, redis, vpc, kubernetes, monitor.
+- Supports all services needed for aiops-cruise: vm, lb, redis, mongodb, vpc, kubernetes, monitor.
 
 Usage:
     from lib.jdc_client import JdcClient
@@ -34,6 +34,7 @@ SERVICE_ENDPOINTS = {
     "kubernetes":  "kubernetes.jdcloud-api.com",
     "disk":        "disk.jdcloud-api.com",
     "es":          "es.jdcloud-api.com",
+    "mongodb":     "mongodb.jdcloud-api.com",
     "nc":          "nc.jdcloud-api.com",
 }
 
@@ -316,6 +317,12 @@ class JdcClient:
         r = region or self.region
         return self._paginate("es", f"/v1/regions/{r}/instances",
                                result_path="instances")
+
+    def list_mongodb(self, region: str | None = None) -> list:
+        """List MongoDB instances (read-only)."""
+        r = region or self.region
+        return self._paginate("mongodb", f"/v1/regions/{r}/instances",
+                              result_path="instances")
 
     def list_eips(self, region: str | None = None) -> list:
         """List Elastic IPs (read-only)."""

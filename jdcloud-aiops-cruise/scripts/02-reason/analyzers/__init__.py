@@ -36,4 +36,5 @@ def create_all() -> list:
     from analyzers import sg_analyzer
     from analyzers import nat_analyzer
     from analyzers import es_analyzer
+    from analyzers import mongodb_analyzer
     return [cls() for cls in _A.values()]

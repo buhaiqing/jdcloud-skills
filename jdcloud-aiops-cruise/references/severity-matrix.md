@@ -31,6 +31,9 @@ critical:
     - "磁盘使用率 > 90%"                       # 资源即将耗尽
     - "服务不可用（健康检查 0%）"               # 服务中断
     - "存在 0.0.0.0/0 开放 DB/管理端口"        # 高危安全配置
+    - "MongoDB 磁盘使用率 > 90%"                # 写入/备份失败风险
+    - "MongoDB 复制延迟 > 60s"                  # HA/一致性风险
+    - "MongoDB 连接使用率 > 85%"                # 连接耗尽风险
   auto_abort: true                           # GCL 中直接终止
 
 warning:
@@ -39,6 +42,8 @@ warning:
     - "环比昨日同期增长 > 30%"
     - "连续 3 个采样点持续上升"
     - "规格资源水位 > 60%"
+    - "MongoDB 慢查询出现 COLLSCAN 或 docsExamined/nReturned > 1000"
+    - "MongoDB Oplog window < 24h"
 
 info:
   conditions:

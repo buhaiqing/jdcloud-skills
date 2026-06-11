@@ -17,6 +17,7 @@
 | 06 | PostgreSQL 巡检 | 定时 / 告警触发 / 人工 | 每日 | 数据库优化 | 中 |
 | 07 | CLB 升级评估/建议 | 大促前 / 告警触发 / 人工 | 按需 / 每周 | 容量管理 | 中 |
 | 08 | EIP 审计 | 定时 / 人工 | 每周 | 公网入口治理 | 中 |
+| 09 | MongoDB AIOps 诊断 | 定时 / 告警 / 人工 | 每日 / 按需 | 数据库根因定位 | 中 |
 
 ---
 
@@ -113,7 +114,8 @@ runbooks/
 ├── 05-mysql-slowquery-audit.md         ← MySQL 慢查询巡检
 ├── 06-postgresql-audit.md              ← PostgreSQL 巡检
 ├── 07-clb-upgrade-assessment.md        ← CLB 升级评估/建议（只读）
-└── 08-eip-audit.md                     ← EIP 审计（只读）
+├── 08-eip-audit.md                     ← EIP 审计（只读）
+└── 09-mongodb-aiops-diagnosis.md       ← MongoDB AIOps 诊断（只读）
 references/
 ├── severity-matrix.md                   ← 严重级别矩阵
 └── threshold-definitions.md             ← 阈值定义 + 规格上限速查

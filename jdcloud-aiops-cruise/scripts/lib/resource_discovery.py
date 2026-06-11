@@ -33,7 +33,7 @@ def discover_customer_resources(client: JdcClient, customer: str,
             "customer": str,
             "regions": [str],
             "raw": {
-                "vms": [...], "lbs": [...], "redis": [...],
+                "vms": [...], "lbs": [...], "redis": [...], "mongodb": [...],
                 "vpcs": [...], "subnets": [...], "security_groups": [...],
                 "eips": [...], "nats": [...], "es": [...],
             },
@@ -51,7 +51,7 @@ def discover_customer_resources(client: JdcClient, customer: str,
     if regions is None:
         regions = ALL_REGIONS
 
-    raw = {"vms": [], "lbs": [], "redis": [], "rds": [], "vpcs": [],
+    raw = {"vms": [], "lbs": [], "redis": [], "mongodb": [], "rds": [], "vpcs": [],
            "subnets": [], "security_groups": [], "eips": [], "nats": [],
            "es": [],}
 
@@ -71,6 +71,11 @@ def discover_customer_resources(client: JdcClient, customer: str,
             raw["redis"].extend(redis)
         except Exception as e:
             print(f"  ⚠️  {region} Redis discovery failed: {e}")
+        try:
+            mongodb = client.list_mongodb(region=region)
+            raw["mongodb"].extend(mongodb)
+        except Exception as e:
+            print(f"  ⚠️  {region} MongoDB discovery failed: {e}")
         try:
             vpcs = client.list_vpcs(region=region)
             raw["vpcs"].extend(vpcs)
@@ -106,6 +111,7 @@ def discover_customer_resources(client: JdcClient, customer: str,
     customer_vms = filter_by_tag(raw["vms"], "客户", customer)
     customer_lbs = filter_by_tag(raw["lbs"], "客户", customer)
     customer_redis = filter_by_tag(raw["redis"], "客户", customer)
+    customer_mongodb = filter_by_tag(raw["mongodb"], "客户", customer)
     customer_rds = filter_by_tag(raw["rds"], "客户", customer)
     customer_eips = filter_by_tag(raw["eips"], "客户", customer)
     customer_nats = filter_by_tag(raw["nats"], "客户", customer)
@@ -119,6 +125,7 @@ def discover_customer_resources(client: JdcClient, customer: str,
     raw["vms"] = customer_vms
     raw["lbs"] = customer_lbs
     raw["redis"] = customer_redis
+    raw["mongodb"] = customer_mongodb
     raw["rds"] = customer_rds
     raw["eips"] = customer_eips
     raw["nats"] = customer_nats
@@ -137,6 +144,10 @@ def discover_customer_resources(client: JdcClient, customer: str,
             customer_vpc_ids.add(vpc_id)
     for r in customer_redis:
         vpc_id = r.get("vpcId", "")
+        if vpc_id:
+            customer_vpc_ids.add(vpc_id)
+    for m in customer_mongodb:
+        vpc_id = m.get("vpcId", "")
         if vpc_id:
             customer_vpc_ids.add(vpc_id)
     for r in customer_rds:
@@ -184,6 +195,7 @@ def discover_customer_resources(client: JdcClient, customer: str,
             "vms": [],
             "lbs": [],
             "redis": [],
+            "mongodb": [],
             "rds": [],
             "eips": [],
         }
@@ -206,6 +218,11 @@ def discover_customer_resources(client: JdcClient, customer: str,
         vpc_id = rds.get("vpcId", "")
         if vpc_id in vpc_map:
             vpc_map[vpc_id]["rds"].append(rds.get("instanceName", ""))
+
+    for mongo in customer_mongodb:
+        vpc_id = mongo.get("vpcId", "")
+        if vpc_id in vpc_map:
+            vpc_map[vpc_id]["mongodb"].append(mongo.get("instanceName", ""))
 
     for eip in customer_eips:
         vpc_id = eip.get("vpcId", "")
@@ -239,6 +256,15 @@ def discover_customer_resources(client: JdcClient, customer: str,
         name = rds.get("instanceName", "")
         rid = rds.get("instanceId", "")
         cls = _classify(tags, name, "rds")
+        classification["resources"].append(cls | {"id": rid, "name": name})
+        if cls["confidence"] <= 0.8:
+            classification["needs_confirmation"].append(cls | {"id": rid, "name": name})
+
+    for mongo in customer_mongodb:
+        tags = tag_dict(mongo)
+        name = mongo.get("instanceName", "")
+        rid = mongo.get("instanceId", "")
+        cls = _classify(tags, name, "mongodb")
         classification["resources"].append(cls | {"id": rid, "name": name})
         if cls["confidence"] <= 0.8:
             classification["needs_confirmation"].append(cls | {"id": rid, "name": name})

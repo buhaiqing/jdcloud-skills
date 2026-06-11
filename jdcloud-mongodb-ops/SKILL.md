@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.1.0"
-  last_updated: "2026-06-04"
+  version: "1.3.0"
+  last_updated: "2026-06-12"
   runtime: Harness AI Agent
   api_profile: "JD Cloud MongoDB API v1 - https://mongodb.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -96,6 +96,7 @@ The CLI's `ProfileManager.__init__()` calls `__make_config_dir()` which does `os
 - Task keywords: createInstance, describeInstances, modifyInstance, backup, restore, database, mongodb, replica set, sharded cluster
 - User asks to deploy, configure, troubleshoot, or monitor MongoDB instances **via API, SDK, CLI, or automation**
 - Task involves MongoDB performance analysis (slow query log, connection pool, index optimization)
+- Task involves AIOps diagnosis, root-cause analysis, capacity prediction, slow-query/index audit, or replica-lag troubleshooting
 - **Resource Audit Tasks**:
   - Tag compliance checking (标签合规检查)
   - Resource inventory and asset management (资源清单)
@@ -163,10 +164,28 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 | Delete | `running`/`stopped` | (404 on describe) | 10s | 600s |
 | Backup | `running` | backup available | 10s | 300s |
 
+## AIOps Runbooks and Diagnosis References
+
+This skill includes MongoDB-specific AIOps runbooks and references for structured root-cause analysis:
+
+- [Runbook Index](runbooks/00-index.md) — Perceive → Reason → Execute model and output contract
+- [01 - 日常健康巡检](runbooks/01-daily-health-check.md) — instance health, metrics, backups, and replication
+- [02 - 性能故障定位](runbooks/02-performance-troubleshoot.md) — high CPU/latency/connection/IOPS diagnosis
+- [03 - 容量规划](runbooks/03-capacity-planning.md) — disk, connection, and oplog capacity prediction
+- [04 - 慢查询与索引审计](runbooks/04-slow-query-index-audit.md) — query-shape aggregation and index advice
+- [05 - 复制延迟定位](runbooks/05-replica-lag-troubleshoot.md) — repl lag and oplog window troubleshooting
+- [AIOps Diagnosis](references/aiops-diagnosis.md) — confidence scoring and cross-skill correlation
+- [Root Cause Patterns](references/root-cause-patterns.md) — MongoDB RCA pattern library
+- [Slow Query Analysis](references/slow-query-analysis.md) — slow query normalization and ranking
+- [Index Advisor](references/index-advisor.md) — explain-backed index recommendation rules
+
+All AIOps runbooks are **read-only** by default. Any mutation (scale, restore, index creation, whitelist/security-group change) requires human confirmation and the relevant operation flow / skill delegation.
+
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2026-06-12 | **AIOps diagnosis enhancement**: Added MongoDB AIOps runbooks (daily health, performance troubleshooting, capacity planning, slow-query/index audit, replica-lag troubleshooting) and references for diagnosis confidence, root-cause patterns, slow-query normalization, and index advisor. Added routing language for RCA/capacity/index audit tasks. |
 | 1.2.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DB-level paths, MongoDB-specific rules for `dropDatabase` cascade, `updateMany` filter check, `$out`/`$merge` in aggregate) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, `dropCollection`, `dropDatabase`, `shutdown`, `fsyncLock`, `repairDatabase`, `replSetReconfig`, `updateOne`/`updateMany`/`deleteOne`/`deleteMany` without filter. |
 | 1.1.0 | 2026-06-03 | Added resource audit operations: tag compliance audit, resource inventory, compliance report generation, and DOPS ticket creation for non-compliant resources |
 | 1.0.0 | 2026-06-03 | Initial version with API/SDK and `jdc` CLI dual-path support |
