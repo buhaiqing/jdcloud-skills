@@ -13,8 +13,8 @@ compatibility: >-
   SDK/API is the only execution path.
 metadata:
   author: buhaiqing
-  version: "2.2.0"
-  last_updated: "2026-06-04"
+  version: "2.3.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Elasticsearch API v1 - https://es.jdcloud-api.com/v1"
   cli_applicability: sdk-only
@@ -137,6 +137,7 @@ from jdcloud_sdk.services.es.apis.ModifyInstanceSpecRequest import ModifyInstanc
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, mandatory) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for SDK payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 2.2.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + ES REST paths, ES-specific rules for wildcard `DELETE /<index>`, `match_all` queries in `_update_by_query` / `_delete_by_query`, `_forcemerge max_num_segments=1`) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, node count / storage shrink, `DELETE /<index>`, `_close`, `_delete_by_query`, `_forcemerge max_num_segments=1`, snapshot deletion. |
 | 2.1.0 | 2026-06-03 | **Refactored**: Moved quick inspection snippets, operational best practices to `references/`. SKILL.md is now concise (<300 lines). |
 | 2.0.0 | 2026-06-03 | **Breaking**: Corrected `cli_applicability` to `sdk-only`. Added verified API field names. |
@@ -263,9 +264,11 @@ resp = client.send(DeleteInstanceRequest(parameters=DeleteInstanceParameters(
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **2** | `delete-instance` / `delete-index` (especially wildcard) / `_delete_by_query` / `_forcemerge max_num_segments=1` are destructive; do not retry repeatedly on production data |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `delete`, `restore`, node count / storage shrink, `DELETE /<index>`, `_close`, `_delete_by_query`, `_forcemerge max_num_segments=1`, snapshot deletion | matches repository safety gate policy |
+| `hallucination_check` | **mandatory** | Phase 6 H layer; validates SDK payloads and ES REST API structure before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -274,33 +277,157 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
-[1] Generator (G)            ──► jdc (primary) → SDK / elasticsearch-py (after 3 fails)
+[1] Generator (G)            ──► SDK (primary) → elasticsearch-py (fallback)
+   │                              generate SDK call/payload (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (mandatory for es-ops)        - SDK payload structure validation
+   │                                   - ES REST API operation validation
    │
+   ├── PASS → [1a] Execute (run the SDK/REST call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<2 & not all pass → RETRY (inject suggestions)
-   └─ iter=2 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<2 & not all pass   → RETRY (inject suggestions)
+   └─ iter=2 & not all pass   → RETURN_BEST
 ```
+
+### Hallucination Detection Layer (H) — Mandatory
+
+> **Purpose**: Catch LLM-generated SDK calls and ES REST API operations that contain structurally invalid elements
+> **before** they reach the JD Cloud Elasticsearch API. This is a **pre-execution** gate placed
+> between G's generation and actual API execution.
+
+**Three-Category Check (for elasticsearch-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **SDK Payload Structure** | Verify SDK request parameters match OpenAPI schema | Compare against `references/api-sdk-usage.md` operation tables |
+| **ES REST API Validation** | Validate HTTP method + URL + body structure | Check against ES API reference (method, path, required fields) |
+| **Operation-Specific Validation** | Elasticsearch-specific constraints | Index name format; query structure; destructive operation flags |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "sdk_payload": { "status": "PASS|FAIL", "issues": [] },
+      "es_rest_api": { "status": "PASS|FAIL", "issues": [] },
+      "operation_specific": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 SDK Payload Errors | §2 Skill Generation | §3 Cross-Skill │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-elasticsearch-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- Wildcard DELETE /<index>: Requires confirm=DELETE_WILDCARD_INDEX
+- match_all in _delete_by_query: Safety=0 → ABORT
+- _forcemerge max_num_segments=1: Requires confirm=FORCEMERGE"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "sdk_payload" | "skill_generation" | "cross_skill" | "runtime" | "token_efficiency",
+    "skill": "jdcloud-elasticsearch-ops",
+    "command": "DELETE /logs-*",
+    "error": "Missing confirm=DELETE_WILDCARD_INDEX in trace",
+    "fix": "Added explicit user confirmation before wildcard index deletion",
+    "reusable": true
+  }
+}
+```
+
+Reusable patterns (reusable=true) are candidates for `docs/failure-patterns.md` — the centralized Reflexion memory.
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
-The GCL **wraps** the jdc-first / SDK-fallback flow defined under
-`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
-executor. The Critic (C) is a new, read-only role with no `jdc` / SDK /
+The GCL **wraps** the SDK-only execution flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing SDK
+executor. The Critic (C) is a new, read-only role with no SDK /
 ES HTTP access. The Orchestrator (O) owns the loop and persists the GCL
-trace.
+trace. The Hallucination Detector (H) is a mandatory pre-execution structural check.
 
 ### Operation-specific behavior
 
@@ -340,6 +467,12 @@ trace.
 - **All ES ops** — Always pre-check via `GET _cat/indices?v` /
   `GET _cluster/health` / `GET /<index>/_count` and include result in trace;
   full HTTP method + URL + body must appear verbatim.
+- **H layer operation-specific checks**:
+  - `delete-instance` — H validates instanceId format and existence check
+  - `DELETE /<index>` — H validates index name format; wildcard requires extra confirm
+  - `_delete_by_query` / `_update_by_query` — H validates query is not empty/match_all
+  - `_forcemerge` — H validates max_num_segments parameter; =1 requires confirm
+  - `_reindex` — H validates source/dest structure; wildcard dest requires confirm
 
 ## Prerequisites
 

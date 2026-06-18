@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.3.0"
-  last_updated: "2026-06-12"
+  version: "1.4.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud MongoDB API v1 - https://mongodb.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -185,6 +185,7 @@ All AIOps runbooks are **read-only** by default. Any mutation (scale, restore, i
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, mandatory) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.3.0 | 2026-06-12 | **AIOps diagnosis enhancement**: Added MongoDB AIOps runbooks (daily health, performance troubleshooting, capacity planning, slow-query/index audit, replica-lag troubleshooting) and references for diagnosis confidence, root-cause patterns, slow-query normalization, and index advisor. Added routing language for RCA/capacity/index audit tasks. |
 | 1.2.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DB-level paths, MongoDB-specific rules for `dropDatabase` cascade, `updateMany` filter check, `$out`/`$merge` in aggregate) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, `dropCollection`, `dropDatabase`, `shutdown`, `fsyncLock`, `repairDatabase`, `replSetReconfig`, `updateOne`/`updateMany`/`deleteOne`/`deleteMany` without filter. |
 | 1.1.0 | 2026-06-03 | Added resource audit operations: tag compliance audit, resource inventory, compliance report generation, and DOPS ticket creation for non-compliant resources |
@@ -1067,9 +1068,11 @@ print(f"按版本分布: {inventory['summary']['byVersion']}")
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **2** | `delete` / `restore` / `dropDatabase` / `dropCollection` / `updateMany`/`deleteMany` without filter are all destructive; do not retry repeatedly on production data |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `delete`, `restore`, storage shrink, `dropCollection`, `dropDatabase`, `shutdown`, `fsyncLock`, `repairDatabase`, `replSetReconfig`, `updateOne`/`updateMany`/`deleteOne`/`deleteMany` without filter | matches repository safety gate policy |
+| `hallucination_check` | **mandatory** | Phase 6 H layer; validates CLI parameters and JSON structure before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -1078,25 +1081,149 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc (primary) → SDK / pymongo (after 3 fails)
+   │                              generate command/payload (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (mandatory for mongodb-ops)   - CLI parameter existence
+   │                                   - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<2 & not all pass → RETRY (inject suggestions)
-   └─ iter=2 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<2 & not all pass   → RETRY (inject suggestions)
+   └─ iter=2 & not all pass   → RETURN_BEST
 ```
+
+### Hallucination Detection Layer (H) — Mandatory
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud MongoDB API. This is a **pre-execution** gate placed
+> between G's generation and actual API execution.
+
+**Three-Category Check (for mongodb-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in the jdc mongodb operation spec | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For SDK request payloads | Validate field nesting matches OpenAPI schema |
+| **Operation-Specific Validation** | MongoDB-specific constraints | instanceId format; engine="MongoDB"; filter validation for updateMany/deleteMany |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] },
+      "operation_specific": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-mongodb-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- Empty filter in updateMany/deleteMany: Safety=0 → ABORT
+- dropDatabase requires confirm: Cascades to ALL collections
+- $out/$merge in aggregate: Re-score Safety"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime" | "token_efficiency",
+    "skill": "jdcloud-mongodb-ops",
+    "command": "jdc --output json mongodb delete-instance ...",
+    "error": "Missing confirm=DROP in trace",
+    "fix": "Added explicit user confirmation before destructive operation",
+    "reusable": true
+  }
+}
+```
+
+Reusable patterns (reusable=true) are candidates for `docs/failure-patterns.md` — the centralized Reflexion memory.
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
@@ -1104,7 +1231,7 @@ The GCL **wraps** the jdc-first / SDK-fallback flow defined under
 `## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
 executor. The Critic (C) is a new, read-only role with no `jdc` / SDK /
 MongoDB driver access. The Orchestrator (O) owns the loop and persists the
-GCL trace.
+GCL trace. The Hallucination Detector (H) is a mandatory pre-execution structural check.
 
 ### Operation-specific behavior
 
@@ -1142,6 +1269,11 @@ GCL trace.
 - **Read-only audit / report / inventory / DOPS-ticket operations** — All
   read-only. Safety = 1.0 by default. Traceability and Correctness still
   scored normally.
+- **H layer operation-specific checks**:
+  - `delete-instance` — H validates instanceId format and existence check
+  - `dropDatabase` / `dropCollection` — H validates confirm=DROP presence
+  - `updateMany` / `deleteMany` — H validates filter is not empty/missing
+  - `aggregate` with `$out`/`$merge` — H validates pipeline structure
 
 ## Prerequisites
 
