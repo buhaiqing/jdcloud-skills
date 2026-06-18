@@ -13,8 +13,8 @@ compatibility: >-
   disk operations support.
 metadata:
   author: buhaiqing
-  version: "1.1.0"
-  last_updated: "2026-06-10"
+  version: "1.2.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "Disk API v1.0 - https://docs.jdcloud.com/cn/cloud-disk-service/api"
   cli_applicability: dual-path
@@ -143,6 +143,7 @@ All runbooks follow the **Perceive → Reason → Execute** three-phase model. T
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, mandatory) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.1.0 | 2026-06-10 | **Runbooks added**: Added `runbooks/` directory with 2 runbooks (01-daily-health-check, 02-capacity-planning) covering proactive disk health monitoring and capacity prediction. Runbook index at `runbooks/00-index.md`. |
 | 1.0.0 | 2026-06-08 | Initial dual-path skill for JD Cloud Disk (jdc-first with SDK fallback) |
 
@@ -624,25 +625,201 @@ jdc --output json disk create-disks \
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md`](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **required** for this skill (per `AGENTS.md` §8 — destructive ops).
 
-### Parameters
+### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **3** | `AGENTS.md` §8 default for disk ops (recommended) |
-| `rubric_version` | `v1` | see [references/rubric.md](references/rubric.md) |
+| `max_iterations` | **2** | `delete-disk` is destructive; `resize-disk` shrink is irreversible; do not retry repeatedly |
+| `rubric_version` | `v2` | see [references/rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
-| `safety_confirm_required` | **true** | Delete disk requires user confirmation |
+| `safety_confirm_required` | **true** for `delete-disk`, `resize-disk` (shrink), `detach-disk` (in-use) | matches repository safety gate policy |
+| `hallucination_check` | **mandatory** | Phase 6 H layer; validates CLI parameters before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
-### Rubric Dimensions
+### Loop overview
 
-| Dimension | Threshold | Notes |
-|-----------|-----------|-------|
-| Correctness | ≥ 0.5 | Disk ID/state matches request |
-| Safety | = 1 | Delete/restore confirmed; no in-use deletion |
-| Idempotency | ≥ 0.5 | Create with same name returns error consistently |
-| Traceability | ≥ 0.5 | All jdc/SDK calls logged with request IDs |
-| Spec Compliance | ≥ 0.5 | Follows Disk API conventions |
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │                              optionally load failure-patterns.md
+   ▼
+[1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │                              generate command (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (mandatory for disk-ops)      - CLI parameter existence
+   │                                   - JSON structure compliance
+   │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
+   ▼
+[3] Orchestrator decider
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<2 & not all pass   → RETRY (inject suggestions)
+   └─ iter=2 & not all pass   → RETURN_BEST
+```
 
----
+### Hallucination Detection Layer (H) — Mandatory
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud Disk API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for disk-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc disk <operation>` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (e.g., `--disk-spec`) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `create-disks` | `--region-id`, `--az`, `--disk-type`, `--disk-size`, `--disk-name`, `--count` |
+| `describe-disk` | `--region-id`, `--disk-id` |
+| `describe-disks` | `--region-id`, `--page-number`, `--page-size` |
+| `attach-disk` | `--region-id`, `--disk-id`, `--instance-id`, `--device` |
+| `detach-disk` | `--region-id`, `--disk-id`, `--instance-id` |
+| `resize-disk` | `--region-id`, `--disk-id`, `--disk-size` (must be larger) |
+| `delete-disk` | `--region-id`, `--disk-id` |
+| `create-snapshot` | `--region-id`, `--disk-id`, `--snapshot-name` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-disk-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidDiskType: Disk type must be ssd, premium-hdd, or standard-hdd
+- DiskInUse: Cannot delete disk that is currently attached
+- InvalidDiskSize: New size must be larger than current size"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime" | "token_efficiency",
+    "skill": "jdcloud-disk-ops",
+    "command": "jdc disk delete-disk ...",
+    "error": "DiskInUse: Cannot delete disk that is currently attached",
+    "fix": "Detach disk before deletion",
+    "reusable": true
+  }
+}
+```
+
+Reusable patterns (reusable=true) are candidates for `docs/failure-patterns.md` — the centralized Reflexion memory.
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK access.
+The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is a mandatory pre-execution structural check.
+
+### Operation-specific behavior
+
+- **`create-disks`** — Disk type and size must be explicit. Check quota first.
+  H layer validates `--disk-type`, `--disk-size`, `--az` before execution.
+- **`attach-disk`** — Target instance MUST be in `running` or `stopped` state. Disk MUST
+  be in `available` state. H layer validates `--disk-id`, `--instance-id`, `--device` before execution.
+- **`detach-disk`** — Can cause data corruption if disk is actively writing. Always `describe-disk`
+  first. Safety = 0 without `confirm=DETACH` → ABORT. For in-use disks, additional
+  `confirm=FORCE_DETACH` required. H layer validates `--disk-id`, `--instance-id` before execution.
+- **`resize-disk`** — **IRREVERSIBLE** (cannot shrink). New size MUST be larger than current size.
+  Safety = 0 without `confirm=RESIZE` → ABORT. H layer validates `--disk-id`, `--disk-size` before execution.
+- **`delete-disk`** — **DESTRUCTIVE** (all data lost). Disk MUST be in `available` state (not
+  `in-use`); refuse if still attached. Safety = 0 without `confirm=DELETE`
+  → ABORT. H layer validates `--disk-id` before execution.
 

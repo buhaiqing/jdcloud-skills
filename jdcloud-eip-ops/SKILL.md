@@ -12,8 +12,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.1.0"
-  last_updated: "2026-06-04"
+  version: "1.2.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud EIP API v1 - https://eip.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -117,6 +117,7 @@ See [CLI Usage](references/cli-usage.md) for critical jdc behavioral notes.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, mandatory) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, EIP-specific rules for irreversible `release EIP`, prod-tagged `dissociate` / `release` confirm, `associate` force-rebind guard) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for `dissociate EIP`, `release EIP`, `associate EIP` (force-rebind). |
 | 1.0.0 | 2026-06-03 | Initial version with jdc-first execution and SDK fallback |
 
@@ -271,16 +272,18 @@ Poll until 404 (max 24 attempts, 5s interval)
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
-> The quality gate is **mandatory** for all operations exposed by this skill.
+> The quality gate is **required** for this skill (per `AGENTS.md` §8 — destructive ops).
 
 ### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **2** | `release EIP` is irreversible; `dissociate EIP` can break production traffic; do not retry repeatedly |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `dissociate EIP`, `release EIP`, `associate EIP` (force-rebind) | matches repository safety gate policy |
+| `hallucination_check` | **mandatory** | Phase 6 H layer; validates CLI parameters before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -289,46 +292,181 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │                              generate command (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (mandatory for eip-ops)       - CLI parameter existence
+   │                                   - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<2 & not all pass → RETRY (inject suggestions)
-   └─ iter=2 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<2 & not all pass   → RETRY (inject suggestions)
+   └─ iter=2 & not all pass   → RETURN_BEST
 ```
+
+### Hallucination Detection Layer (H) — Mandatory
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud EIP API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for eip-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc eip <operation>` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (if any) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `allocate-address` | `--region-id`, `--address-name`, `--bandwidth` |
+| `describe-address` | `--region-id`, `--address-id` |
+| `describe-addresses` | `--region-id`, `--page-number`, `--page-size` |
+| `associate-address` | `--region-id`, `--address-id`, `--instance-id`, `--instance-type` |
+| `dissociate-address` | `--region-id`, `--address-id` |
+| `release-address` | `--region-id`, `--address-id` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-eip-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidAddressId: EIP ID must be valid format
+- EIPInUse: Cannot release EIP that is currently associated
+- InvalidInstanceState: Target instance must be in running state"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime" | "token_efficiency",
+    "skill": "jdcloud-eip-ops",
+    "command": "jdc eip release-address ...",
+    "error": "InvalidParameter: InvalidAddressId",
+    "fix": "EIP ID must be valid format",
+    "reusable": true
+  }
+}
+```
+
+Reusable patterns (reusable=true) are candidates for `docs/failure-patterns.md` — the centralized Reflexion memory.
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
 The GCL **wraps** the jdc-first / SDK-fallback flow defined under
 `## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
-executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
-access. The Orchestrator (O) owns the loop and persists the GCL trace.
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK access.
+The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is a mandatory pre-execution structural check.
 
 ### Operation-specific behavior
 
 - **`allocate EIP`** — Bandwidth + ISP must be explicit. Check quota first.
+  H layer validates `--region-id`, `--address-name`, `--bandwidth` before execution.
 - **`associate EIP`** — Target instance MUST be in `running` state. EIP MUST
   be in `Available` state. Refuse to force-rebind an EIP in `InUse` state
-  without explicit opt-in.
+  without explicit opt-in. H layer validates `--address-id`, `--instance-id`, `--instance-type` before execution.
 - **`dissociate EIP`** — Can break production traffic. Always `describe-eip`
   first. Safety = 0 without `confirm=DISSOCIATE` → ABORT. For prod-tagged
-  EIPs, additional `confirm=DISSOCIATE_PROD` required.
+  EIPs, additional `confirm=DISSOCIATE_PROD` required. H layer validates `--address-id` before execution.
 - **`release EIP`** — **IRREVERSIBLE** (public IP returns to pool, may be
   allocated to another tenant). EIP MUST be in `Available` state (not
   `InUse`); refuse if still attached. Safety = 0 without `confirm=RELEASE`
-  → ABORT. For prod-tagged EIPs, additional `confirm=RELEASE_PROD` required.
+  → ABORT. For prod-tagged EIPs, additional `confirm=RELEASE_PROD` required. H layer validates `--address-id` before execution.
 
 ## Prerequisites
 

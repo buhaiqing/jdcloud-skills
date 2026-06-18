@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.1.0"
-  last_updated: "2026-06-04"
+  version: "1.2.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud IAM API v1 - https://iam.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -163,6 +163,7 @@ IAM resources are typically **immediate** in state changes:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, mandatory) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, IAM-specific rules for `attach AdministratorAccess`, `create main-account key`, `delete sub-user` with attached policies, STS session duration, `Principal: *` trust policy) and `references/prompt-templates.md` (G/C/O prompt skeletons; **secret value never logged**). `max_iterations=2`. `safety_confirm_required=true` for create-access-key (main account), attach-policy (admin/wildcard), assume-role (>1h), delete sub-user (with attached policies). |
 | 1.0.0 | 2026-05-08 | Initial version with comprehensive IAM support: sub-users, groups, roles, policies, AKSK, STS, MFA; jdc-first with SDK fallback |
 
@@ -449,16 +450,18 @@ resp = sts_client.send(req)
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
-> The quality gate is **mandatory** for all operations exposed by this skill.
+> The quality gate is **required** for this skill (per `AGENTS.md` §8 — destructive ops).
 
 ### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **2** | IAM privilege changes (attach admin policy, create main-account key, delete sub-user) are immediately impactful; do not retry repeatedly |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `create-access-key` (main account), `attach-policy` (admin/wildcard), `assume-role` (>1h), `delete sub-user` (with attached policies) | matches repository safety gate policy |
+| `hallucination_check` | **mandatory** | Phase 6 H layer; validates CLI parameters before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -467,52 +470,192 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │                              generate command (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (mandatory for iam-ops)       - CLI parameter existence
+   │                                   - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<2 & not all pass → RETRY (inject suggestions)
-   └─ iter=2 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<2 & not all pass   → RETRY (inject suggestions)
+   └─ iter=2 & not all pass   → RETURN_BEST
 ```
+
+### Hallucination Detection Layer (H) — Mandatory
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud IAM API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for iam-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc iam <operation>` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (e.g., `--assume-role-policy-document`, `--policy-document`) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `create-sub-user` | `--sub-user-name`, `--description` |
+| `create-group` | `--group-name`, `--description` |
+| `create-role` | `--role-name`, `--assume-role-policy-document` (JSON structure) |
+| `create-policy` | `--policy-name`, `--policy-document` (JSON structure) |
+| `attach-sub-user-policy` | `--sub-user-name`, `--policy-name` |
+| `attach-group-policy` | `--group-name`, `--policy-name` |
+| `attach-role-policy` | `--role-name`, `--policy-name` |
+| `detach-sub-user-policy` | `--sub-user-name`, `--policy-name` |
+| `create-user-access-key` | (no parameters for main account) |
+| `delete-sub-user` | `--sub-user-name` |
+| `assume-role` (STS) | `--role-name`, `--duration-seconds` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-iam-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidSubUserName: Sub-user name must match IAM naming conventions
+- MissingPolicyDocument: Policy document JSON is required for create-policy
+- InvalidPrincipal: Trust policy Principal must be valid ARN or *"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime" | "token_efficiency",
+    "skill": "jdcloud-iam-ops",
+    "command": "jdc iam create-sub-user ...",
+    "error": "InvalidParameter: InvalidSubUserName",
+    "fix": "Sub-user name must match IAM naming conventions",
+    "reusable": true
+  }
+}
+```
+
+Reusable patterns (reusable=true) are candidates for `docs/failure-patterns.md` — the centralized Reflexion memory.
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
 The GCL **wraps** the jdc-first / SDK-fallback flow defined under
 `## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
-executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
-access. The Orchestrator (O) owns the loop and persists the GCL trace.
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK access.
+The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is a mandatory pre-execution structural check.
 
 ### Operation-specific behavior
 
 - **`create sub-user` / `create group` / `create role`** — Check duplicates
   first via `list-*`. Refuse to re-create same name without explicit opt-in.
+  H layer validates `--sub-user-name` / `--group-name` / `--role-name` before execution.
 - **`create role`** — Trust policy JSON must appear in trace. Refuse
-  `"Principal": "*"` without opt-in.
+  `"Principal": "*"` without opt-in. H layer validates `--assume-role-policy-document` JSON structure before execution.
 - **`create policy`** — Policy document JSON must appear in trace. Refuse
-  `Effect: Allow, Action: *, Resource: *` without opt-in.
+  `Effect: Allow, Action: *, Resource: *` without opt-in. H layer validates `--policy-document` JSON structure before execution.
 - **`attach policy`** — Refuse `AdministratorAccess` or `*:*` without
-  `confirm=ATTACH_ADMIN` → ABORT.
+  `confirm=ATTACH_ADMIN` → ABORT. H layer validates `--sub-user-name` / `--group-name` / `--role-name` and `--policy-name` before execution.
 - **`create access-key` (main account)** — Check existing key count first
   (max 2). Refuse without `confirm=CREATE_KEY` and without a rotation plan
   in trace. **NEVER log secret value**.
 - **`delete sub-user`** — MUST detach all policies + remove from all groups
   before deletion. Missing either → Safety = 0 → ABORT. Must include
-  pre-delete snapshot of attached policies + group memberships.
+  pre-delete snapshot of attached policies + group memberships. H layer validates `--sub-user-name` before execution.
 - **`assume role` (STS)** — Default session duration ≤ 1 hour. Longer
   requires `confirm=EXTEND_SESSION`. Verify role's trust policy allows the
-  assumed principal.
+  assumed principal. H layer validates `--role-name` and `--duration-seconds` before execution.
 
 ## Prerequisites
 
