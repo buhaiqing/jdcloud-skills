@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.3.0"
-  last_updated: "2026-06-08"
+  version: "1.4.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud RDS MySQL API v1 - https://rds.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -159,6 +159,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, mandatory) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.3.0 | 2026-06-08 | **Enhanced slow query capabilities**: (1) **Automated Perception**: Added CloudMonitor alarm integration for automatic slow query detection and alert-triggered analysis. (2) **Scheduled Audit**: Added `scheduled_slowquery_audit` for daily/weekly automated patrol with trend analysis and optimization tracking. (3) **Improved Analysis**: Enhanced `analyzeSlowQueries` with severity classification (Critical/Major/Minor), root cause detection (7 patterns), and actionable optimization advice with impact estimation. |
 | 1.2.0 | 2026-06-05 | **Added Describe Slow Logs operations**: (1) `describeSlowLogs` — query slow query summaries by time range for single instance. (2) `describeSlowLogsByTags` — two-phase composite operation: filter instances by tags (环境=生产, 客户=xxx), then parallel query slow logs across all matching instances. Both support pagination, filtering (account/keyword), sorting (execution metrics), with safety guards (max_instances limit, parallel execution control). |
 | 1.1.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, instance-level + DDL/DML paths, op-specific overrides including storage shrink and SQL `WHERE` check) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, storage shrink, DDL `DROP`/`TRUNCATE`, DML `UPDATE`/`DELETE` without WHERE. |
@@ -1765,16 +1766,18 @@ resp = client.send(req)
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
-> The quality gate is **mandatory** for all operations exposed by this skill.
+> The quality gate is **required** for this skill (per `AGENTS.md` §8 — destructive ops).
 
 ### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **2** | `delete` / `restore` / DDL `DROP` / DML `DELETE`/`UPDATE` without WHERE are all destructive; do not retry repeatedly on production data |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `delete`, `restore`, storage shrink, `DROP`, `TRUNCATE`, `DELETE`/`UPDATE` without WHERE | matches repository safety gate policy |
+| `hallucination_check` | **mandatory** | Phase 6 H layer; validates CLI parameters before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -1783,25 +1786,160 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc (primary) → SDK / pymysql (after 3 fails)
+   │                              generate command (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (mandatory for mysql-ops)     - CLI parameter existence
+   │                                   - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK/pymysql call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<2 & not all pass → RETRY (inject suggestions)
-   └─ iter=2 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<2 & not all pass   → RETRY (inject suggestions)
+   └─ iter=2 & not all pass   → RETURN_BEST
 ```
+
+### Hallucination Detection Layer (H) — Mandatory
+
+> **Purpose**: Catch LLM-generated CLI/SDK/SQL calls that contain structurally invalid elements
+> **before** they reach the JD Cloud RDS MySQL API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for mysql-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc rds <operation>` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (e.g., `--tags`, `--backupStrategy`) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `create-instance` | `--dbInstanceClass`, `--dbInstanceStorageType`, `--az`, `--subnetId`, `--dbInstanceName` |
+| `delete-instance` | `--dbInstanceId` |
+| `restore-instance` | `--dbInstanceId`, `--backupId` |
+| `modify-instance-spec` | `--dbInstanceId`, `--dbInstanceClass` |
+| `resize-disk` | `--dbInstanceId`, `--dbInstanceStorage` (must be larger) |
+| DDL `DROP`/`TRUNCATE` | SQL syntax validation: table/database name must exist |
+| DML `UPDATE`/`DELETE` | SQL syntax validation: WHERE clause required |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-mysql-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidDbInstanceClass: Use exact class code from describeInstanceClass
+- MissingSubnetId: Subnet ID is required for instance creation
+- InvalidBackupId: Backup ID must belong to the same dbInstanceId
+- MissingWhereClause: DML UPDATE/DELETE requires WHERE clause"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime" | "token_efficiency",
+    "skill": "jdcloud-mysql-ops",
+    "command": "jdc rds create-instance ...",
+    "error": "InvalidParameter: InvalidDbInstanceClass",
+    "fix": "Use exact class code from describeInstanceClass",
+    "reusable": true
+  }
+}
+```
+
+Reusable patterns (reusable=true) are candidates for `docs/failure-patterns.md` — the centralized Reflexion memory.
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
@@ -1809,28 +1947,31 @@ The GCL **wraps** the jdc-first / SDK-fallback flow defined under
 `## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
 executor. The Critic (C) is a new, read-only role with no `jdc` / SDK / SQL
 access. The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is a mandatory pre-execution structural check.
 
 ### Operation-specific behavior
 
 - **`create-instance`** — Critic verifies `--client-token` was set
-  (Idempotency = 1 required). Missing → Idempotency = 0.
+  (Idempotency = 1 required). Missing → Idempotency = 0. H layer validates `--dbInstanceClass`, `--az`, `--subnetId` before execution.
 - **`delete-instance`** — Critic checks the trace contains both a pre-delete
   `describe-instance` snapshot and a post-delete 404. Missing either →
-  Correctness = 0.
+  Correctness = 0. H layer validates `--dbInstanceId` before execution.
 - **`restore-instance`** — `backupId` must belong to the same `instanceId`;
   cross-instance restore requires explicit user confirm in trace or Safety = 0.
+  H layer validates `--backupId` format before execution.
 - **`modify-instance` (storage)** — Storage shrink is **forbidden** without
-  user opt-in. Safety = 0 otherwise.
+  user opt-in. Safety = 0 otherwise. H layer validates `--dbInstanceStorage` before execution.
 - **DDL `CREATE TABLE`** — Prefer `IF NOT EXISTS`. Full DDL must appear in
-  trace or Traceability = 0.
+  trace or Traceability = 0. H layer validates SQL syntax before execution.
 - **DDL `DROP TABLE` / `DROP DATABASE` / `TRUNCATE`** — Always Safety = 0
   without `confirm=DROP` / `confirm=TRUNCATE` in trace → ABORT.
+  H layer validates SQL syntax and table/database existence before execution.
 - **DDL `ALTER TABLE`** — Full ALTER must appear in trace; online DDL
-  preferred for production.
+  preferred for production. H layer validates SQL syntax before execution.
 - **DML `UPDATE` / `DELETE`** — SQL text MUST have a `WHERE` clause. Missing
   WHERE → Safety = 0 → ABORT. Pre-check: `SELECT COUNT(*)` with the same
-  WHERE to predict `affected_rows`.
-- **DML `SELECT`** — Read-only; Safety = 1.0 by default.
+  WHERE to predict `affected_rows`. H layer validates WHERE clause presence before execution.
+- **DML `SELECT`** — Read-only; Safety = 1.0 by default. H layer validates SQL syntax before execution.
 - **All DDL/DML** — Always pre-check via `SHOW DATABASES` / `SHOW TABLES` /
   `DESCRIBE` and include result in trace; full SQL text must appear verbatim.
 
