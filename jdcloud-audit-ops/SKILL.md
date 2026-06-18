@@ -13,8 +13,8 @@ compatibility: >-
   Current Status for current CLI/SDK limitations.
 metadata:
   author: buhaiqing
-  version: "1.3.0"
-  last_updated: "2026-06-09"
+  version: "1.4.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Audit Log API v1 - https://docs.jdcloud.com/cn/audit-log"
   cli_applicability: sdk-or-api-only
@@ -199,6 +199,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-06-18 | **Complete GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H) and Phase 7 Reflexion Integration. Rubric expanded to 8 dimensions (5 core + 3 Aliyun-specific extensions). Added per-operation Safety sub-rules, worked examples, and H layer prompt template. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with aliyun-skills GCL v1.9.0 pattern. |
 | 1.3.0 | 2026-06-09 | **P1 SecOps+AIOps**: Added mask_sensitive reference implementation (`references/redaction.md`), Privacy Display Policy, AIOps runbook scene definitions (`references/aiops-runbooks.md`), tightened external export security (Slack/Email/SIEM), clarified cross-skill delegation & PII display strategy, fixed Quick Reference raw eventDetail output. |
 | 1.2.1 | 2026-06-09 | **P0 corrective update**: Marked current CLI/SDK paths as unverified in locked toolchain, switched to SDK/API-only metadata, added documentation-stub status, and tightened redaction / pagination guidance. |
 | 1.2.0 | 2026-06-04 | **GCL rollout (optional)**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, read-only audit log query, PII masking guard for `requestParameters`) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=5`. `safety_confirm_required=false` (read-only by definition). |
@@ -458,9 +459,11 @@ else:
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-audit-ops` (optional, read-only) |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` (self) |
 | `safety_confirm_required` | **false** | read-only by definition |
+| `hallucination_check` | **optional** | Phase 6 H layer; recommended for API parameter validation |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -469,25 +472,150 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► OpenAPI REST (primary) → SDK (after module confirmed)
+   │                              generate command/payload (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for audit-ops)      - API parameter existence
+   │                                   - JSON structure compliance
+   │                                   - time range validity (≤ 90 days)
    │
+   ├── PASS → [1a] Execute (run the REST/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<5 & not all pass → RETRY (inject suggestions)
-   └─ iter=5 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
 ```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated REST/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud Audit API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Three-Category Check (for audit-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **API Parameter Existence** | Verify every query parameter exists in the Audit API spec | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For `requestParameters` / `responseElements` in event details | Validate field nesting matches OpenAPI schema |
+| **Time Range Validity** | Ensure `startTime`/`endTime` ≤ 90 days (retention limit) | Parse ISO 8601 and compute delta |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "api_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] },
+      "time_range": { "status": "PASS|FAIL", "delta_days": 30 }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-audit-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidTimeRange: Limit startTime/endTime ≤ 90 days (retention limit)
+- Sensitive data leakage: Apply mask_sensitive() to requestParameters before output
+- Large result set timeout: Always use pageNumber/pageSize (≤100) for pagination"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime" | "token_efficiency",
+    "skill": "jdcloud-audit-ops",
+    "command": "GET https://audit.jdcloud-api.com/v1/...",
+    "error": "InvalidParameter: InvalidTimeRange",
+    "fix": "Adjusted time range to ≤ 90 days",
+    "reusable": true
+  }
+}
+```
+
+Reusable patterns (reusable=true) are candidates for `docs/failure-patterns.md` — the centralized Reflexion memory.
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
@@ -495,18 +623,21 @@ The GCL **wraps** the SDK/API-first flow defined under
 `## Execution Flows` above. The Generator (G) IS the existing REST-or-SDK
 executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
 access. The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is an optional pre-execution structural check.
 
 ### Operation-specific behavior
 
 - **`describe-events`** (list operation events) — Time range + region +
-  filter MUST be explicit. Default time range = last 24h. Trace MUST
-  include `pageNumber` / `pageSize` / `totalCount` if paginated.
+  filter MUST be explicit. Default time range = last 24h. Max = 90d (retention).
+  Trace MUST include `pageNumber` / `pageSize` / `totalCount` if paginated.
+  H layer validates time range ≤ 90 days before execution.
 - **`describe-event-detail`** (get single event details) — Event id MUST
   be explicit. **Sensitive fields in `requestParameters` MUST be
   masked** (password, secret, accessKey, accessKeySecret, privateKey →
   `***` or SHA-256 prefix). Unmasked sensitive data → Safety = 0 → ABORT.
+  H layer validates eventId format before execution.
 - **`describe-trails`** (list audit trails) — All trails visible to the
-  principal.
+  principal. Read-only query; no trail creation/deletion/modification attempted.
 
 ## Prerequisites
 

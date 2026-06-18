@@ -345,11 +345,38 @@ mistake is unrecoverable.
 | Role | Job | Input | Output | Forbidden |
 |---|---|---|---|---|
 | **Generator (G)** | Execute the cloud operation | user request + previous Critic feedback | result + execution trace | modifying the rubric; self-scoring |
+| **Hallucination Detector (H)** | Pre-execution structural validity check | G's generated command / JSON + skill's reference knowledge base | pass/fail signal + hallucination report | executing API calls (read-only offline check only); modifying G's output |
 | **Critic (C)** | Independently audit G's output | G's result + trace + rubric | scores + suggestions | calling jdc / SDK / mutating anything |
-| **Orchestrator (O)** | Loop control, termination, final return | context + C scores + budget | continue / final result | executing or scoring on its own |
+| **Orchestrator (O)** | Loop control, termination, final return | context + C scores + H result + budget | continue / final result | executing or scoring on its own |
 
 **Hard constraint:** G and C MUST live in **isolated prompt contexts** (preferably isolated sessions
 or sub-agents). A shared context is a "pseudo-GCL" and is explicitly banned — see §9.
+H is a **deterministic offline check** by default (the Phase 6 mechanical H); it does NOT need isolation
+because it never calls cloud APIs. A future LLM-based H would require the same isolation as C.
+
+### 2.1 Critic Test & Regression Assessment (MANDATORY)
+
+> **Core principle — accuracy over coverage**: Do **not** optimize for coverage metrics or test count. Optimize for whether tests **accurately** validate changed behavior and would **reliably catch** real regressions.
+
+On **every** critique iteration, C MUST evaluate two acceptance dimensions **in addition to** the rubric:
+
+| Assessment | C action | On failure |
+|------------|----------|------------|
+| **Test accuracy** | Judge whether existing tests **correctly** exercise and assert behaviors touched by this change. Ask: *if this change introduced a bug, would these tests fail?* Reject stale tests, wrong contracts, masked failures, or cases that touch code without validating outcomes | `blocking=true`; concrete test fixes/additions in `suggestions`; **RETRY** — no PASS until accurate for the change |
+| **Regression verification gate** | Decide whether targeted regression ([AGENTS.md §11.1](#111-regression-testing-mandatory)) is required — pick the **smallest accurate suite** for the change and adjacent risk, not blanket runs for coverage theater | If required: name suite(s) and why sufficient; require green runs in trace/summary. If waived: document zero-behavioral-delta rationale |
+
+**Decision posture**: Professional and cautious — when ambiguous, require targeted regression with tests that would actually fail on breakage.
+
+| Change signal | C default |
+|---------------|-----------|
+| Pure docs/formatting (confirmed zero behavior delta) | Runtime regression optional; document skip rationale |
+| Scripts / SkillOpt / execution flow / shared runtime | Run §11.1 suite(s) **only where they accurately exercise the changed path**; fix shallow assertions |
+| Cross-skill or generator / `gen-skillopt.sh` | Shared integration + ≥1 representative test that **traverses the changed contract** |
+| Refactor or intentional behavior change | Test-first: lock accurate before/after behavior, then applicable suites |
+
+**Banned**: padding test count, chasing coverage %, PASSing on green suites that do not assert the changed behavior.
+
+O treats inaccurate tests or missing required regression evidence like any other blocking C finding.
 
 ### 3. Rubric (mandatory per skill)
 
@@ -374,27 +401,42 @@ User Request
 [0] Pre-flight (Orchestrator)
     - resolve env.* and user.* variables
     - pick skill, load its rubric
+    - [Optional] 检索 failure-patterns.md 中与当前 skill 相关的已知模式
+      → 将已知模式注入 Generator 上下文（预防性提示，非强制约束）
      │
      ▼
-[1] Generate (G) ───────────────────────┐
-    - run jdc / SDK                     │
-    - capture trace                     │
-     │                                  │
-     ▼                                  │
-[2] Critique (C)                       │
-    - isolated prompt context           │
-    - score every rubric dimension      │
-    - emit actionable suggestions       │
-     │                                  │
-     ▼                                  │
-[3] Decide (Orchestrator)              │
-    - Safety=0  → ABORT (no partial)   │
-    - all pass  → RETURN                │
-    - else & iter<max → inject         │
-       suggestions into G               │
-    - else → RETURN best + unresolved   │
-       rubric items                     │
-     └──────────────────────────────────┘
+[1] Generate (G)
+    - generate command / JSON payload (DO NOT execute yet) ──┐
+    - pass command + skill context to H                      │
+     │                                                       │
+     ▼                                                       │
+[1.5] Hallucination Detection (H)                           │
+    - check API parameter existence                          │
+    - check JSON structure against OpenAPI schema            │
+    - check time range validity (≤ 90 days for audit)        │
+     │                                                       │
+     ├── PASS → [1a] Execute (run the command)               │
+     ├── FAIL → [1b] Regenerate (H retriggers G with         │
+     │               hallucination report; max 1 retry)      │
+     │         still FAIL → HALT with "HALLUCINATION_ABORT"  │
+     │                                                       │
+     ▼                                                       │
+[2] Critique (C)                                            │
+    - isolated prompt context                                │
+    - score every rubric dimension                           │
+    - assess test accuracy + regression gate (§2.1)          │
+    - emit ≤ 3 actionable suggestions                        │
+     │                                                       │
+     ▼                                                       │
+[3] Decide (Orchestrator)                                   │
+    - HALLUCINATION_ABORT → ABORT (no partial)               │
+    - Safety=0  → ABORT (no partial)                         │
+    - all pass  → RETURN                                     │
+    - else & iter<max → inject                               │
+       suggestions into G                                    │
+    - else → RETURN best + unresolved                        │
+       rubric items                                          │
+     └───────────────────────────────────────────────────────┘
 ```
 
 ### 5. Termination (first match wins)
@@ -402,8 +444,9 @@ User Request
 | Condition | Behavior |
 |---|---|
 | **PASS** | Every rubric dimension meets its threshold → return G's result |
-| **MAX_ITER** | Reached `max_iterations` (default 3) → return **best-so-far** + unresolved rubric items |
+| **MAX_ITER** | Reached `max_iterations` (default per skill class — see §8) → return **best-so-far** + unresolved rubric items |
 | **SAFETY_FAIL** | Safety = 0 → **ABORT**; never return partial or "best-effort" output |
+| **HALLUCINATION_ABORT** | H layer structural validity check fails after regeneration → **ABORT**; return unresolved hallucination report |
 
 `max_iterations` defaults per skill class — see §8.
 
@@ -514,20 +557,269 @@ Each skill may override `max_iter` in its own `SKILL.md` (under `## Quality Gate
 - ❌ **Silently downgrade on Safety fail** — must ABORT visibly → banned
 - ❌ **Trace not persisted** — no post-mortem possible → banned
 - ❌ **Critic mutates resources** — Critic is read-only by definition → banned
+- ❌ **H executes cloud API calls** — H is an offline structural check; calling `jdc` / SDK / mutating anything risks side-effects and contradicts its stateless design → banned
+- ❌ **H rewrites G's command** — H must flag hallucinations, not mutate the command. Fixes come from G (re-generation) or the Orchestrator (HALT → manual intervention) → banned
+- ❌ **H checks skipped for safety-critical ops** — parameter existence check is MANDATORY for all `required` and `recommended` skills per §8 → banned
+- ❌ **Reflexion as mandatory gate** — Pattern retrieval is optional, not a blocking gate → banned
+- ❌ **Unbounded Reflexion memory** — Hard cap at 200 lines; prune low-frequency patterns → banned
+- ❌ **Subjective pattern extraction** — Patterns must come from structured GCL traces or Self-Review records, not ad-hoc observations → banned
 
-### 10. Rollout Roadmap
+### 10. Hallucination Detection Layer (H) — Phase 6
 
-- **Phase 1 (this commit)** — add this section to `AGENTS.md`; pilot on **`jdcloud-vm-ops` only** (most representative
+> **Purpose**: Catch LLM-generated commands, JSON payloads, and architecture suggestions that
+> contain structurally invalid elements **before** they reach the cloud API. This is a
+> **pre-execution** gate placed between G's generation and actual API execution, filling a
+> blind spot the Critic (post-execution) cannot cover.
+
+#### 10.1 Motivation
+
+LLM agents frequently hallucinate when generating JD Cloud CLI commands:
+
+| Hallucination Type | Example | Consequence |
+|---|---|---|
+| **Non-existent parameter** | `--InstanceId` instead of `--instanceId` (wrong case) | API rejects with InvalidParameter → wasted call + latency |
+| **Wrong parameter name** | `--Zone` instead of `--az` | Silent ignore (CLI parses only known flags) → wrong behavior |
+| **Non-existent JSON field** | `"Status": "running"` in a response field that should be `"instanceStatus"` | Downstream parse failure |
+| **Wrong JSON structure** | Flattened nested objects into a flat map | API rejects or silently ignores fields |
+| **Time range violation** | `startTime` > 90 days ago for audit queries | API rejects with InvalidTimeRange |
+
+These are **different from execution errors** caught by the Critic — they are structural
+hallucinations that either fail immediately (wasted API call) or, worse, produce a success
+response with unintended side effects because a wrong parameter was silently ignored.
+
+#### 10.2 Three-Category Check
+
+##### 10.2.1 CLI Parameter Existence (MANDATORY for all `required`/`recommended` skills)
+
+Verify every `--flag` in the generated command exists in that operation's parameter set.
+
+| Source of Truth | Method | Coverage |
+|---|---|---|
+| `jdc <product> <operation> --help` | Parse the `--Parameters` section | Production-grade; runnable in CI |
+| Skill's `references/api-sdk-usage.md` | Operation map table | Always available offline |
+| Built-in parameter knowledge base | Pre-compiled dict in `gcl_runner.py` (`PARAMETER_KNOWLEDGE`) | Default; 300+ operations |
+
+**Algorithm (mechanical H):**
+
+1. Tokenize command into `--flag value` pairs
+2. For each `--flag`, look up `(product, operation, flag)` in parameter knowledge base
+3. Unrecognized flag → record hallucination
+4. All recognized → PASS
+
+**Priority**: Offline knowledge base first → `jdc help` fallback (if CLI available) → PASS
+if neither source can confirm (conservative default).
+
+##### 10.2.2 JSON Structure Compliance (RECOMMENDED for JSON-heavy operations)
+
+For operations that pass a JSON payload:
+
+| Check | Rule |
+|---|---|
+| **Field existence** | Every field in the JSON matches a known OpenAPI field for that operation |
+| **Field nesting** | Nested objects match the OpenAPI schema's hierarchy (no flattening) |
+| **Type correctness** | Values match expected types: string, integer, boolean, array |
+| **Enum membership** | Enum fields use valid values |
+
+**Source of truth**: Skill's `references/api-sdk-usage.md` operation response tables OR a
+pre-compiled field map in `gcl_runner.py`.
+
+**Fallback**: If no JSON payload is present in the command, this check passes automatically.
+
+##### 10.2.3 Time Range Validity (MANDATORY for audit-ops)
+
+For audit log queries, ensure time range does not exceed retention limits:
+
+| Check | Rule |
+|---|---|
+| **Retention limit** | `endTime - startTime ≤ 90 days` (JD Cloud Audit Log retention) |
+| **ISO 8601 format** | Both `startTime` and `endTime` are valid ISO 8601 timestamps |
+| **Chronological order** | `startTime < endTime` |
+
+**Implementation**: Parse timestamps and compute delta. If delta > 90 days, flag as retention violation.
+
+#### 10.3 Termination
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration; return unresolved report |
+
+#### 10.4 Trace Integration
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iterations": [
+    {
+      "iter": 1,
+      "hallucination_detector": {
+        "status": "FAIL",
+        "checks": {
+          "cli_parameters": {
+            "total": 4,
+            "recognized": 3,
+            "unrecognized": ["--Zone"],
+            "status": "FAIL"
+          },
+          "json_structure": {
+            "status": "PASS",
+            "note": "no JSON payload in command"
+          },
+          "time_range": {
+            "status": "PASS",
+            "delta_days": 30,
+            "within_retention": true
+          }
+        },
+        "report": "Unrecognized CLI parameter: --Zone (expected alternatives: --az)"
+      },
+      "regenerated": true,
+      "generator": { ... },
+      "critic": { ... }
+    }
+  ]
+}
+```
+
+#### 10.5 Per-Skill Defaults
+
+Hallucination Detection is **recommended** for all skills, but levels vary:
+
+| GCL Level | Hallucination Check | H Required Dimensions |
+|---|---|---|
+| **required** | **MANDATORY** | CLI parameter existence + JSON structure (if applicable) |
+| **recommended** | **MANDATORY** | CLI parameter existence |
+| **optional** | OPTIONAL | None (but recommended for audit-ops: time range validity) |
+
+#### 10.6 Anti-Patterns (H-specific)
+
+See §9 for the full anti-pattern list. H-specific additions:
+
+- H executes cloud API calls — H is an offline structural check; calling `jdc` (or any API) from H
+  risks side-effects and contradicts its stateless design
+- H rewrites G's command — H must flag hallucinations, not mutate the command. Fixes come from G
+  (re-generation) or the Orchestrator (HALT → manual intervention)
+- H checks skipped for safety-critical ops — parameter existence is MANDATORY for all `required`
+  and `recommended` skills; skipping it for destructive ops defeats the purpose
+
+### 11. Reflexion Integration (Lightweight Reflexion) — Phase 7
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory. This is a lightweight adaptation of the Reflexion pattern
+> (Shinn et al. 2023) — using structured text files instead of vector memory.
+
+#### 11.1 Motivation
+
+| Gap | Current State | Reflexion Solution |
+|-----|---------------|-------------------|
+| CLI parameter errors repeat across sessions | §10 documents known patterns, but new patterns aren't auto-captured | Extract from GCL traces → persist in [docs/failure-patterns.md](docs/failure-patterns.md) |
+| Skill generation repeats structural issues | Self-Review catches them per-session, but doesn't remember | Record in failure-patterns.md §2 → prevent next generation |
+| Cross-skill composition failures | Documented in SKILL.md, but not centralized | Centralize in failure-patterns.md §3 |
+
+#### 11.2 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 11.3 Failure Pattern Schema
+
+Each pattern in `docs/failure-patterns.md` follows this structure:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `category` | enum | ✅ | `cli_parameter` \| `skill_generation` \| `cross_skill` \| `runtime` \| `token_efficiency` |
+| `skill` | string | ✅ | Skill name (e.g. `jdcloud-audit-ops`) |
+| `command` | string | ❌ | The command that failed (for CLI errors) |
+| `error` | string | ✅ | Error message or pattern description |
+| `fix` | string | ✅ | How to fix or prevent this error |
+| `count` | int | ✅ | Frequency count (pruned when < 3) |
+| `reusable` | bool | ✅ | Whether this pattern is generalizable |
+
+#### 11.4 Maintenance Rules
+
+| Rule | Description |
+|------|-------------|
+| **Token budget** | `docs/failure-patterns.md` ≤ 200 lines. When exceeded, prune patterns with `count < 3` |
+| **Dedup** | Before adding, check if pattern exists (match by `skill` + `command` + `error`). If exists, increment `count` |
+| **Source** | Patterns come from: (1) GCL trace `failure_pattern` field, (2) Self-Review Round 3 Lessons Learned |
+| **Review** | Patterns are reviewed monthly. Patterns with `count ≥ 10` are candidates for promotion to §10 Hallucination Detection rules |
+
+#### 11.5 Pre-flight Retrieval (Optional)
+
+During GCL Pre-flight (§4 step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidTimeRange: Limit startTime/endTime ≤ 90 days (retention limit)
+- Sensitive data leakage: Apply mask_sensitive() to requestParameters before output
+- Large result set timeout: Always use pageNumber/pageSize (≤100) for pagination"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+#### 11.6 Relationship with Other GCL Layers
+
+| Layer | Timing | Learning Scope | Reflexion Complement |
+|-------|--------|----------------|---------------------|
+| **GCL (Generator-Critic)** | Per-execution | Within-session | — |
+| **H (Hallucination Detector)** | Pre-execution | Structural patterns | Reflexion feeds high-frequency H failures into §10 knowledge base |
+| **Self-Review (§11)** | Per-update | Skill authoring | Reflexion captures patterns from Self-Review discoveries |
+| **Reflexion Memory** | Cross-session | Persistent failure patterns | Aggregates from all above sources |
+
+#### 11.7 Anti-Patterns
+
+- ❌ **Reflexion as mandatory gate** — Pattern retrieval is optional, not a blocking gate
+- ❌ **Unbounded memory** — Hard cap at 200 lines; prune low-frequency patterns
+- ❌ **Subjective pattern extraction** — Patterns must come from structured GCL traces or Self-Review records, not ad-hoc observations
+- ❌ **Pattern hoarding** — If a pattern is promoted to §10 Hallucination Detection rules, remove from failure-patterns.md to avoid duplication
+
+### 12. Rollout Roadmap
+
+- **Phase 1** ✅ — add this section to `AGENTS.md`; pilot on **`jdcloud-vm-ops` only** (most representative
   destructive workload) with its `prompt-templates.md` and `rubric.md`. `jdcloud-redis-ops` follows in the next PR.
-- **Phase 2** — add `scripts/gcl_runner.py` as a reusable Orchestrator
-- **Phase 3** — feed `gcl-trace-*.json` into `jdcloud-audit-ops` for quality dashboards
-- **Phase 4** — wire rubric pass-rate to Cloud Monitor alarms (real incidents refine thresholds)
+- **Phase 2** ✅ — add `scripts/gcl_runner.py` as a reusable Orchestrator
+- **Phase 3** ✅ — feed `gcl-trace-*.json` into `jdcloud-audit-ops` for quality dashboards
+- **Phase 4** ✅ — wire rubric pass-rate to Cloud Monitor alarms (real incidents refine thresholds)
+- **Phase 5** ✅ — GCL rollout extended to all `recommended` skills (CLB, CloudMonitor, OSS, FC, WAF, APIGateway, JCQ, LogService, VPN, DNS, Cert). Each gets lean `references/rubric.md` + `references/prompt-templates.md` + `## Quality Gate (GCL)` section with `max_iter=3`.
+- **Phase 6** ✅ — **Hallucination Detection Layer (H)** shipped. §10 added to spec; `scripts/gcl_runner.py` extended with `--enable-hallucination-check` flag and `hallucination_detect()` function (parameter existence, JSON structure, time range validity). Every `required`/`recommended` skill now gets a `HALLUCINATION_ABORT` exit path in addition to the existing `SAFETY_FAIL`.
+- **Phase 7** ✅ — **Lightweight Reflexion Integration** shipped. §11 added to spec; `docs/failure-patterns.md` created as centralized Reflexion memory; GCL trace schema extended with `failure_pattern` field; Pre-flight updated with optional pattern retrieval. Cross-session failure pattern learning enabled.
+- **Phase 8** ✅ — **jdcloud-audit-ops complete GCL rollout**: Enhanced with 8 dimensions (5 core + 3 Aliyun-specific extensions); added per-operation Safety sub-rules; added worked examples; integrated Phase 6 H layer (optional for audit-ops) and Phase 7 Reflexion; aligned with aliyun-skills GCL v1.9.0 pattern.
 
-### 11. Changelog
+### 13. Changelog
 
 | Version | Date | Change |
 |---|---|---|
 | 1.9.1 | 2026-06-10 | Added `jdcloud-dns-ops` and `jdcloud-cert-ops` skills with full GCL support (recommended, max_iter=3). DNS covers domain/record CRUD, batch operations, monitoring. Cert covers certificate lifecycle and expiry cruise with CLB/CDN cross-service binding discovery. Updated repo layout template to include all 8 reference files. |
+| 2.0.0 | 2026-06-18 | **Complete GCL v2 rollout for jdcloud-audit-ops**: Phase 6 (Hallucination Detection Layer H) + Phase 7 (Lightweight Reflexion Integration) fully integrated. Added §10 H layer spec (CLI parameter existence, JSON structure compliance, time range validity); added §11 Reflexion spec (cross-session failure memory via `docs/failure-patterns.md`); enhanced §2 Roles with H role; enhanced §4 Loop Flow with [1.5] H gate; added `HALLUCINATION_ABORT` termination condition; added 6 new anti-patterns (H-specific + Reflexion-specific); updated jdcloud-audit-ops SKILL.md/rubric.md/prompt-templates.md with 8 dimensions (5 core + 3 Aliyun-specific extensions), per-operation Safety sub-rules, worked examples, and H layer prompt template. Aligned with aliyun-skills GCL v1.9.0 pattern. |
 | 1.0.0 | 2026-06-04 | Initial GCL specification added to AGENTS.md (Correctness threshold relaxed to ≥0.5; pilot scoped to `jdcloud-vm-ops`) |
 | 1.1.0 | 2026-06-04 | `jdcloud-redis-ops` rollout: added `references/rubric.md` and `references/prompt-templates.md`; `## Quality Gate (GCL)` chapter inserted; per-op Safety rules for spec-shrink and cross-instance restore |
 | 1.2.0 | 2026-06-04 | `jdcloud-mysql-ops` rollout: rubric expanded to cover DDL/DML paths (instance-level + SQL-level); WHERE-clause check and DDL confirm gates added; prompt templates include pre-check + transaction + affected_rows rules |
