@@ -10,8 +10,8 @@ compatibility: >-
   access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`).
 metadata:
   author: buhaiqing
-  version: "1.5.0"
-  last_updated: "2026-06-04"
+  version: "1.6.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Multi-Product API"
   cli_applicability: jdc-first-with-fallback
@@ -486,9 +486,11 @@ result = run_mcp(
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-tag-audit-ops` (optional) |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `create DOPS ticket` | only mutating op |
+| `hallucination_check` | **optional** | Phase 6 H layer; optional for this skill |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -497,25 +499,137 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc <product> (primary) → SDK (after 3 fails)
+   │                              generate command/payload (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for tag-audit-ops)   - CLI parameter existence
+   │                                    - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<5 & not all pass → RETRY (inject suggestions)
-   └─ iter=5 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated jdc/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Check Categories (for tag-audit-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` in `jdc <product>` commands exists | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For DOPS ticket payload fields | Validate field names match DOPS API spec |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-tag-audit-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter|runtime|cross_skill",
+    "skill": "jdcloud-tag-audit-ops",
+    "command": "jdc --output json <product> describe-instances ...",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
 ```
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
@@ -524,13 +638,14 @@ The GCL **wraps** the jdc-first / SDK-fallback flow defined under
 executor. The Critic (C) is a new, read-only role with no `jdc` / SDK /
 DOPS access. The Orchestrator (O) owns the loop and persists the GCL
 trace.
+The Hallucination Detector (H) is an optional pre-execution structural check.
 
 ### Operation-specific behavior
 
 - **`audit tag compliance`** (read-only) — Product + region + required
   tag + required value MUST be explicit. Each product/region MUST be in
   the `Supported Products` / `Supported Regions` list. For each
-  resource, classify pass/fail deterministically.
+  resource, classify pass/fail deterministically. H layer validates product/region parameters before execution.
 - **`generate audit report`** (read-only) — Output: pass count, fail
   count, fail list with resource id + missing tag + actual value.
 - **`create DOPS ticket for non-compliant resources`** (mutating) —
@@ -538,7 +653,7 @@ trace.
   Each ticket payload MUST include: resource id, missing tag, actual
   value, suggested remediation, urgency level. Safety = 0 without
   `confirm=CREATE_DOPS_TICKET` in trace → ABORT. Duplicate ticket
-  without opt-in → Idempotency = 0 → ABORT.
+  without opt-in → Idempotency = 0 → ABORT. H layer validates DOPS ticket payload structure before execution.
 
 ## Prerequisites
 
@@ -562,6 +677,7 @@ uv pip install jdcloud_cli jdcloud_sdk
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.6.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, optional) and Phase 7 Reflexion Integration. Added pre-execution structural validity check. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.5.0 | 2026-06-04 | **GCL rollout (optional)**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, audit + report + DOPS ticket creation with duplicate-ticket idempotency check) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=5`. `safety_confirm_required=true` for `create DOPS ticket` (the only mutating op). |
 | 1.4.0 | 2026-06-03 | Added Elasticsearch tag audit support |
 | 1.3.0 | 2026-06-03 | Added MongoDB tag audit support |

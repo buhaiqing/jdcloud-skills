@@ -14,8 +14,8 @@ compatibility: >-
   已配置 JDC_ACCESS_KEY / JDC_SECRET_KEY / JDC_REGION。
 metadata:
   author: buhaiqing
-  version: "0.3.0"
-  last_updated: "2026-06-10"
+  version: "0.4.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
@@ -57,6 +57,7 @@ metadata:
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.4.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, optional) and Phase 7 Reflexion Integration. Added pre-execution structural validity check. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 0.3.0 | 2026-06-10 | **§1.3 联动 + 8/8 refs 补齐**：R1 两段式全面同步；R3 业务 tag 全局使用 `business=core/important/general/peripheral`；新增 4 个 ref：`api-sdk-usage.md` / `integration.md` / `monitoring.md` / `troubleshooting.md`。术语统一：抑制层用"降档 (demote)"，CLI/SDK 切换用"fallback"。 |
 | 0.2.0 | 2026-06-04 | **GCL 推广（optional）**：新增 `## Quality Gate (GCL)` 章节接入仓库级 GCL。新增 `references/rubric.md` 和 `references/prompt-templates.md`。`max_iterations=5`。`safety_confirm_required=false`（read-only by mandate）。 |
 | 0.1.0 | 2026-06-03 | 初版：聚合 / 分级 / 抑制 / 报告四件套；规则引擎实现，ML 留 v0.3 |
@@ -300,9 +301,11 @@ jdc --output json monitor describe-alarm-history \
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-alert-intelligence` (optional, read-only) |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **false** | read-only by mandate |
+| `hallucination_check` | **optional** | Phase 6 H layer; optional for this read-only skill |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -311,25 +314,137 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify workflow step
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc monitor (primary) → SDK (after 3 fails)
+   │                              generate command/payload (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for alert-intelligence)  - CLI parameter existence
+   │                                      - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<5 & not all pass → RETRY (inject suggestions)
-   └─ iter=5 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated jdc/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud Monitor API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Check Categories (for alert-intelligence):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` in `jdc monitor` commands exists | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For alarm history query parameters | Validate field names match Monitor API spec |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-alert-intelligence)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter|runtime|cross_skill",
+    "skill": "jdcloud-alert-intelligence",
+    "command": "jdc --output json monitor describe-alarm-history ...",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
 ```
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
@@ -337,11 +452,12 @@ The GCL **wraps** the 5-step **工作流** defined above. The Generator (G) IS
  the existing jdc-or-SDK executor that fetches alert data. The Critic (C)
 audits the produced report's citations and completeness. The Orchestrator
 (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is an optional pre-execution structural check.
 
 ### Workflow-step-specific behavior
 
 - **Step 1. 加载时间窗告警** — Time window MUST be explicit; default 24h;
-  max 15d. Time window > 15d → ABORT.
+  max 15d. Time window > 15d → ABORT. H layer validates time window ≤ 15d before execution.
 - **Step 2. 聚合** — Aggregation key `(service, resource, metric)` MUST be
   complete for every cluster. Dropped clusters MUST cite a suppression
   rule.
@@ -352,4 +468,4 @@ audits the produced report's citations and completeness. The Orchestrator
 - **Step 5. 报告输出** — Every P0/P1 cluster MUST have a 下一跳建议 pointing
   to a specific `jdcloud-*-ops` operation. The report MUST NOT recommend
   `delete` / `disable` / `modify` on an alert rule (this skill is
-  read-only by mandate).
+  read-only by mandate). H layer validates report does not contain mutation recommendations.

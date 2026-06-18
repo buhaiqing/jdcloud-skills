@@ -1,6 +1,6 @@
 ---
 name: "jdcloud-aiops-cruise"
-version: "1.5.0"
+version: "1.6.0"
 metadata:
  description: "JD Cloud 全链路巡检 Skill —覆盖 EIP审计/CLB升级评估/VM/K8s/Redis/NAT/安全组的自动拓扑发现与深度诊断"
  cli_applicability: "partial"
@@ -99,81 +99,183 @@ metadata:
 
 ## Quality Gate (GCL)
 
-> 本 Skill 是 **optional GCL（read-only）**巡检，不是 required GCL写操作 Skill。
->巡检产出物（报告、建议）面向人工审查，不需要 CI强制门控；但建议在生产客户巡检中启用 GCL，
->验证 Safety / Traceability / Spec Compliance三大维度。
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this read-only skill (per
+> `AGENTS.md` §8).
 
-### GCL 设置
+### Parameters (override `AGENTS.md` §8 defaults)
 
-| 参数 | 值 | 说明 |
+| Parameter | Value | Reason |
 |---|---|---|
-|启用模式 | **optional (read-only)** | CI 不强制；可在本地 / staging启用 |
-| `max_iterations` | **3** | 默认3轮迭代；超过返回 best-so-far |
-| Trace落盘路径 | `<repo-root>/audit-results/gcl-trace-<YYYYMMDD-HHMMSS>.json` |统一审计追踪 |
-| Prompt模板 | `references/prompt-templates.md` | Generator / Critic / Orchestrator 三套 |
-| Rubric 实例 | `references/rubric.md` |5维框架 + 本 skill专属 Safety规则 |
+| `max_iterations` | **5** | `AGENTS.md` §8 default for optional skills |
+| `rubric_version` | `v2` | see [references/rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified trace path |
+| `safety_confirm_required` | **false** | read-only cruise; no mutations |
+| `hallucination_check` | **optional** | Phase 6 H layer; optional for this read-only skill |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
-### Rubric（5维）
+### Loop overview
 
-|维度 |阈值 |含义 |
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │                              optionally load failure-patterns.md
+   ▼
+[1] Generator (G)            ──► Python scripts (Phase 1 sniff + Phase 2 analyze)
+   │                              generate cruise commands (DO NOT execute mutations)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for aiops-cruise)    - CLI parameter existence (for jdc commands)
+   │                                   - JSON structure compliance
+   │                                   - script import path validity
+   │
+   ├── PASS → [1a] Execute (run the script/command)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │                              score every rubric dimension
+   │                              assess test accuracy + regression gate
+   ▼
+[3] Orchestrator decider
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated cruise commands that contain structurally invalid elements
+> **before** they reach the JD Cloud API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Check Categories (for aiops-cruise):**
+
+| Category | Check | Method |
 |---|---|---|
-| **Correctness** | ≥0.5 | finding 与人工复核一致 |
-| **Safety** | **=1（强制）** | 未执行资源变更、未泄露 `SECRET_KEY`、未返回/持久化跨客户或全账号原始资源清单 |
-| **Idempotency** | ≥0.8 |相同输入不同时间执行产出一致结论 |
-| **Traceability** | ≥0.8 |报告含完整执行上下文（命令 / 参数 /原始响应） |
-| **Spec Compliance** | ≥0.8 |严格遵循 runbook 与 AGENTS.md路径约定 |
+| **CLI Parameter Existence** | Verify every `--flag` in `jdc <product>` commands exists | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For script input/output JSON payloads | Validate field names match API spec |
+| **Script Import Path Validity** | Verify `sys.path` imports follow three-phase directory structure | Check `_project_dir` pattern per AGENTS.md |
 
-> **Safety =0 必须无条件 ABORT**。即使巡检为只读，只要出现变更调用、敏感信息泄露、或跨客户/全账号原始资源数据被返回或持久化，Safety 即为0；不允许"best-effort"返回部分结果。
+**Termination:**
 
-### Safety 红线（本 skill专属）
-
-|严禁动作 |后果 |替代 |
+| Condition | Exit Code | Action |
 |---|---|---|
-|任何资源的删除 /释放 /停止 / 重启 | Safety =0 → ABORT | `jdcloud-vm-ops` / `jdcloud-clb-ops` / `jdcloud-eip-ops` 等 |
-|任何资源的升配 /降配 /规格变更 | Safety =0 → ABORT | 同上 |
-| EIP / CLB 后端的绑定 / 解绑 /摘除 | Safety =0 → ABORT | `jdcloud-eip-ops` / `jdcloud-clb-ops` |
-|任何 DDL（CREATE INDEX / VACUUM FULL / DROP） | Safety =0 → ABORT | `jdcloud-mysql-ops` / `jdcloud-postgresql-ops` |
-| 修改 / 删除 /禁用告警规则 | Safety =0 → ABORT | `jdcloud-cloudmonitor-ops` |
-|打印完整 `SECRET_KEY` / 返回跨客户原始清单 | Safety =0 → ABORT | 仅 `<masked>` + 按客户范围最小化输出 |
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
 
-###终止条件（按优先级）
+**Trace Integration:**
 
-|条件 |触发 |行为 |
-|---|---|---|
-| **SAFETY_FAIL** | Safety =0 |立即 ABORT，不返回任何结果 |
-| **PASS** | 所有维度 ≥阈值 | 返回 Generator 结果 |
-| **MAX_ITER** | iter ≥3 | 返回 best-so-far + 未解决 rubric 项 |
-| **RETRY** | 任一维度 <阈值 且 iter <3 | 将 Critic反馈注入 Generator 重试 |
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
 
-### GCL Prompt
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] },
+      "script_imports": { "status": "PASS|FAIL", "invalid_paths": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
 
-- Generator Prompt：`references/prompt-templates.md`（执行器）
-- Critic Prompt：`references/prompt-templates.md`（独立审计员，**不可见用户原始请求**）
-- Orchestrator Prompt：`references/prompt-templates.md`（循环控制 + Safety FAIL优先决策）
-- Rubric详细定义：`references/rubric.md`
+### Reflexion Integration (Lightweight Reflexion)
 
-###跨 Skill GCL兼容性
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
 
-| Skill | GCL 设置 | 与本 skill 的差异 |
-|---|---|---|
-| `jdcloud-vm-ops` / `jdcloud-redis-ops` / `jdcloud-mysql-ops` | required / max_iter=2 |写操作，需要 Safety 双门 |
-| `jdcloud-clb-ops` / `jdcloud-cloudmonitor-ops` | recommended / max_iter=3 |写操作但风险中等 |
-| `jdcloud-alert-intelligence` / `jdcloud-audit-ops` | optional / max_iter=5 | 只读，但本 skill 是全链路跨产品，更严格 |
-| **`jdcloud-aiops-cruise`** | **optional / max_iter=3** | 只读 +跨产品 + 数据最小化强制 |
+**Architecture:**
 
-### 本 skill 不强制 GCL 的原因
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-1. **只读边界明确** —任何变更调用都需走对应 ops skill，违反即 Safety FAIL。
-2. **人工终审** —报告由人工审阅后再委托执行，GCL主要是审计追踪而非阻塞门。
-3. **跨产品数据量大** — 单次巡检可达上百资源，强制 GCL 会显著拖慢 CI。
-4. **历史溯源靠 runbook Changelog** —阈值/场景变更通过 SemVer + runbook 版本控制保证。
+**Pre-flight Retrieval (Optional):**
 
-> 生产客户巡检建议**手动启用 GCL**（`--gcl`标志），并将 trace落盘供事后审计。
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-aiops-cruise)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter|runtime|cross_skill",
+    "skill": "jdcloud-aiops-cruise",
+    "command": "python scripts/01-perceive/cruise_sniff.py ...",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the two-phase execution flow (Phase 1 sniff + Phase 2 analyze) defined under
+`## Execution Flow` above. The Generator (G) IS the existing Python script executor.
+The Critic (C) is a new, read-only role with no execution access.
+The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is an optional pre-execution structural check.
+
+### Operation-specific behavior
+
+- **Phase 1: 嗅探 (Perceive)** — Resource discovery via `cruise_sniff.py`. MUST use customer tag filter. H layer validates CLI parameters for all `jdc` discovery commands. MUST NOT return/persist full-account resource lists; output scoped to customer.
+- **Phase 2: 深度巡检 (Reason)** — Analysis via `cruise_link.py` + analyzers. MUST follow three-phase import path convention (`_project_dir` pattern). H layer validates script import paths. MUST NOT execute any mutation (delete/stop/resize/bind).
+- **Phase 3: 执行建议 (Execute)** — Read-only suggestions only. MUST delegate all mutations to corresponding ops skills. H layer validates no mutation commands are generated.
 
 ## Changelog
 
 | 版本 | 日期 |变更 |
 |---|---|---|
+|1.6.0 |2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, optional) and Phase 7 Reflexion Integration. Added pre-execution structural validity check. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 |1.5.0 |2026-06-10 |补齐8/8 refs（新增 core-concepts.md / cli-usage.md / api-sdk-usage.md / monitoring.md / rubric.md）；强化 ## Quality Gate (GCL)章节：optional模式 + max_iter=3 + Safety 红线 +终止条件表 +跨 Skill兼容性；与 AGENTS.md GCL §3框架完全对齐 |
 |1.4.0 |2026-06-09 | 新增 CLB升级评估/建议（runbook07）与 EIP审计（runbook08）；EIP纳入发现；Monitor serviceCode显式化；修复 CLB 健康后端 datetime路径 |
 |1.3.0 |2026-06-08 | 新增 PostgreSQL巡检场景（runbook06），新增 rds_postgresql_analyzer，支持 PostgreSQL 实例健康检查、慢查询分析、VACUUM状态检查 |

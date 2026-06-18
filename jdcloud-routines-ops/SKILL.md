@@ -1,6 +1,6 @@
 ---
 name: jdcloud-routines-ops
-version: "1.3.0"
+version: "1.4.0"
 metadata:
   displayName: 京东云日常运维
   description: 京东云日常运维场景集：资源到期巡检、资源盘点（账单分析已委托给 jdcloud-billing-ops）
@@ -323,9 +323,21 @@ find ~/.jdcloud-routines-ops/outputs -type f -mtime +30 -delete
 
 ## Quality Gate (GCL)
 
-> **本 skill 采用 optional GCL**：排程驱动的常规巡检不需要走 GCL 循环；
-> 但 on-demand 操作员触发的巡检、以及"续费决策前置"巡检，**建议 / 必须**
-> 走 GCL。
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this read-only skill (per
+> `AGENTS.md` §8).
+
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **5** | `AGENTS.md` §8 default for optional skills |
+| `rubric_version` | `v2` | see [references/rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified trace path |
+| `safety_confirm_required` | **false** | read-only by default; renewal flows must confirm via delegated ops skills |
+| `hallucination_check` | **optional** | Phase 6 H layer; optional for this read-only skill |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### GCL 触发条件
 
@@ -335,30 +347,158 @@ find ~/.jdcloud-routines-ops/outputs -type f -mtime +30 -delete
 | 操作员 on-demand 调用 | **推荐** |
 | 续费 / 替换决策前置巡检 | **必须** |
 
-### Rubric（5 维 + 安全门）
+### Loop overview
 
-| 维度 | 阈值 | 说明 |
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │                              optionally load failure-patterns.md
+   ▼
+[1] Generator (G)            ──► jdc CLI (primary) → SDK (after 3 fails)
+   │                              generate cruise commands (DO NOT execute mutations)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for routines-ops)    - CLI parameter existence
+   │                                   - JSON structure compliance
+   │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │                              score every rubric dimension
+   │                              assess test accuracy + regression gate
+   ▼
+[3] Orchestrator decider
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated jdc/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Check Categories (for routines-ops):**
+
+| Category | Check | Method |
 |---|---|---|
-| **Correctness** | ≥ 0.5 | `summary.total_expiring == len(details)`；`days_left` 数学正确 |
-| **Safety** | = 1 | 纯读-only；不打印 `JDC_SECRET_KEY`；报告不外泄跨客户数据 |
-| **Idempotency** | ≥ 0.5 | 重跑得到相同 schema / 相同 summary（modulo `days_left`） |
-| **Traceability** | ≥ 0.5 | 报告含 `report_time` / `warning_days` / `regions_checked` / `types_checked` / `customer_filter` / `summary` / `details[]` |
-| **Spec Compliance** | ≥ 0.5 | jdc-first with SDK fallback；Python 3.10；无 `--no-interactive`；`sys.path` 合规 |
+| **CLI Parameter Existence** | Verify every `--flag` in `jdc <product>` commands exists | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For cruise script input/output JSON | Validate field names match API spec |
 
-> **Safety = 0 必须无条件 ABORT**。即使巡检为只读，只要出现变更调用、
-> 敏感信息泄露、或报告路径外泄，Safety 即为 0。
+**Termination:**
 
-### 循环参数
-
-| 参数 | 值 | 来源 |
+| Condition | Exit Code | Action |
 |---|---|---|
-| `max_iterations` | **3** | AGENTS.md §8 default for `jdcloud-routines-ops` |
-| Trace 路径 | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | AGENTS.md §6 |
-| Rubric 版本 | `v1` | `references/rubric.md` |
-| Prompt 模板 | `references/prompt-templates.md` | — |
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
 
-详见 [`references/rubric.md`](references/rubric.md) 与
-[`references/prompt-templates.md`](references/prompt-templates.md)。
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-routines-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter|runtime|cross_skill",
+    "skill": "jdcloud-routines-ops",
+    "command": "python scripts/expiry_cruise.py ...",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
+executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
+access. The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is an optional pre-execution structural check.
+
+### Operation-specific behavior
+
+- **资源到期巡检 (Expiry Cruise)** — Read-only. H layer validates CLI parameters for all `jdc` discovery commands. MUST use `--customer` filter. MUST NOT execute any mutation. Report MUST include `report_time` / `warning_days` / `regions_checked` / `types_checked` / `summary` / `details[]`.
+- **资源盘点 (Resource Inventory)** — Read-only. Same constraints as expiry cruise.
+- **续费决策前置巡检** — GCL **必须** enabled. H layer validates all parameters before execution. Renewal recommendations MUST be delegated to corresponding ops skills with human confirmation.
 
 ---
 
@@ -382,6 +522,7 @@ find ~/.jdcloud-routines-ops/outputs -type f -mtime +30 -delete
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.4.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, optional) and Phase 7 Reflexion Integration. Added pre-execution structural validity check. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.3.0 | 2026-06-10 | **重构**：账单分析功能委托给 `jdcloud-billing-ops`；更新 description 和 Cross-Skill Delegation 表；本 skill 专注于资源到期巡检和资源盘点 |
 | 1.2.0 | 2026-06-10 | 新增 [references/code-patterns.md](references/code-patterns.md) 提供 5 个脚本开发模式模板；重构 `expiry_cruise.py` 为配置驱动模式；更新 `lib/jdc_client.py` 增加 `--input-json` 和多步骤询价支持 |
 | 1.1.0 | 2026-06-09 | 添加 MongoDB 和 Elasticsearch 到期巡检；默认 types 增加 mongodb,elasticsearch |

@@ -17,8 +17,8 @@ compatibility: >-
   frontmatter conventions.
 metadata:
   author: buhaiqing
-  version: "1.6.0"
-  last_updated: "2026-06-04"
+  version: "1.7.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: meta-skill
 ---
@@ -404,10 +404,12 @@ Optional later improvements (not required to start): PR template checkbox linkin
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-skill-generator` (optional, meta); generation is iterative and benefits from up to 3 retries |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `max_iterations` | **5** | `AGENTS.md` §8 default for optional skills |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **false** | output is the generated `*.md` content; the human user decides whether to commit |
+| `hallucination_check` | **optional** | Phase 6 H layer; optional for this meta-skill |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -416,25 +418,140 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify generation step
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc <product> --help (for verification)
+   │                              generate skill content (DO NOT commit yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for skill-generator)   - CLI parameter existence (for verified commands)
+   │                                     - JSON structure compliance
+   │                                     - secret leak detection
    │
+   ├── PASS → [1a] Execute (output generated content)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<3 & not all pass → RETRY (inject suggestions)
-   └─ iter=3 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated skill content that contains structurally invalid elements
+> **before** they are output. This is a **pre-execution** gate placed between
+> G's generation and actual output.
+
+**Check Categories (for skill-generator):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify jdc commands in generated content use correct parameters | Compare against `jdc <product> --help` output |
+| **JSON Structure Compliance** | For API response examples in generated content | Validate field names match OpenAPI spec |
+| **Secret Leak Detection** | Ensure no `.env` values, secret keys, access-key ids, passwords, or PII | Hard rule per `references/critical-jdc-cli-notes.md` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] },
+      "secret_leak": { "status": "PASS|FAIL", "leaked_fields": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-skill-generator)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "skill_generation|runtime|cross_skill",
+    "skill": "jdcloud-skill-generator",
+    "command": "...",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
 ```
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
@@ -443,19 +560,20 @@ above. The Generator (G) IS the existing generation agent. The Critic (C)
 audits the generated `*.md` content for OpenSpec compliance, secret
 leakage, and 2-round self-review completion. The Orchestrator (O) owns
 the loop and persists the GCL trace.
+The Hallucination Detector (H) is an optional pre-execution structural check.
 
 ### Generation-step-specific behavior
 
 - **Step 0. Environment Setup** — Verifies Python 3.10 (not 3.12) and
-  `uv` available. Never logs credentials.
+  `uv` available. Never logs credentials. H layer validates no credential leakage.
 - **Step 1. Source Analysis** — OpenAPI URL + jdc help output + SDK
   module list ALL captured in trace.
 - **Step 2. Operation Mapping** — Every operationId mapped to a real
-  jdc command + SDK method. Cross-checked against both sources.
+  jdc command + SDK method. Cross-checked against both sources. H layer validates command existence.
 - **Step 3. SKILL.md Generation** — Generated SKILL.md passes Agent
   Skill OpenSpec; **NEVER includes any `.env` value, secret key,
   access-key id/secret, password, or PII** (hard rule per
-  `references/critical-jdc-cli-notes.md`).
+  `references/critical-jdc-cli-notes.md`). H layer performs secret leak detection.
 - **Step 4. References Generation** — Generated `cli-usage.md` /
   `api-sdk-usage.md` / `core-concepts.md` / `troubleshooting.md` (at
   minimum) with verified commands and imports.
@@ -466,6 +584,7 @@ the loop and persists the GCL trace.
 
 | Version | Date | Change |
 |---|---|---|
+| 1.7.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, optional) and Phase 7 Reflexion Integration. Added pre-execution structural validity check. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.6.0 | 2026-06-04 | **GCL rollout (optional)**: Added `## Quality Gate (GCL)` chapter wiring this meta-skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, secret-leak guard, OpenSpec + 2-round self-review enforcement) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=3`. `safety_confirm_required=false` (output is generated `*.md` content; the human user decides whether to commit). |
 | 1.5.0 | 2026-05-06 | (pre-existing; details in repo history) |
 

@@ -9,8 +9,8 @@ compatibility: >-
   JD Cloud Python SDK (3.10+), network access to billing endpoints.
 metadata:
   author: jdcloud
-  version: "1.0.1"
-  last_updated: "2026-06-10"
+  version: "1.1.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile:
     name: "JD Cloud Billing API v1"
@@ -284,17 +284,18 @@ export JDC_ACCESS_KEY="..." JDC_SECRET_KEY="..."
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
-> The quality gate is **optional** for billing queries (read-only, per `AGENTS.md` §8),
-> and **recommended** for cost estimation and automated reports.
+> The quality gate is **optional** for this read-only skill (per `AGENTS.md` §8).
 
-### Parameters
+### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-billing-ops` (optional, read-only) |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
-| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
-| `safety_confirm_required` | **false** for all queries | read-only skill; no mutations |
+| `max_iterations` | **5** | `AGENTS.md` §8 default for optional skills |
+| `rubric_version` | `v2` | see [references/rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified trace path |
+| `safety_confirm_required` | **false** | read-only billing queries; SDK-only |
+| `hallucination_check` | **optional** | Phase 6 H layer; optional for this read-only skill |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -303,43 +304,161 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, select SDK operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► SDK-only (billing not exposed via jdc CLI)
+   │                              generate SDK call (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for billing-ops)     - SDK method existence
+   │                                   - JSON parameter structure compliance
+   │                                   - date range validity
    │
+   ├── PASS → [1a] Execute (run the SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<3 & not all pass → RETRY (inject suggestions)
-   └─ iter=3 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud Billing API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Check Categories (for billing-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **SDK Method Existence** | Verify SDK method exists in billing module | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Parameter Structure** | For SDK call parameters | Validate field names match Billing API spec |
+| **Date Range Validity** | Ensure date ranges are within billing query limits | Parse dates and compute delta |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "sdk_methods": { "status": "PASS|FAIL", "unrecognized_methods": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] },
+      "date_range": { "status": "PASS|FAIL", "delta_days": 30 }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-billing-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "runtime|cross_skill",
+    "skill": "jdcloud-billing-ops",
+    "command": "billing_client.describe_balance(...)",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
 ```
 
 ### Artifacts
 
-- Rubric: [references/rubric.md](references/rubric.md)
-- Prompt templates: [references/prompt-templates.md](references/prompt-templates.md)
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
-The GCL **wraps** the SDK-only execution flow. Generator (G) IS the existing SDK executor. Critic (C) is read-only.
+The GCL **wraps** the SDK-only execution flow. Generator (G) IS the existing SDK executor.
+Critic (C) is read-only. The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is an optional pre-execution structural check.
 
 ### Operation-specific behavior
 
-- **Balance query** — Read-only. Safety = 1 automatically. No mutation risk.
-- **Consumption summary** — Read-only. Date range must be ≤ 1 month.
-- **Bill details** — Read-only. Same date range constraint.
+- **Balance query** — Read-only. Safety = 1 automatically. No mutation risk. H layer validates SDK method existence.
+- **Consumption summary** — Read-only. Date range must be ≤ 1 month. H layer validates date range.
+- **Bill details** — Read-only. Same date range constraint. H layer validates date range.
 - **Voucher query** — Read-only. Never log voucher amounts in combination with identifiable info.
-- **Cost estimation** — Read-only. No actual resource changes; just price calculation.
-- **Automated report** — Aggregates multiple queries. Ensure total amounts match sum of parts.
+- **Cost estimation** — Read-only. No actual resource changes; just price calculation. H layer validates no mutation parameters.
+- **Automated report** — Aggregates multiple queries. Ensure total amounts match sum of parts. H layer validates all sub-query parameters.
 
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, optional) and Phase 7 Reflexion Integration. Added pre-execution structural validity check. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.0.1 | 2026-06-10 | Fix frontmatter: add cli_version_locked, sdk_version_locked, cli_support_evidence, structured api_profile with endpoint URL. Expand GCL Quality Gate from stub to full section. Create scripts/cost_optimizer.py with executable plan_a/b/c functions. |
 | 1.0.0 | 2026-06-10 | Initial release |
 
