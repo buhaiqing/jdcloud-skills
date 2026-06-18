@@ -13,7 +13,7 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.2.0"
+  version: "1.3.0"
   last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud CLB API v1 - https://lb.jdcloud-api.com/v1"
@@ -171,7 +171,8 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.3.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.2.0 | 2026-06-18 | Initial GCL v2 content: Added Phase 6 H layer and Phase 7 Reflexion sections to Quality Gate. |
 | 1.1.0 | 2026-06-04 | **GCL rollout (recommended)**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, CLB-specific rules for `delete-lb` traffic cut, `deregister-targets` >50% DRAIN guard, `register-targets` non-running backend refusal) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=3` (per `AGENTS.md` §8 recommended). `safety_confirm_required=true` for `delete-lb`, `deregister-targets` (>50%). |
 | 1.0.0 | 2026-05-06 | Initial version with jdc-first execution and SDK fallback for CLB operations |
 

@@ -15,7 +15,7 @@ compatibility: >-
   to JD Cloud endpoints, and official JD Cloud CLI (jdc) for this product.
 metadata:
   author: buhaiqing
-  version: "1.6.0"
+  version: "1.7.0"
   last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
@@ -57,7 +57,8 @@ metadata:
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
-| 1.6.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.7.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.6.0 | 2026-06-18 | Initial GCL v2 content: Added Phase 6 H layer and Phase 7 Reflexion sections to Quality Gate. |
 | 1.5.0 | 2026-06-10 | **双向路由与 GCL 章节重构**：① frontmatter 增加 `parent_skill: null` + `ecosystem_skills`（包含 `jdcloud-alert-intelligence`）;② "不应使用本 Skill 的场景"表新增两条指向 `jdcloud-alert-intelligence` 的委派规则（告警后处理 / 告警历史趋势分析）；③ `## Quality Gate (GCL)` 章节原本被 `## Smart Fallback Strategy` 拆断（出现"continued"续接），本次将 loop diagram / Artifacts / Integration / Operation-specific behavior 完整整合进 GCL 章节，删除续接；④ Reference 目录补充 `rubric.md` 与 `prompt-templates.md` 链接（达成 8/8 ref 校验）。 |
 | 1.4.0 | 2026-06-04 | **GCL 推广（recommended）**：新增 `## Quality Gate (GCL)` 章节，将本 skill 接入仓库级 Generator-Critic-Loop。新增 `references/rubric.md`（5 维 rubric，云监控特有的静默故障保护：删/禁告警规则的 `confirm=DELETE` / `confirm=DISABLE` 门、规则 7 天内曾触发需 `confirm=DELETE_AFTER_FIRING`、prod 标签双重确认、告警通道不能为空）和 `references/prompt-templates.md`（G/C/O prompt 模板）。`max_iterations=3`（按 `AGENTS.md` §8 recommended）。`safety_confirm_required=true` for `delete-alarm-rule`, `disable-alarm-rule`。 |
 | 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: 修复 `--output json` 定位（必须放在子命令之前）、删除不存在的 `--no-interactive` 标志、修正凭证文档说明（CLI 仅从 `~/.jdc/config` INI 读取，不支持环境变量）、增加了沙箱配置工作区 |

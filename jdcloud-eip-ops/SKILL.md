@@ -177,7 +177,14 @@ resp = client.send(AllocateAddressRequest(parameters=params))
 
 ### Operation: Describe EIP
 
-#### Execution (CLI)
+#### Pre-flight Checks
+
+| Check | Expected | On Failure |
+|-------|----------|------------|
+| EIP exists | EIP found by ID | Verify EIP ID and region |
+| Credentials | Non-empty keys | HALT; user configures |
+
+#### Execution — CLI [Primary]
 
 ```bash
 jdc --output json eip describe-address \
@@ -185,9 +192,27 @@ jdc --output json eip describe-address \
   --address-id "{{user.eip_id}}"
 ```
 
-#### Execution (SDK)
+#### Execution — SDK [Fallback]
 
-See [API & SDK Usage](references/api-sdk-usage.md) for details.
+```python
+from jdcloud_sdk.services.eip.apis.DescribeAddressRequest import DescribeAddressRequest, DescribeAddressParameters
+
+params = DescribeAddressParameters(regionId="{{user.region}}", addressId="{{user.eip_id}}")
+resp = client.send(DescribeAddressRequest(parameters=params))
+address = resp.result["address"]
+```
+
+#### Post-execution Validation
+
+Verify response contains `address` object with valid `status` field.
+
+#### Failure Recovery
+
+| Error | Retries | Action |
+|-------|---------|--------|
+| `AddressNotFound` | 0 | HALT; verify EIP ID |
+| `InvalidParameter` | 0-1 | Fix args; retry once |
+| `InternalError` / 5xx | 3 | Retry then HALT |
 
 #### Present to User
 
@@ -198,10 +223,19 @@ See [API & SDK Usage](references/api-sdk-usage.md) for details.
 | Status | `$.result.address.status` |
 | Public IP | `$.result.address.publicIp` |
 | Bandwidth | `$.result.address.bandwidth` |
+| Instance ID | `$.result.address.instanceId` |
+| Instance Type | `$.result.address.instanceType` |
 
 ### Operation: List EIPs
 
-#### Execution (CLI)
+#### Pre-flight Checks
+
+| Check | Expected | On Failure |
+|-------|----------|------------|
+| Credentials | Non-empty keys | HALT; user configures |
+| Region | Supported | Suggest valid region |
+
+#### Execution — CLI [Primary]
 
 ```bash
 jdc --output json eip describe-addresses \
@@ -210,13 +244,47 @@ jdc --output json eip describe-addresses \
   --page-size 100
 ```
 
+#### Execution — SDK [Fallback]
+
+```python
+from jdcloud_sdk.services.eip.apis.DescribeAddressesRequest import DescribeAddressesRequest, DescribeAddressesParameters
+
+params = DescribeAddressesParameters(regionId="{{user.region}}")
+params.setPageNumber(1)
+params.setPageSize(100)
+resp = client.send(DescribeAddressesRequest(parameters=params))
+eips = resp.result["addresses"]
+```
+
+#### Post-execution Validation
+
+Verify response contains `addresses` array and `totalCount`.
+
+#### Failure Recovery
+
+| Error | Retries | Action |
+|-------|---------|--------|
+| `InvalidParameter` | 0-1 | Fix pagination args |
+| Throttling / 429 | 3 | Exponential backoff |
+| `InternalError` / 5xx | 3 | Retry then HALT |
+
 ### Operation: Associate EIP
 
-#### Pre-flight
+#### Pre-flight Checks
 
-Verify EIP is `available` and target instance exists.
+| Check | Expected | On Failure |
+|-------|----------|------------|
+| EIP exists | EIP found | HALT; verify EIP ID |
+| EIP state | `available` | HALT; cannot associate in-use EIP |
+| Target exists | Instance found | HALT; verify instance ID |
+| Target state | `running` | HALT; start instance first |
 
-#### Execution (CLI)
+#### Safety Gate
+
+- ⚠️ If EIP is `in-use`, force-rebind will **drop existing association**
+- MUST obtain explicit confirmation for force-rebind
+
+#### Execution — CLI [Primary]
 
 ```bash
 jdc --output json eip associate-address \
@@ -226,17 +294,47 @@ jdc --output json eip associate-address \
   --instance-type "{{user.instance_type|default:"vm"}}"
 ```
 
-#### Validation
+#### Execution — SDK [Fallback]
 
-Poll until status == `in-use`
+```python
+from jdcloud_sdk.services.eip.apis.AssociateAddressRequest import AssociateAddressRequest, AssociateAddressParameters
+
+params = AssociateAddressParameters(regionId="{{user.region}}", addressId="{{user.eip_id}}")
+params.setInstanceId("{{user.instance_id}}")
+params.setInstanceType("{{user.instance_type|default:'vm'}}")
+resp = client.send(AssociateAddressRequest(parameters=params))
+```
+
+#### Post-execution Validation
+
+Poll until status == `in-use` (max 12 attempts, 5s interval)
+
+#### Failure Recovery
+
+| Error | Retries | Action |
+|-------|---------|--------|
+| `AddressNotFound` | 0 | HALT; verify EIP ID |
+| `InstanceNotFound` | 0 | HALT; verify instance ID |
+| `AddressAlreadyAssociated` | 0 | HALT; dissociate first |
+| Throttling / 429 | 3 | Exponential backoff |
+| `InternalError` / 5xx | 3 | Retry then HALT |
 
 ### Operation: Dissociate EIP
 
-#### Pre-flight
+#### Pre-flight Checks
 
-Verify EIP is `in-use`.
+| Check | Expected | On Failure |
+|-------|----------|------------|
+| EIP exists | EIP found | HALT; verify EIP ID |
+| EIP state | `in-use` | HALT; cannot dissociate available EIP |
 
-#### Execution (CLI)
+#### Safety Gate
+
+- ⚠️ Dissociating an EIP **breaks production traffic**
+- MUST obtain explicit confirmation: `confirm=DISSOCIATE`
+- For `env=prod` tagged EIPs: `confirm=DISSOCIATE_PROD` required
+
+#### Execution — CLI [Primary]
 
 ```bash
 jdc --output json eip dissociate-address \
@@ -244,19 +342,45 @@ jdc --output json eip dissociate-address \
   --address-id "{{user.eip_id}}"
 ```
 
-#### Validation
+#### Execution — SDK [Fallback]
 
-Poll until status == `available`
+```python
+from jdcloud_sdk.services.eip.apis.DissociateAddressRequest import DissociateAddressRequest, DissociateAddressParameters
+
+params = DissociateAddressParameters(regionId="{{user.region}}", addressId="{{user.eip_id}}")
+resp = client.send(DissociateAddressRequest(parameters=params))
+```
+
+#### Post-execution Validation
+
+Poll until status == `available` (max 12 attempts, 5s interval)
+
+#### Failure Recovery
+
+| Error | Retries | Action |
+|-------|---------|--------|
+| `AddressNotFound` | 0 | HALT; verify EIP ID |
+| `AddressNotAssociated` | 0 | HALT; EIP already available |
+| Throttling / 429 | 3 | Exponential backoff |
+| `InternalError` / 5xx | 3 | Retry then HALT |
 
 ### Operation: Delete EIP
 
+#### Pre-flight Checks
+
+| Check | Expected | On Failure |
+|-------|----------|------------|
+| EIP exists | EIP found | HALT; verify EIP ID |
+| EIP state | `available` | HALT; dissociate first |
+
 #### Safety Gate
 
-- MUST obtain explicit confirmation
+- ⚠️ **IRREVERSIBLE**: Public IP returns to pool, may be allocated to another tenant
+- MUST obtain explicit confirmation: `confirm=RELEASE`
+- For `env=prod` tagged EIPs: `confirm=RELEASE_PROD` required
 - MUST check if EIP is associated — warn and dissociate first
-- MUST NOT proceed without user assent
 
-#### Execution (CLI)
+#### Execution — CLI [Primary]
 
 ```bash
 jdc --output json eip release-address \
@@ -264,9 +388,27 @@ jdc --output json eip release-address \
   --address-id "{{user.eip_id}}"
 ```
 
-#### Validation
+#### Execution — SDK [Fallback]
+
+```python
+from jdcloud_sdk.services.eip.apis.ReleaseAddressRequest import ReleaseAddressRequest, ReleaseAddressParameters
+
+params = ReleaseAddressParameters(regionId="{{user.region}}", addressId="{{user.eip_id}}")
+resp = client.send(ReleaseAddressRequest(parameters=params))
+```
+
+#### Post-execution Validation
 
 Poll until 404 (max 24 attempts, 5s interval)
+
+#### Failure Recovery
+
+| Error | Retries | Action |
+|-------|---------|--------|
+| `AddressNotFound` | 0 | HALT; verify EIP ID |
+| `AddressInUse` | 0 | HALT; dissociate first |
+| Throttling / 429 | 3 | Exponential backoff |
+| `InternalError` / 5xx | 3 | Retry then HALT |
 
 ## Quality Gate (GCL)
 

@@ -14,7 +14,7 @@ compatibility: >-
   execution is SDK-only.
 metadata:
   author: buhaiqing
-  version: "1.1.0"
+  version: "1.2.0"
   last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud OSS API v1 - https://oss.jdcloud-api.com/v1"
@@ -140,7 +140,8 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for SDK method parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for SDK method parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.1.0 | 2026-06-18 | Initial GCL v2 content: Added Phase 6 H layer and Phase 7 Reflexion sections to Quality Gate. |
 | 1.0.0 | 2026-06-08 | Initial version: SDK-only execution path for OSS bucket CRUD, object CRUD, ACL, lifecycle, versioning, CRR, presigned URL; GCL rollout with rubric v1 and prompt templates; safety gates for destructive ops |
 
 ## Execution Flows (Agent-Readable)

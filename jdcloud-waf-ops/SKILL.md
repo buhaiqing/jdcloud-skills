@@ -15,7 +15,7 @@ compatibility: >-
   WAF operations support.
 metadata:
   author: buhaiqing
-  version: "1.1.0"
+  version: "1.2.0"
   last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "WAF API v1.0 - https://docs.jdcloud.com/cn/waf/api"
@@ -145,7 +145,8 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.1.0 | 2026-06-18 | Initial GCL v2 content: Added Phase 6 H layer and Phase 7 Reflexion sections to Quality Gate. |
 | 1.0.0 | 2026-06-08 | Initial dual-path skill for JD Cloud WAF |
 
 ## Execution Flows (Agent-Readable)
@@ -768,6 +769,19 @@ During GCL Pre-flight (step [0]), the Orchestrator MAY:
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
 - Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
 - Failure patterns (cross-session memory): `docs/failure-patterns.md` (repository-wide)
+
+### Integration with existing flows
+
+The GCL **wraps** the jdc-first / SDK-fallback flow defined under `## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK executor. The Critic (C) is a new, read-only role with no `jdc` / SDK access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`create-instance`** — Critic verifies instance spec (region, spec code) matches quota. Missing quota check → Idempotency = 0.5.
+- **`delete-instance`** — Critic checks trace contains both pre-delete snapshot (domain count) and post-delete 404. Missing either → Correctness = 0. H layer validates `instance-id` format before execution.
+- **`add-domain`** — Domain config must include valid CNAME/origin. Invalid origin → Correctness = 0.
+- **`disable-domain`** — Safety = 0 without explicit warning about origin exposure. For prod-tagged domains, additional `confirm=DISABLE_PROD` required.
+- **`bind-cert`** — SSL certificate CN/SAN must match the protected domain. Mismatch → Correctness = 0.
+- **`create-rule`** — Rule spec must be valid (e.g., rate limit thresholds, ACL conditions). Invalid spec → Correctness = 0.
 
 ---
 

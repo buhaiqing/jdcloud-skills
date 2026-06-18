@@ -1,0 +1,46 @@
+# JD Cloud EIP Example Configuration
+# Copy this file and adjust values for your environment
+
+# Basic EIP allocation
+allocate:
+  region: cn-north-1
+  name: my-eip
+  bandwidth: 5
+
+# EIP with specific bandwidth
+allocate-high-bandwidth:
+  region: cn-north-1
+  name: high-bandwidth-eip
+  bandwidth: 100
+
+# Associate EIP to VM
+associate-vm:
+  region: cn-north-1
+  eip-id: eip-abc123
+  instance-id: vm-def456
+  instance-type: vm
+
+# Associate EIP to CLB
+associate-clb:
+  region: cn-north-1
+  eip-id: eip-abc123
+  instance-id: lb-ghi789
+  instance-type: clb
+
+# Release EIP (irreversible!)
+release:
+  region: cn-north-1
+  eip-id: eip-abc123
+  confirm: RELEASE  # Required safety confirmation
+
+# Dissociate EIP (can break production traffic)
+dissociate:
+  region: cn-north-1
+  eip-id: eip-abc123
+  confirm: DISSOCIATE  # Required safety confirmation
+
+# Modify EIP bandwidth
+modify:
+  region: cn-north-1
+  eip-id: eip-abc123
+  new-bandwidth: 20

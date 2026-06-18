@@ -14,7 +14,7 @@ compatibility: >-
   Function Compute as of SDK version 1.6.26.
 metadata:
   author: buhaiqing
-  version: "1.1.0"
+  version: "1.2.0"
   last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "Function Compute API v1.0"
@@ -122,7 +122,8 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for SDK method parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for SDK method parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| 1.1.0 | 2026-06-18 | Initial GCL v2 content: Added Phase 6 H layer and Phase 7 Reflexion sections to Quality Gate. |
 | 1.0.0 | 2026-06-08 | Initial SDK-only skill for JD Cloud Function Compute |
 
 ## Execution Flows (Agent-Readable)
@@ -616,6 +617,18 @@ During GCL Pre-flight (step [0]), the Orchestrator MAY:
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
 - Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
 - Failure patterns (cross-session memory): `docs/failure-patterns.md` (repository-wide)
+
+### Integration with existing flows
+
+The GCL **wraps** the SDK-only flow defined under `## Execution Flows` above. The Generator (G) IS the existing SDK executor. The Critic (C) is a read-only role with no SDK access. The Orchestrator (O) owns the loop and persists the GCL trace.
+
+### Operation-specific behavior
+
+- **`createService`** — Critic verifies service name uniqueness check was performed (Idempotency = 1 required). Missing → Idempotency = 0.
+- **`deleteService`** — Critic checks trace contains both pre-delete snapshot (function count) and post-delete 404. Missing either → Correctness = 0. H layer validates `serviceName` format before execution.
+- **`createFunction`** — Critic verifies runtime/handler compatibility (e.g., Node.js handler format `index.handler`). Invalid format → Correctness = 0.
+- **`invokeFunction`** — For production invocation, Safety = 0 without explicit confirmation in trace. H layer validates `invocationType` (RequestResponse vs Event) before execution.
+- **`publishVersion`** — Version description must be explicit. Missing description → Traceability = 0.5.
 
 ---
 

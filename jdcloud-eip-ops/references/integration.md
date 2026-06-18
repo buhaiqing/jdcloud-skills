@@ -1,6 +1,12 @@
 # Integration - JD Cloud EIP
 
-## Environment Setup (uv)
+## Version Lock (Pinned Baseline)
+
+| Dependency | Locked Version | Notes |
+|------------|---------------|-------|
+| Python | 3.10.x | `SafeConfigParser` removed in 3.12; 3.10 is stable |
+| jdcloud_cli | 1.2.12 | Confirmed EIP subcommand support; matches SKILL.md metadata |
+| jdcloud_sdk | >=1.6.26 | Latest stable with full EIP API coverage |
 
 > **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
 
