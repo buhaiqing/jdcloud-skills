@@ -14,8 +14,8 @@ compatibility: >-
   Function Compute as of SDK version 1.6.26.
 metadata:
   author: buhaiqing
-  version: "1.0.0"
-  last_updated: "2026-06-08"
+  version: "1.1.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "Function Compute API v1.0"
   cli_applicability: sdk-only
@@ -122,6 +122,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for SDK method parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.0.0 | 2026-06-08 | Initial SDK-only skill for JD Cloud Function Compute |
 
 ## Execution Flows (Agent-Readable)
@@ -469,19 +470,152 @@ print(f"Service deleted: {resp.requestId}")
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **3** | `AGENTS.md` §8 default for ops skills |
-| `rubric_version` | `v1` | see [references/rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [references/rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** | Delete service/function requires user confirmation |
+| `hallucination_check` | **recommended** | Phase 6 H layer; validates SDK method parameters before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
-### Rubric Dimensions
+### Loop overview
 
-| Dimension | Threshold | Notes |
-|-----------|-----------|-------|
-| Correctness | ≥ 0.5 | Function/service ID/state matches request |
-| Safety | = 1 | Delete operations confirmed; no accidental cascade |
-| Idempotency | ≥ 0.5 | Create with same name returns existing or error consistently |
-| Traceability | ≥ 0.5 | All SDK calls logged with request IDs |
-| Spec Compliance | ≥ 0.5 | Follows Function Compute API conventions |
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │                              optionally load failure-patterns.md
+   ▼
+[1] Generator (G)            ──► SDK (sole path; no jdc for FC)
+   │                              generate SDK call (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (recommended for fc-ops)      - SDK method parameter existence
+   │                                   - JSON structure compliance
+   │
+   ├── PASS → [1a] Execute (run the SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
+   ▼
+[3] Orchestrator decider
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<3 & not all pass   → RETRY (inject suggestions)
+   └─ iter=3 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Recommended
+
+> **Purpose**: Catch LLM-generated SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud Function Compute API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for fc-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **SDK Method Parameter Existence** | Verify every parameter exists in SDK method signature | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (e.g., function config, trigger config) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `createService` | `regionId`, `serviceName`, `description` |
+| `deleteService` | `regionId`, `serviceName` |
+| `createFunction` | `regionId`, `serviceName`, `functionName`, `runtime`, `handler`, `memorySize`, `timeout`, `code` |
+| `deleteFunction` | `regionId`, `serviceName`, `functionName` |
+| `invokeFunction` | `regionId`, `serviceName`, `functionName`, `qualifier`, `invocationType`, `payload` |
+| `publishVersion` | `regionId`, `serviceName`, `functionName`, `description` |
+| `createAlias` | `regionId`, `serviceName`, `functionName`, `aliasName`, `version` |
+| `createTrigger` | `regionId`, `serviceName`, `functionName`, `qualifier`, `triggerType`, `triggerName`, `triggerConfig` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "sdk_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 SDK Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-fc-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidRuntime: Runtime must be in supported list (python3.10, nodejs18, java11, etc.)
+- ServiceCascadeDelete: Deleting service cascades to all functions; require explicit confirmation
+- InvalidHandler: Handler format must match runtime (e.g., index.handler for Node.js)"
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): `docs/failure-patterns.md` (repository-wide)
 
 ---
 

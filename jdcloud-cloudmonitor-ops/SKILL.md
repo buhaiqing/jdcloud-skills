@@ -15,8 +15,8 @@ compatibility: >-
   to JD Cloud endpoints, and official JD Cloud CLI (jdc) for this product.
 metadata:
   author: buhaiqing
-  version: "1.5.0"
-  last_updated: "2026-06-10"
+  version: "1.6.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
@@ -57,6 +57,7 @@ metadata:
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| 1.6.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.5.0 | 2026-06-10 | **双向路由与 GCL 章节重构**：① frontmatter 增加 `parent_skill: null` + `ecosystem_skills`（包含 `jdcloud-alert-intelligence`）;② "不应使用本 Skill 的场景"表新增两条指向 `jdcloud-alert-intelligence` 的委派规则（告警后处理 / 告警历史趋势分析）；③ `## Quality Gate (GCL)` 章节原本被 `## Smart Fallback Strategy` 拆断（出现"continued"续接），本次将 loop diagram / Artifacts / Integration / Operation-specific behavior 完整整合进 GCL 章节，删除续接；④ Reference 目录补充 `rubric.md` 与 `prompt-templates.md` 链接（达成 8/8 ref 校验）。 |
 | 1.4.0 | 2026-06-04 | **GCL 推广（recommended）**：新增 `## Quality Gate (GCL)` 章节，将本 skill 接入仓库级 Generator-Critic-Loop。新增 `references/rubric.md`（5 维 rubric，云监控特有的静默故障保护：删/禁告警规则的 `confirm=DELETE` / `confirm=DISABLE` 门、规则 7 天内曾触发需 `confirm=DELETE_AFTER_FIRING`、prod 标签双重确认、告警通道不能为空）和 `references/prompt-templates.md`（G/C/O prompt 模板）。`max_iterations=3`（按 `AGENTS.md` §8 recommended）。`safety_confirm_required=true` for `delete-alarm-rule`, `disable-alarm-rule`。 |
 | 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: 修复 `--output json` 定位（必须放在子命令之前）、删除不存在的 `--no-interactive` 标志、修正凭证文档说明（CLI 仅从 `~/.jdc/config` INI 读取，不支持环境变量）、增加了沙箱配置工作区 |
@@ -161,9 +162,11 @@ metadata:
 | Parameter | Value | Reason |
 |---|---|---|
 | `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-cloudmonitor-ops` (recommended); `delete-alarm-rule` / `disable-alarm-rule` are impactful but recoverable by re-creation |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `delete-alarm-rule`, `disable-alarm-rule` | matches repository safety gate policy |
+| `hallucination_check` | **recommended** | Phase 6 H layer; validates CLI parameters before execution |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -172,25 +175,136 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │                              generate command (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (recommended for              - CLI parameter existence
+   │    cloudmonitor-ops)             - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<3 & not all pass → RETRY (inject suggestions)
-   └─ iter=3 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<3 & not all pass   → RETRY (inject suggestions)
+   └─ iter=3 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Recommended
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud CloudMonitor API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for cloudmonitor-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc monitor <operation>` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (e.g., alarm rule spec, metric queries) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `create-alarm-rule` | `--alarm-rule-name`, `--product`, `--metric`, `--resource-id`, `--threshold`, `--comparison`, `--notification-channel` |
+| `delete-alarm-rule` | `--alarm-id` |
+| `disable-alarm-rule` | `--alarm-id` |
+| `describe-metric-data` | `--metric`, `--resource-id`, `--start-time`, `--end-time` |
+| `describe-alarm-history` | `--alarm-id`, `--start-time`, `--end-time` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-cloudmonitor-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidNotificationChannel: notificationChannel must be a valid ID, not empty/null
+- DELETE_AFTER_FIRING: Alarm rules fired in last 7 days need confirm=DELETE_AFTER_FIRING
+- SilentDisable: Disabling alarm rules means silent failure; require explicit confirmation"
 ```
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
 - Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): `docs/failure-patterns.md` (repository-wide)
 
 ### Integration with existing flows
 
