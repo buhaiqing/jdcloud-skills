@@ -58,3 +58,21 @@
 - `max_iterations`: **3** (recommended classification per `AGENTS.md` §8)
 - `trace_path`: `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json`
 - `safety_confirm_required`: true for all `delete-*` operations
+
+## Operation-specific overrides
+
+| Operation | Required dimensions = 1.0 | Notes |
+|---|---|---|
+| `create-vpn-gateway` | Correctness, Safety, Spec Compliance | VPC and bandwidth must be valid |
+| `delete-vpn-gateway` | Correctness, Safety, Traceability | **Breaks all VPN tunnels**. Require `confirm=DELETE` |
+| `create-vpn-tunnel` | Correctness, Safety, Spec Compliance | Peer IP and pre-shared key must be valid |
+| `delete-vpn-tunnel` | Correctness, Safety, Traceability | **Breaks site-to-site connectivity**. Require `confirm=DELETE` |
+| `modify-vpn-tunnel` | Correctness, Safety, Traceability | Changing tunnel params may cause brief connectivity loss |
+| `describe-vpn-gateway` / `describe-vpn-tunnel` | Correctness, Traceability | Read-only; Safety & Idempotency N/A |
+
+## Safety special cases (auto-fail)
+
+- `delete-vpn-gateway` without `confirm=DELETE` in trace → **Safety = 0 → ABORT**
+- `delete-vpn-tunnel` without `confirm=DELETE` in trace → **Safety = 0 → ABORT**
+- `delete-vpn-gateway` on prod-tagged gateway without `confirm=DELETE_PROD` → **Safety = 0 → ABORT**
+- `modify-vpn-tunnel` without warning about connectivity impact → **Safety = 0**

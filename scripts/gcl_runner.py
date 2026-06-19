@@ -109,14 +109,58 @@ RUBRIC_DIMENSIONS = (
     "spec_compliance",
 )
 
+# Optional extension dimensions (e.g., audit-ops uses 8 dimensions).
+# These are parsed if present but not required.
+EXTENSION_DIMENSIONS = (
+    "region_compliance",
+    "credential_hygiene",
+    "well_architected",
+)
+
 # AGENTS.md §8 — per-skill class -> max_iterations default.
 # Used as a fallback when a skill's `## Quality Gate` chapter
 # doesn't override.
 DEFAULT_MAX_ITER = {
     "required": 2,      # write ops on production
     "recommended": 3,   # network / monitoring
-    "optional": 5,      # read-only / meta
+    "optional": 3,      # read-only / meta (aligned 2026-06-19)
 }
+
+# AGENTS.md §10.2.1 — built-in parameter knowledge base for H layer.
+# Maps (product, operation) -> set of valid --flag names.
+# This is a conservative default; skills can extend via references/api-sdk-usage.md.
+PARAMETER_KNOWLEDGE: dict[str, dict[str, set[str]]] = {
+    "vm": {
+        "describe-instances": {"--ids", "--region-id", "--page-number", "--page-size", "--filters", "--output"},
+        "create-instance": {"--image-id", "--instance-type", "--az", "--name", "--subnet-id", "--client-token", "--region-id", "--output"},
+        "start-instance": {"--instance-id", "--region-id", "--output"},
+        "stop-instance": {"--instance-id", "--region-id", "--output"},
+        "reboot-instance": {"--instance-id", "--region-id", "--output"},
+        "delete-instance": {"--instance-id", "--region-id", "--output"},
+        "resize-instance": {"--instance-id", "--instance-type", "--region-id", "--output"},
+    },
+    "disk": {
+        "describe-disks": {"--disk-ids", "--region-id", "--page-number", "--page-size", "--output"},
+        "create-disks": {"--disk-size", "--disk-type", "--az", "--name", "--client-token", "--region-id", "--output"},
+        "delete-disk": {"--disk-id", "--region-id", "--output"},
+        "attach-disk": {"--disk-id", "--instance-id", "--device", "--region-id", "--output"},
+        "detach-disk": {"--disk-id", "--instance-id", "--region-id", "--output"},
+        "resize-disk": {"--disk-id", "--new-size", "--region-id", "--output"},
+    },
+    "redis": {
+        "describe-instances": {"--instance-id", "--region-id", "--page-number", "--page-size", "--output"},
+        "create-instance": {"--instance-name", "--instance-class", "--vpc-id", "--subnet-id", "--az", "--region-id", "--output"},
+        "delete-instance": {"--instance-id", "--region-id", "--output"},
+    },
+    "clb": {
+        "describe-load-balancers": {"--load-balancer-ids", "--region-id", "--page-number", "--page-size", "--output"},
+        "create-load-balancer": {"--name", "--type", "--az", "--subnet-id", "--region-id", "--output"},
+        "delete-load-balancer": {"--load-balancer-id", "--region-id", "--output"},
+    },
+}
+
+# AGENTS.md §10.2.3 — audit log retention limit (days).
+AUDIT_RETENTION_DAYS = 90
 
 # AGENTS.md §6 — trace filename format.
 TRACE_FILE_PREFIX = "gcl-trace"
@@ -216,13 +260,22 @@ class CriticScore:
 
 @dataclass
 class IterationRecord:
-    """One full Generator -> Critic -> Decide cycle."""
+    """One full Generator -> H -> Critic -> Decide cycle.
+
+    Extended per AGENTS.md §10.4 (H layer fields) and §11.2 (failure_pattern).
+    """
 
     iter: int
     generator: dict[str, Any]
     critic: dict[str, Any]
-    decision: str  # "PASS" | "RETRY" | "RETURN_BEST" | "ABORT"
+    decision: str  # "PASS" | "RETRY" | "RETURN_BEST" | "ABORT" | "HALLUCINATION_ABORT"
     reason: str
+    # §10.4 — Hallucination Detector result (None if H not enabled).
+    hallucination_detector: Optional[dict[str, Any]] = None
+    # §10.4 — Whether this iteration was regenerated after H FAIL.
+    regenerated: bool = False
+    # §11.2 — Extracted failure pattern (None if no failure).
+    failure_pattern: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -476,6 +529,245 @@ def decide(
 
 
 # ---------------------------------------------------------------------------
+# Hallucination Detection Layer (H) — Phase 6
+# ---------------------------------------------------------------------------
+
+
+def hallucination_detect(
+    skill: str,
+    operation: str,
+    command: str,
+    json_payload: Optional[dict] = None,
+    enable_time_range_check: bool = False,
+) -> dict[str, Any]:
+    """Pre-execution structural validity check per AGENTS.md §10.2.
+
+    Three-category check:
+    1. CLI/SDK Parameter Existence (§10.2.1) — MANDATORY
+    2. JSON Structure Compliance (§10.2.2) — RECOMMENDED
+    3. Time Range Validity (§10.2.3) — MANDATORY for audit-ops
+
+    This is a deterministic offline check. It NEVER executes cloud API calls.
+    It NEVER modifies the Generator's command.
+
+    Args:
+        skill: skill name (e.g., "vm-ops", "audit-ops")
+        operation: operation name (e.g., "describe-instances", "describe-events")
+        command: the generated command string to validate
+        json_payload: optional JSON payload dict for structure validation
+        enable_time_range_check: enable §10.2.3 time range check (audit-ops)
+
+    Returns:
+        Dict matching the §10.4 trace schema:
+        {
+            "status": "PASS"|"FAIL",
+            "checks": {
+                "cli_parameters": {...},
+                "json_structure": {...},
+                "time_range": {...}
+            },
+            "report": "..."
+        }
+    """
+    checks: dict[str, Any] = {}
+    issues: list[str] = []
+
+    # ---- §10.2.1 CLI Parameter Existence ----
+    product = skill.replace("-ops", "").replace("jdcloud-", "")
+    known_ops = PARAMETER_KNOWLEDGE.get(product, {})
+    known_flags = known_ops.get(operation, set())
+
+    # Tokenize --flag patterns from command
+    import shlex
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+
+    found_flags: list[str] = []
+    for tok in tokens:
+        if tok.startswith("--"):
+            # Strip =value suffix
+            flag = tok.split("=")[0]
+            found_flags.append(flag)
+
+    unrecognized = []
+    if known_flags:
+        for f in found_flags:
+            if f not in known_flags and f not in ("--output", "--help"):
+                unrecognized.append(f)
+    # If no known_flags for this op, conservative PASS (can't verify)
+
+    checks["cli_parameters"] = {
+        "total": len(found_flags),
+        "recognized": len(found_flags) - len(unrecognized),
+        "unrecognized": unrecognized,
+        "status": "FAIL" if unrecognized else "PASS",
+    }
+    if unrecognized:
+        issues.append(
+            f"Unrecognized CLI parameters: {unrecognized} "
+            f"(known: {sorted(known_flags) if known_flags else 'none in KB'})"
+        )
+
+    # ---- §10.2.2 JSON Structure Compliance ----
+    if json_payload:
+        json_issues = []
+        # Basic type checks — field values must match expected types
+        for key, val in json_payload.items():
+            if val is None:
+                json_issues.append(f"Field '{key}' is null")
+        checks["json_structure"] = {
+            "status": "FAIL" if json_issues else "PASS",
+            "issues": json_issues,
+        }
+        issues.extend(json_issues)
+    else:
+        checks["json_structure"] = {
+            "status": "PASS",
+            "note": "no JSON payload in command",
+        }
+
+    # ---- §10.2.3 Time Range Validity (audit-ops only) ----
+    if enable_time_range_check and json_payload:
+        start = json_payload.get("startTime") or json_payload.get("start_time")
+        end = json_payload.get("endTime") or json_payload.get("end_time")
+        if start and end:
+            try:
+                from datetime import datetime as _dt
+                # Parse ISO 8601 (strip Z suffix for fromisoformat)
+                s = _dt.fromisoformat(start.replace("Z", "+00:00"))
+                e = _dt.fromisoformat(end.replace("Z", "+00:00"))
+                delta_days = (e - s).days
+                within = delta_days <= AUDIT_RETENTION_DAYS
+                checks["time_range"] = {
+                    "status": "PASS" if within and delta_days > 0 else "FAIL",
+                    "delta_days": delta_days,
+                    "within_retention": within,
+                    "suggestion": "" if within else f"Limit to ≤ {AUDIT_RETENTION_DAYS} days",
+                }
+                if not within:
+                    issues.append(f"Time range {delta_days}d exceeds {AUDIT_RETENTION_DAYS}d retention")
+                if delta_days <= 0:
+                    issues.append("startTime must be before endTime")
+            except Exception as ex:
+                checks["time_range"] = {
+                    "status": "FAIL",
+                    "error": f"Cannot parse timestamps: {ex}",
+                }
+                issues.append(f"Time range parse error: {ex}")
+        else:
+            checks["time_range"] = {"status": "PASS", "note": "no time range in payload"}
+    else:
+        checks["time_range"] = {"status": "PASS", "note": "not applicable"}
+
+    overall = "FAIL" if issues else "PASS"
+    return {
+        "status": overall,
+        "checks": checks,
+        "report": "; ".join(issues) if issues else "All structural checks passed",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Reflexion Integration — Phase 7
+# ---------------------------------------------------------------------------
+
+
+def load_failure_patterns(skill: str) -> list[dict[str, Any]]:
+    """Load failure patterns for a skill from docs/failure-patterns.md.
+
+    Per AGENTS.md §11.5, this is an OPTIONAL pre-flight retrieval.
+    Searches both per-skill and central failure-patterns.md files.
+
+    Args:
+        skill: skill name (e.g., "vm-ops")
+
+    Returns:
+        List of pattern dicts with keys: category, skill, command, error, fix, count, reusable.
+        Empty list if no file found.
+    """
+    patterns: list[dict[str, Any]] = []
+
+    # Try per-skill file first
+    per_skill_path = REPO_ROOT / f"jdcloud-{skill}" / "docs" / "failure-patterns.md"
+    central_path = REPO_ROOT / "docs" / "failure-patterns.md"
+
+    for path in (per_skill_path, central_path):
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        # Parse ### Pattern: <name> blocks
+        blocks = re.split(r"^### Pattern:\s*", text, flags=re.MULTILINE)[1:]
+        for block in blocks:
+            lines = block.strip().splitlines()
+            if not lines:
+                continue
+            name = lines[0].strip()
+            pat: dict[str, Any] = {"name": name, "count": 1}
+            for line in lines[1:]:
+                m = re.match(r"-\s*\*\*(\w+)\*\*:\s*(.+)", line)
+                if m:
+                    key = m.group(1).lower()
+                    val = m.group(2).strip()
+                    if key == "reusable":
+                        val = val.lower() in ("true", "yes", "1")
+                    pat[key] = val
+            # Filter by skill if the pattern has a skill field
+            pat_skill = pat.get("skill", "")
+            if pat_skill and skill not in pat_skill:
+                continue
+            patterns.append(pat)
+
+    return patterns
+
+
+def inject_failure_patterns(patterns: list[dict[str, Any]], max_patterns: int = 3) -> str:
+    """Format failure patterns as a prevention hint for the Generator.
+
+    Per AGENTS.md §11.5, this is a HINT, not a CONSTRAINT.
+    """
+    if not patterns:
+        return ""
+    top = patterns[:max_patterns]
+    lines = ["Known failure patterns to avoid:"]
+    for p in top:
+        lines.append(f"- {p.get('name', 'unknown')}: {p.get('error', '')} → {p.get('fix', '')}")
+    return "\n".join(lines)
+
+
+def extract_failure_pattern(
+    skill: str,
+    command: str,
+    error: str,
+    decision: str,
+) -> Optional[dict[str, Any]]:
+    """Extract a failure pattern from a failed GCL iteration per §11.2.
+
+    Returns None if the iteration passed (no failure to extract).
+    """
+    if decision in ("RETURN",):
+        return None
+    category = "runtime"
+    if "InvalidParameter" in error or "MissingParameter" in error:
+        category = "cli_parameter"
+    elif "unrecognized" in error.lower():
+        category = "cli_parameter"
+    elif decision == "HALLUCINATION_ABORT":
+        category = "cli_parameter"
+
+    return {
+        "category": category,
+        "skill": f"jdcloud-{skill}",
+        "command": command[:200],
+        "error": error[:500],
+        "fix": "See GCL trace suggestions",
+        "count": 1,
+        "reusable": True,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
@@ -487,6 +779,9 @@ def run_gcl(
     generator_fn: GeneratorFn,
     critic_fn: CriticFn,
     rubric: Optional[RubricConfig] = None,
+    enable_hallucination_check: bool = False,
+    operation: str = "",
+    enable_reflexion: bool = True,
 ) -> tuple[str, Trace]:
     """Run one GCL cycle and return (decision, trace).
 
@@ -501,10 +796,13 @@ def run_gcl(
         critic_fn: callable implementing the Critic
         rubric: pre-parsed RubricConfig. If None, parsed from
             `jdcloud-<skill>/references/rubric.md`.
+        enable_hallucination_check: enable Phase 6 H layer (§10)
+        operation: operation name for H layer parameter validation
+        enable_reflexion: enable Phase 7 Reflexion pre-flight (§11)
 
     Returns:
         (decision, trace) where decision ∈
-        {"ABORT", "RETURN", "RETURN_BEST"} and trace is the
+        {"ABORT", "RETURN", "RETURN_BEST", "HALLUCINATION_ABORT"} and trace is the
         full Trace object.
     """
     if rubric is None:
@@ -517,19 +815,71 @@ def run_gcl(
         rubric_version=rubric.rubric_version,
     )
 
+    # ---- Phase 7: Reflexion pre-flight (optional) ----
+    reflexion_hint = ""
+    if enable_reflexion:
+        patterns = load_failure_patterns(skill)
+        reflexion_hint = inject_failure_patterns(patterns)
+        if reflexion_hint:
+            # Append to request context so Generator sees it
+            request = f"{request}\n\n# Reflexion prevention hints\n{reflexion_hint}"
+
+    # Determine if time range check applies (audit-ops only)
+    enable_time_range = skill in ("audit-ops", "tag-audit-ops")
+
     critic_feedback = ""
     for it in range(1, rubric.max_iterations + 1):
         # Step 1: Generate
         gen_out = generator_fn(request, critic_feedback, rubric, it)
 
-        # Pre-flight: safety_confirm_required gate.
-        # AGENTS.md §2: Generator "MUST NOT proceed without explicit
-        # user confirmation" for destructive ops. We model this as
-        # if the Orchestrator blocks at the trace level — the
-        # Generator itself is responsible for honoring the gate.
-        # Here we record it; we don't actually abort, because the
-        # safety_confirm is expected to be checked by the Generator
-        # AND by the Critic (safety=0 if missing).
+        # ---- Phase 6: Hallucination Detection (pre-execution) ----
+        h_result: Optional[dict[str, Any]] = None
+        regenerated = False
+        if enable_hallucination_check and operation:
+            h_result = hallucination_detect(
+                skill=skill,
+                operation=operation,
+                command=gen_out.command,
+                json_payload=gen_out.args if gen_out.args else None,
+                enable_time_range_check=enable_time_range,
+            )
+
+            # H_FAIL → Regenerate (max 1 retry per §10.3)
+            if h_result["status"] == "FAIL":
+                # Inject hallucination report into Generator feedback
+                h_feedback = f"Hallucination detected: {h_result['report']}. Fix the command and retry."
+                gen_out = generator_fn(request, h_feedback, rubric, it)
+                regenerated = True
+
+                # Re-check after regeneration
+                h_result = hallucination_detect(
+                    skill=skill,
+                    operation=operation,
+                    command=gen_out.command,
+                    json_payload=gen_out.args if gen_out.args else None,
+                    enable_time_range_check=enable_time_range,
+                )
+
+                # Still FAIL → HALLUCINATION_ABORT
+                if h_result["status"] == "FAIL":
+                    record = IterationRecord(
+                        iter=it,
+                        generator=asdict(gen_out),
+                        critic={},
+                        decision="HALLUCINATION_ABORT",
+                        reason=f"H layer failed after regeneration: {h_result['report']}",
+                        hallucination_detector=h_result,
+                        regenerated=True,
+                    )
+                    trace.iterations.append(record)
+                    trace.final = {
+                        "status": "HALLUCINATION_ABORT",
+                        "iter": it,
+                        "output": None,
+                        "hallucination_report": h_result["report"],
+                    }
+                    trace.finished_at = datetime.now(timezone.utc).isoformat()
+                    return "HALLUCINATION_ABORT", trace
 
         # Step 2: Critique
         score = critic_fn(
@@ -546,6 +896,19 @@ def run_gcl(
         # Step 3: Decide
         decision, reason, next_feedback = decide(score, rubric, it)
 
+        # ---- Phase 7: Extract failure pattern from failed iteration ----
+        failure_pat = None
+        if decision in ("ABORT", "RETURN_BEST", "HALLUCINATION_ABORT", "RETRY"):
+            error_msg = reason
+            if score.suggestions:
+                error_msg += "; " + "; ".join(score.suggestions[:2])
+            failure_pat = extract_failure_pattern(
+                skill=skill,
+                command=gen_out.command,
+                error=error_msg,
+                decision=decision,
+            )
+
         trace.iterations.append(
             IterationRecord(
                 iter=it,
@@ -558,6 +921,9 @@ def run_gcl(
                 },
                 decision=decision,
                 reason=reason,
+                hallucination_detector=h_result,
+                regenerated=regenerated,
+                failure_pattern=failure_pat,
             )
         )
 
@@ -722,6 +1088,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         generator_fn=gen_fn,
         critic_fn=critic_fn,
         rubric=rubric,
+        enable_hallucination_check=args.enable_hallucination_check,
+        operation=args.operation or "",
+        enable_reflexion=not args.disable_reflexion,
     )
 
     # Persist trace.
@@ -773,6 +1142,21 @@ def build_argparser() -> argparse.ArgumentParser:
         "--trace-dir",
         default=None,
         help=f"trace output directory (default: {DEFAULT_TRACE_DIR})",
+    )
+    p_run.add_argument(
+        "--enable-hallucination-check",
+        action="store_true",
+        help="Enable Phase 6 Hallucination Detection Layer (H) pre-execution check",
+    )
+    p_run.add_argument(
+        "--operation",
+        default="",
+        help="Operation name for H layer parameter validation (e.g., describe-instances)",
+    )
+    p_run.add_argument(
+        "--disable-reflexion",
+        action="store_true",
+        help="Disable Phase 7 Reflexion pre-flight (failure pattern retrieval)",
     )
     p_run.set_defaults(func=cmd_run)
 

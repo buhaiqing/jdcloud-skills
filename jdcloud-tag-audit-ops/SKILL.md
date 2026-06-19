@@ -485,7 +485,7 @@ result = run_mcp(
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-tag-audit-ops` (optional) |
+| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-tag-audit-ops` (optional) |
 | `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `create DOPS ticket` | only mutating op |

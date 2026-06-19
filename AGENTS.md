@@ -164,6 +164,75 @@ uv pip install jdcloud_cli jdcloud_sdk
 
 `pyproject.toml` pins `jdcloud_cli==1.2.12`. The default pip index is `https://mirrors.aliyun.com/pypi/simple/` (configured under `[tool.uv]`).
 
+### MANDATORY Pre-flight Checks (Agent MUST Execute Before ANY jdc Command)
+
+**CRITICAL: Agent MUST verify the following BEFORE attempting to use `jdc` CLI. Failure to do so will result in `command not found` errors.**
+
+| Check | Command | Expected Result | On Failure |
+|-------|---------|-----------------|------------|
+| **1. Python version** | `python --version` | `Python 3.10.x` (NOT 3.12+) | HALT; recreate venv with `uv venv --python 3.10` |
+| **2. Virtual env exists** | `test -d .venv && echo "OK"` | `OK` | Run `uv venv --python 3.10` |
+| **3. Virtual env activated** | `echo $VIRTUAL_ENV` | Absolute path ending in `/.venv` | Run `source .venv/bin/activate` |
+| **4. jdc binary location** | `which jdc` | `.venv/bin/jdc` (MUST be in .venv) | Reinstall: `uv pip install --no-cache jdcloud_cli==1.2.12` |
+| **5. jdc executable** | `jdc --version` | `1.2.12` | Reinstall: `uv pip install --no-cache jdcloud_cli==1.2.12 jdcloud_sdk` |
+| **6. Credentials configured** | `test -n "$JDC_ACCESS_KEY" && test -n "$JDC_SECRET_KEY"` | Exit code 0 | Load from `.env` or prompt user |
+| **7. jdc config file** | `test -f ~/.jdc/config && test -f ~/.jdc/current` | Both files exist | Create config (see Credentials section below) |
+
+**Agent Execution Protocol (MANDATORY):**
+
+```bash
+# Step 1: Activate virtual environment (ALWAYS first)
+source .venv/bin/activate
+
+# Step 2: Verify Python version
+python --version  # MUST be 3.10.x
+
+# Step 3: Verify jdc is in .venv
+which jdc  # MUST output: /path/to/project/.venv/bin/jdc
+
+# Step 4: Verify jdc works
+jdc --version  # MUST output: 1.2.12
+
+# Step 5: Load credentials (if not in shell env)
+if [ -f .env ]; then
+  export $(grep -E '^JDC_' .env | xargs)
+fi
+
+# Step 6: Configure jdc CLI (sandbox-safe)
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = {{env.JDC_ACCESS_KEY}}
+secret_key = {{env.JDC_SECRET_KEY}}
+region_id = {{env.JDC_REGION}}
+endpoint = nc.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+
+# Step 7: Test jdc command
+jdc --output json nc describe-clusters --region-id cn-north-1 --page-number 1 --page-size 1
+```
+
+**Common Mistakes (BANNED):**
+
+| ❌ Wrong | ✅ Correct | Why |
+|---------|-----------|-----|
+| `jdc vm list` (without activating venv) | `source .venv/bin/activate && jdc --output json vm list` | `jdc` binary is in `.venv/bin/`, not in system PATH |
+| Assuming `jdcloud_cli` is installed | `which jdc && jdc --version` | Package may be installed in wrong Python environment |
+| `pip install jdcloud_cli` (system pip) | `uv pip install jdcloud_cli` (after `source .venv/bin/activate`) | System pip installs to system Python, not .venv |
+| Using Python 3.12 | `uv venv --python 3.10` | `jdcloud_cli==1.2.12` uses `SafeConfigParser` removed in Python 3.12 |
+| Setting only env vars for CLI | Writing `~/.jdc/config` INI file | jdc CLI reads ONLY from config file, NOT from env vars |
+
+**Agent Self-Check Question (Before ANY jdc Execution):**
+
+> "Did I just run `source .venv/bin/activate` and verify `which jdc` points to `.venv/bin/jdc`?"
+>
+> If NO → **STOP** and run the Pre-flight Checks above.
+> If YES → Proceed with jdc command.
+
 ### Credentials
 
 Three methods (priority order: shell env > `.env` > `~/.jdc/config`):

@@ -66,3 +66,19 @@
 
 - ✅ Start ≤ End
 - ✅ Range ≤ 1 month (no cross-month queries)
+
+## Operation-specific overrides
+
+| Operation | Required dimensions = 1.0 | Notes |
+|---|---|---|
+| `describeAccountAmount` | Correctness, Traceability | Read-only; Safety & Idempotency N/A; score 1.0 by default |
+| `queryBillSummary` | Correctness, Traceability | Time range MUST be within single calendar month |
+| `queryBillDetail` | Correctness, Traceability | Pagination required for large result sets |
+| `describeInstanceVouchers` | Correctness, Traceability | Read-only; Safety & Idempotency N/A |
+| `calculateTotalPrice` | Correctness, Spec Compliance | Price calculation must use valid product specs |
+
+## Safety special cases (auto-fail)
+
+- Any query with `JDC_SECRET_KEY` value in trace → **Safety = 0 → ABORT**
+- Bill query spanning multiple calendar months → **Correctness = 0 → ABORT**
+- Amount parsing that loses decimal precision → **Correctness = 0**

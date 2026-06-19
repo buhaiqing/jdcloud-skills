@@ -9,20 +9,23 @@ description: >-
 license: MIT
 compatibility: >-
   Official JD Cloud SDK (Python 3.10+), valid API credentials, network
-  access to JD Cloud endpoints, and official JD Cloud CLI (`jdc`) when this
-  product is supported by the CLI (jdc-first with SDK fallback).
+  access to JD Cloud endpoints. `jdc kubernetes` CLI subcommand exists but
+  is BROKEN in locked version (jdcloudHeaders bug) — see Current Status.
 metadata:
   author: buhaiqing
-  version: "1.1.0"
-  last_updated: "2026-06-10"
+  version: "1.4.0"
+  last_updated: "2026-06-19"
   runtime: Harness AI Agent
   api_profile: "JD Cloud JCS for Kubernetes API - https://nc.jdcloud-api.com/v1"
-  cli_applicability: jdc-first-with-fallback
+  cli_applicability: sdk-or-api-only
   cli_version_locked: "1.2.12"
   sdk_version_locked: ">=1.6.26"
   cli_support_evidence: >-
-    Confirmed via `jdc` help output showing 'nc' (Native Container) in product
-    list which includes Kubernetes cluster operations.
+    VERIFIED: `jdc kubernetes` 子命令存在（包含 describe-clusters, create-cluster 等操作），
+    但存在已知 bug：执行时返回 'Namespace' object has no attribute 'jdcloudHeaders' 错误。
+    `jdc nc` 是 Native Container（容器实例），不是 Kubernetes 集群管理。
+    当前锁定版本 jdcloud_cli==1.2.12 的 `jdc kubernetes` 命令不可用，
+    所有 CLI 示例均为期望语法，实际执行应使用 SDK/API。
     Official CLI documentation: https://docs.jdcloud.com/cn/cli/introduction
   environment:
     - JDC_ACCESS_KEY
@@ -30,6 +33,7 @@ metadata:
     - JDC_REGION
   dependencies:
     - jdcloud-aiops-cruise (k8s_analyzer.py for workload analysis)
+    - kubernetes>=25.3.0 (K8s Python client for storage operations)
 ---
 
 > This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
@@ -109,7 +113,8 @@ This skill integrates with `jdcloud-aiops-cruise` for workload analysis before d
 - Task involves cluster credentials: obtain kubeconfig for kubectl access
 - Task involves cluster upgrades: upgrade cluster control plane or node groups
 - Task involves workload analysis for cluster deletion safety
-- Keywords detected: createCluster, describeClusters, deleteCluster, createNodeGroup, describeNodeGroups, modifyNodeGroup, describeClusterCredential, kubeconfig, nodeGroup
+- Task involves storage management: PV, PVC, StorageClass operations, storage health checks
+- Keywords detected: createCluster, describeClusters, deleteCluster, createNodeGroup, describeNodeGroups, modifyNodeGroup, describeClusterCredential, kubeconfig, nodeGroup, PersistentVolume, PersistentVolumeClaim, PVC, PV, StorageClass, storage
 - User describes container orchestration needs without naming "Kubernetes" (e.g., "manage my container cluster", "deploy a K8s cluster", "scale worker nodes", "get kubectl config")
 
 ### SHOULD NOT Use This Skill When
@@ -204,21 +209,19 @@ All runbooks follow the **Perceive → Reason → Execute** three-phase model. T
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-06-19 | **Storage operations added**: 新增 `scripts/snippets/storage_ops.py`，使用 K8s Python client 管理 PV/PVC/StorageClass。支持 list_storage_classes、create_pvc、list_pvcs、delete_pvc、list_pvs、check_pvc_health、get_storage_summary。添加 `kubernetes>=25.3.0` 依赖。 |
+| 1.3.0 | 2026-06-19 | **CLI 策略变更**: 从 `jdc-first-with-fallback` 改为 `sdk-or-api-only`。原因：`jdc kubernetes` 命令运行时崩溃（`jdcloudHeaders` bug），`jdc nc` 是 Native Container（容器实例）而非 Kubernetes 集群管理。所有 CLI 示例标记为期望语法，实际执行必须使用 SDK/API。 |
+| 1.2.0 | 2026-06-18 | **GCL v2 rollout**: Upgraded to GCL v2 with Phase 6 (Hallucination Detection Layer H — recommended, MANDATORY for CLI parameter existence) and Phase 7 (Lightweight Reflexion Integration — enabled, loads `docs/failure-patterns.md`). Changed GCL classification from `required` to `recommended` with `max_iterations=3`. Added `HALLUCINATION_ABORT` termination condition. Added operation-specific H layer behavior for delete-cluster, delete-node-group, create operations. Rubric version bumped to v2. |
 | 1.1.0 | 2026-06-10 | **Runbooks added**: Added `runbooks/` directory with 2 runbooks (01-cluster-health-check, 02-resource-optimization) covering proactive K8s cluster health monitoring and resource optimization. Runbook index at `runbooks/00-index.md`. |
 | 1.0.0 | 2026-06-08 | Initial version with jdc-first execution and SDK fallback for Kubernetes operations. GCL rollout with rubric (required, max_iter=2). Cluster delete safety gate with workload dependency check via jdcloud-aiops-cruise. |
 
 ## Execution Flows (Agent-Readable)
 
-All operations follow this standardized workflow:  
-**Pre-flight Checks → Execute (jdc primary / SDK fallback) → Post-execution Validation → Failure Recovery**  
-Do not skip any phase.
+Every operation: **Pre-flight → Execute (SDK/API primary) → Validate → Recover**. Do not skip phases.
 
-### Execution Strategy (jdc-first with SDK Fallback)
+**执行策略说明:** 当前锁定版本 CLI (`jdcloud_cli==1.2.12`) 中 `jdc kubernetes` 命令运行时崩溃，`jdc nc` 是 Native Container（容器实例）而非 Kubernetes 集群管理。以下 CLI 示例均为**期望语法**，Agent SHOULD NOT 直接执行未验证的命令。
 
-1. **Primary Path**: Attempt `jdc` CLI first for all operations
-2. **Retry Logic**: If `jdc` fails, retry up to **3 times** with exponential backoff (0s → 2s → 4s)
-3. **Fallback Path**: Only use SDK/API after 3 consecutive `jdc` failures
-4. **Output Preference**: When both paths succeed, prefer `jdc` output for consistency
+> 安全执行路径：通过 SDK (`jdcloud_sdk`) 或原始 REST API (`https://nc.jdcloud-api.com/v1/...`) 执行。详见 [API & SDK Usage](references/api-sdk-usage.md)。
 
 ### Operation: Create Cluster
 
@@ -226,51 +229,14 @@ Do not skip any phase.
 
 | Check | Method | Expected | On Failure |
 |-------|--------|----------|------------|
-| CLI / deps | `jdc --version` | Exit code 0 | Retry up to 3 times; then fall back to SDK |
-| SDK / deps | `import jdcloud_sdk.services.nc.client.NcClient` | No import error | Document install pin (fallback path) |
-| Credentials | Construct credential from env or CLI config | Non-empty keys | HALT; user configures env |
+| SDK / deps | `import jdcloud_sdk.services.nc.client.NcClient` | No import error | Install pin: `uv pip install jdcloud_sdk>=1.6.26` |
+| Credentials | Construct credential from env | Non-empty keys | HALT; user configures env |
 | Region | Call `describeClusters` with small page | `{{user.region}}` supported | Suggest valid region |
 | VPC/Subnet | Verify via `jdcloud-vpc-ops` | Subnet exists and has IP | HALT; create subnet first |
 | Kubernetes version | Validate version string | Supported version | List available versions |
 | Quota | Check cluster count vs limit | Not exceeded | HALT; request quota increase |
 
-#### Pre-flight: Configure jdc Config File for Sandbox
-
-Before running any `jdc` command in sandboxed environments, ensure the config file exists:
-
-```bash
-# Setup jdc config in a writable location (sandbox-safe)
-export HOME=/tmp/jdc-home
-mkdir -p /tmp/jdc-home/.jdc
-cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
-[default]
-access_key = {{env.JDC_ACCESS_KEY}}
-secret_key = {{env.JDC_SECRET_KEY}}
-region_id = {{user.region}}
-endpoint = nc.jdcloud-api.com
-scheme = https
-timeout = 20
-CONFIGEOF
-printf "%s" "default" > /tmp/jdc-home/.jdc/current
-```
-
-#### Execution — CLI (`jdc`) [Primary Path]
-
-**Required** when `cli_applicability: jdc-first-with-fallback`. Use `--output json` at the **top level** (before the subcommand). Do NOT use `--no-interactive` — it is not supported by jdc CLI.
-
-```bash
-jdc --output json nc create-cluster \
-  --region-id "{{user.region}}" \
-  --cluster-name "{{user.cluster_name}}" \
-  --vpc-id "{{user.vpc_id}}" \
-  --subnet-id "{{user.subnet_id}}" \
-  --master-version "{{user.master_version}}" \
-  --node-group-name "{{user.node_group_name}}" \
-  --instance-type "{{user.instance_type}}" \
-  --node-count {{user.node_count}}
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 import os
@@ -300,24 +266,30 @@ resp = client.send(req)
 cluster_id = resp.result["clusterId"]
 ```
 
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes create-cluster \
+  --region-id "{{user.region}}" \
+  --cluster-name "{{user.cluster_name}}" \
+  --vpc-id "{{user.vpc_id}}" \
+  --subnet-id "{{user.subnet_id}}" \
+  --master-version "{{user.master_version}}" \
+  --node-group-name "{{user.node_group_name}}" \
+  --instance-type "{{user.instance_type}}" \
+  --node-count {{user.node_count}}
+```
+
 #### Post-execution Validation
 
 1. Capture `{{output.cluster_id}}` from `$.result.clusterId`.
 2. Poll `describeCluster` until `state` == `running` or timeout.
 
-```bash
-# CLI poll loop (primary path) — --output json at TOP level
-for i in $(seq 1 20); do
-  STATE=$(jdc --output json nc describe-cluster \
-    --region-id "{{user.region}}" \
-    --cluster-id "{{output.cluster_id}}" | jq -r '.result.cluster.state')
-  [ "$STATE" = "running" ] && break
-  sleep 30
-done
-```
-
 ```python
-# SDK poll loop (fallback, after 3 jdc failures)
+# SDK poll loop (primary path)
 from jdcloud_sdk.services.nc.apis.DescribeClusterRequest import DescribeClusterRequest, DescribeClusterParameters
 
 for _ in range(20):
@@ -423,15 +395,7 @@ clusters = resp.result["clusters"]
 - **MUST** warn user about workloads, persistent volumes, and LoadBalancer services that will be lost.
 - **MUST NOT** proceed without clear user assent.
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc delete-cluster \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.DeleteClusterRequest import DeleteClusterRequest, DeleteClusterParameters
@@ -444,18 +408,35 @@ req = DeleteClusterRequest(parameters=params)
 resp = client.send(req)
 ```
 
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes delete-cluster \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}"
+```
+
 #### Post-execution Validation
 
 Poll describe until 404 or max wait (600s).
 
-```bash
-# CLI poll loop
-for i in $(seq 1 20); do
-  jdc --output json nc describe-cluster \
-    --region-id "{{user.region}}" \
-    --cluster-id "{{user.cluster_id}}" 2>&1 | grep -q "NotFound" && break
-  sleep 30
-done
+```python
+# SDK poll loop
+from jdcloud_sdk.services.nc.apis.DescribeClusterRequest import DescribeClusterRequest, DescribeClusterParameters
+
+for _ in range(20):
+    try:
+        dparams = DescribeClusterParameters(regionId="{{user.region}}", clusterId="{{user.cluster_id}}")
+        dreq = DescribeClusterRequest(parameters=dparams)
+        dresp = client.send(dreq)
+        sleep(30)
+    except Exception as e:
+        if "NotFound" in str(e) or "404" in str(e):
+            break
+        raise
 ```
 
 ### Operation: Create Node Group
@@ -469,19 +450,7 @@ done
 | Instance type | User input | Valid instance type | List available types |
 | Node count | User input | ≥ 1, ≤ quota | Validate range |
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc create-node-group \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}" \
-  --name "{{user.node_group_name}}" \
-  --instance-type "{{user.instance_type}}" \
-  --node-count {{user.node_count}} \
-  --subnet-id "{{user.subnet_id}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.CreateNodeGroupRequest import CreateNodeGroupRequest, CreateNodeGroupParameters
@@ -503,35 +472,47 @@ resp = client.send(req)
 node_group_id = resp.result["nodeGroupId"]
 ```
 
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes create-node-group \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}" \
+  --name "{{user.node_group_name}}" \
+  --instance-type "{{user.instance_type}}" \
+  --node-count {{user.node_count}} \
+  --subnet-id "{{user.subnet_id}}"
+```
+
 #### Post-execution Validation
 
 1. Capture `{{output.node_group_id}}` from `$.result.nodeGroupId`.
 2. Poll `describeNodeGroup` until `state` == `running` or timeout.
 
-```bash
-# CLI poll loop
-for i in $(seq 1 20); do
-  STATE=$(jdc --output json nc describe-node-group \
-    --region-id "{{user.region}}" \
-    --cluster-id "{{user.cluster_id}}" \
-    --node-group-id "{{output.node_group_id}}" | jq -r '.result.nodeGroup.state')
-  [ "$STATE" = "running" ] && break
-  sleep 15
-done
+```python
+# SDK poll loop
+from jdcloud_sdk.services.nc.apis.DescribeNodeGroupRequest import DescribeNodeGroupRequest, DescribeNodeGroupParameters
+
+for _ in range(20):
+    ng_params = DescribeNodeGroupParameters(
+        regionId="{{user.region}}",
+        clusterId="{{user.cluster_id}}",
+        nodeGroupId="{{output.node_group_id}}"
+    )
+    ng_req = DescribeNodeGroupRequest(parameters=ng_params)
+    ng_resp = client.send(ng_req)
+    state = ng_resp.result["nodeGroup"]["state"]
+    if state == "running":
+        break
+    sleep(15)
 ```
 
 ### Operation: Describe Node Group
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc describe-node-group \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}" \
-  --node-group-id "{{user.node_group_id}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.DescribeNodeGroupRequest import DescribeNodeGroupRequest, DescribeNodeGroupParameters
@@ -544,6 +525,18 @@ params = DescribeNodeGroupParameters(
 req = DescribeNodeGroupRequest(parameters=params)
 resp = client.send(req)
 # Access: resp.result["nodeGroup"]
+```
+
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes describe-node-group \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}" \
+  --node-group-id "{{user.node_group_id}}"
 ```
 
 #### Present to User
@@ -567,16 +560,7 @@ resp = client.send(req)
 - **MUST** inform user about pod evictions and data on non-persistent volumes.
 - **MUST NOT** proceed without clear user assent.
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc delete-node-group \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}" \
-  --node-group-id "{{user.node_group_id}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.DeleteNodeGroupRequest import DeleteNodeGroupRequest, DeleteNodeGroupParameters
@@ -588,6 +572,18 @@ params = DeleteNodeGroupParameters(
 )
 req = DeleteNodeGroupRequest(parameters=params)
 resp = client.send(req)
+```
+
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes delete-node-group \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}" \
+  --node-group-id "{{user.node_group_id}}"
 ```
 
 #### Post-execution Validation
@@ -605,17 +601,7 @@ Poll describe until 404 or max wait (300s).
 | Target count | User input | ≥ 1, ≤ quota | Validate range |
 | Subnet capacity | Verify available IPs | Sufficient IPs | HALT; expand subnet |
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc modify-node-group \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}" \
-  --node-group-id "{{user.node_group_id}}" \
-  --node-count {{user.node_count}}
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.ModifyNodeGroupRequest import ModifyNodeGroupRequest, ModifyNodeGroupParameters
@@ -630,21 +616,26 @@ req = ModifyNodeGroupRequest(parameters=params)
 resp = client.send(req)
 ```
 
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes modify-node-group \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}" \
+  --node-group-id "{{user.node_group_id}}" \
+  --node-count {{user.node_count}}
+```
+
 #### Post-execution Validation
 
 Poll `describeNodeGroup` until `nodeCount` matches target and `state` is `running`.
 
 ### Operation: Describe Cluster Credentials
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc describe-cluster-credential \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.DescribeClusterCredentialRequest import DescribeClusterCredentialRequest, DescribeClusterCredentialParameters
@@ -656,6 +647,17 @@ params = DescribeClusterCredentialParameters(
 req = DescribeClusterCredentialRequest(parameters=params)
 resp = client.send(req)
 kubeconfig = resp.result["kubeconfig"]  # Base64-encoded kubeconfig
+```
+
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes describe-cluster-credential \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}"
 ```
 
 #### Present to User
@@ -678,16 +680,7 @@ kubeconfig = resp.result["kubeconfig"]  # Base64-encoded kubeconfig
 | Target version | Validate against available versions | Supported upgrade path | List available upgrade targets |
 | Workload health | `jdcloud-aiops-cruise k8s_analyzer` | Running workloads healthy | Warn user about upgrade impact |
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc modify-cluster \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}" \
-  --master-version "{{user.target_version}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.ModifyClusterRequest import ModifyClusterRequest, ModifyClusterParameters
@@ -701,21 +694,25 @@ req = ModifyClusterRequest(parameters=params)
 resp = client.send(req)
 ```
 
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes modify-cluster \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}" \
+  --master-version "{{user.target_version}}"
+```
+
 #### Post-execution Validation
 
 Poll `describeCluster` until `masterVersion` matches target and `state` is `running`.
 
 ### Operation: Describe Node Groups (List for a Cluster)
 
-#### Execution (CLI) [Primary Path]
-
-```bash
-jdc --output json nc describe-node-groups \
-  --region-id "{{user.region}}" \
-  --cluster-id "{{user.cluster_id}}"
-```
-
-#### Execution (SDK Fallback — after 3 jdc failures)
+#### Execution (SDK — Primary Path)
 
 ```python
 from jdcloud_sdk.services.nc.apis.DescribeNodeGroupsRequest import DescribeNodeGroupsRequest, DescribeNodeGroupsParameters
@@ -729,23 +726,134 @@ resp = client.send(req)
 node_groups = resp.result["nodeGroups"]
 ```
 
+#### Execution — CLI (`jdc`) [期望语法 — 当前锁定版本不可用]
+
+> **⚠️ 注意**: `jdc kubernetes` 命令在当前锁定版本 (1.2.12) 中运行时崩溃，以下为期望语法示例，实际执行前请确认 CLI 版本支持。
+
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用，以下为期望语法示例
+jdc --output json kubernetes describe-node-groups \
+  --region-id "{{user.region}}" \
+  --cluster-id "{{user.cluster_id}}"
+```
+
+### Operation: Storage Management (PV/PVC/StorageClass)
+
+> **Note**: Storage operations use the Kubernetes Python client (`kubernetes` package), not `jdcloud_sdk`. These operations manage K8s-native storage resources (PersistentVolume, PersistentVolumeClaim, StorageClass) within a cluster.
+
+#### Pre-flight Checks
+
+| Check | Method | Expected | On Failure |
+|-------|--------|----------|------------|
+| K8s client deps | `import kubernetes` | No import error | Install: `uv pip install kubernetes>=25.3.0` |
+| Kubeconfig | `credential_ops.get_kubeconfig_decoded()` | Valid kubeconfig | Obtain via `describeClusterCredential` |
+| Cluster access | `list_storage_classes()` | Returns storage classes | Verify kubeconfig and cluster connectivity |
+
+#### Execution (K8s Python client — Primary Path)
+
+**List StorageClasses:**
+
+```python
+from snippets.storage_ops import list_storage_classes
+
+result = list_storage_classes(kubeconfig_path="{{user.kubeconfig_path}}")
+storage_classes = result["storage_classes"]
+default_class = result["default_class"]
+```
+
+**Create PVC:**
+
+```python
+from snippets.storage_ops import create_pvc
+
+result = create_pvc(
+    name="{{user.pvc_name}}",
+    namespace="{{user.namespace}}",
+    storage_class="{{user.storage_class}}",
+    size="{{user.size}}",
+    access_mode="{{user.access_mode}}",
+    kubeconfig_path="{{user.kubeconfig_path}}"
+)
+pvc_name = result["name"]
+```
+
+**List PVCs:**
+
+```python
+from snippets.storage_ops import list_pvcs
+
+result = list_pvcs(
+    namespace="{{user.namespace}}",
+    kubeconfig_path="{{user.kubeconfig_path}}"
+)
+pvcs = result["pvcs"]
+```
+
+**Delete PVC:**
+
+> **⚠️ Safety Gate**: PVC deletion is IRREVERSIBLE. Data on the underlying PV may be lost depending on reclaim policy. MUST confirm with user before calling.
+
+```python
+from snippets.storage_ops import delete_pvc
+
+# SAFETY: Caller MUST confirm with user before calling
+result = delete_pvc(
+    name="{{user.pvc_name}}",
+    namespace="{{user.namespace}}",
+    kubeconfig_path="{{user.kubeconfig_path}}"
+)
+```
+
+**Check PVC Health:**
+
+```python
+from snippets.storage_ops import check_pvc_health
+
+result = check_pvc_health(
+    name="{{user.pvc_name}}",
+    namespace="{{user.namespace}}",
+    kubeconfig_path="{{user.kubeconfig_path}}"
+)
+healthy = result["healthy"]
+issues = result["issues"]
+```
+
+**Get Storage Summary:**
+
+```python
+from snippets.storage_ops import get_storage_summary
+
+result = get_storage_summary(
+    namespace="{{user.namespace}}",
+    kubeconfig_path="{{user.kubeconfig_path}}"
+)
+storage_classes_count = result["storage_classes"]
+pvs_status = result["pvs"]
+pvcs_status = result["pvcs"]
+```
+
+#### Post-execution Validation
+
+- **Create PVC**: Verify PVC status transitions from `Pending` to `Bound`
+- **Delete PVC**: Verify PVC no longer exists via `list_pvcs()`
+- **Health Check**: Verify `healthy == true` and no issues in `issues` array
+
 ## Quality Gate (GCL)
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
-> The quality gate is **required** for all operations exposed by this
-> skill (per `AGENTS.md` §8). Cluster delete is destructive and requires
-> the strictest review.
+> The quality gate is **recommended** for this skill (per `AGENTS.md` §8).
 
 ### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **2** | `AGENTS.md` §8 default for `jdcloud-kubernetes-ops` (required); cluster delete is destructive and impacts all workloads |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
+| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-kubernetes-ops` (recommended) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
 | `safety_confirm_required` | **true** for `delete-cluster`, `delete-node-group` | matches repository safety gate policy |
-| `workload_analysis_required` | **true** for `delete-cluster` | must invoke `k8s_analyzer` before cluster delete |
+| `hallucination_check` | **recommended** | Phase 6 H layer; MANDATORY for CLI parameter existence |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -756,14 +864,22 @@ User request
 [0] Pre-flight (Orchestrator)
     - resolve env.* and user.* variables
     - pick skill, load its rubric
+    - optionally load failure-patterns.md
     - prepare k8s_analyzer if needed
    │
    ▼
 [1] Generate (G)
-    - run jdc / SDK
-    - capture trace
+    - generate command/payload (DO NOT execute yet)
     - run k8s_analyzer pre-check if delete-cluster
    │
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (recommended for k8s-ops)      - CLI parameter existence
+   │                                    - JSON structure compliance
+   │
+   ├── PASS → [1a] Execute (run jdc / SDK)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critique (C)
     - isolated prompt context
@@ -772,11 +888,106 @@ User request
    │
    ▼
 [3] Decide (Orchestrator)
+    - HALLUCINATION_ABORT → ABORT (no partial)
     - Safety=0  → ABORT (no partial)
     - all pass  → RETURN
     - else & iter<max → inject suggestions into G
     - else → RETURN best + unresolved rubric items
 ```
+
+### Hallucination Detection Layer (H) — Recommended
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud Kubernetes API.
+
+**Two-Category Check (for k8s-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc nc <operation> --help` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads in create/update operations | Validate field nesting matches OpenAPI schema |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-kubernetes-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidClusterId: Cluster ID must be in format 'c-xxxxxxxx'
+- NodeGroup cascade delete: Must drain nodes before delete-node-group
+- Kubeconfig expiry: Regenerate kubeconfig if > 24h old"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails, the Orchestrator SHOULD extract a structured failure pattern:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime",
+    "skill": "jdcloud-kubernetes-ops",
+    "command": "jdc nc describe-cluster --clusterId c-xxx",
+    "error": "InvalidParameter: InvalidClusterId",
+    "fix": "Validated cluster ID format before execution",
+    "reusable": true
+  }
+}
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
+
+### Operation-specific behavior
+
+- **`delete-cluster`** — Destructive. MUST invoke `k8s_analyzer` pre-check to identify workload dependencies. Safety=1 required. H layer validates clusterId format.
+- **`delete-node-group`** — Destructive. MUST drain nodes before deletion. Safety=1 required.
+- **`create-cluster`** / **`create-node-group`** — Non-destructive but requires CIDR validation and resource quota check.
+- **`describe-*`** — Read-only. No safety gate required.
 
 ## Reference Directory
 
@@ -795,55 +1006,74 @@ User request
 
 > **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
 
-1. **Install uv** (system-wide, one-time per machine)
+Environment setup follows a **SDK/API 优先（当前 CLI 不可用）** strategy. Complete setup guide is in [CLI Usage](references/cli-usage.md) and [API & SDK Usage](references/api-sdk-usage.md).
 
-   ```bash
-   # macOS / Linux
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   # or: brew install uv
+### Quick Setup Summary
 
-   # Windows (PowerShell)
-   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-   ```
+1. **Attempt SDK/API setup** via `uv` (current executable path)
+2. **`jdc` CLI** — only after confirming the CLI version fixes the `jdcloudHeaders` bug
+3. If CLI is not working, use **SDK/API** directly
 
-2. **Bootstrap Python environment** (idempotent — safe to re-run):
+### Python Runtime (uv)
 
-   ```bash
-   uv venv --python 3.10
-   source .venv/bin/activate
-   uv pip install jdcloud_cli jdcloud_sdk
-   jdc --version
-   ```
+Both `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
 
-3. **Configure Credentials** — Two methods (CLI vs SDK differ):
+**Install uv (system-wide, one-time per machine):**
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Or via Homebrew: brew install uv
 
-   **SDK (env vars):**
-   ```bash
-   export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-   export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-   export JDC_REGION="cn-north-1"
-   ```
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-   **CLI (`~/.jdc/config` INI):**
-   ```bash
-   export HOME=/tmp/jdc-home
-   mkdir -p /tmp/jdc-home/.jdc
-   cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
-   [default]
-   access_key = {{env.JDC_ACCESS_KEY}}
-   secret_key = {{env.JDC_SECRET_KEY}}
-   region_id = {{env.JDC_REGION}}
-   endpoint = nc.jdcloud-api.com
-   scheme = https
-   timeout = 20
-   CONFIGEOF
-   printf "%s" "default" > /tmp/jdc-home/.jdc/current
-   ```
+### Configure Credentials
 
-4. **Verify Configuration**:
-   ```bash
-   jdc --output json nc describe-clusters --region-id cn-north-1 --page-number 1 --page-size 1
-   ```
+**CRITICAL**: The `jdc` CLI reads credentials exclusively from `~/.jdc/config` (INI format). The SDK reads from environment variables. Complete credential setup guide is in [CLI Usage](references/cli-usage.md).
+
+**SDK (env vars) — Primary Path:**
+```bash
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
+export JDC_REGION="cn-north-1"
+```
+
+**CLI (`~/.jdc/config` INI) — Expected Syntax Only:**
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = {{env.JDC_ACCESS_KEY}}
+secret_key = {{env.JDC_SECRET_KEY}}
+region_id = {{env.JDC_REGION}}
+endpoint = nc.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+```
+
+### Verify Configuration
+
+```python
+# SDK verification (primary path)
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.nc.client.NcClient import NcClient
+from jdcloud_sdk.services.nc.apis.DescribeClustersRequest import DescribeClustersRequest, DescribeClustersParameters
+
+credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
+client = NcClient(credential)
+params = DescribeClustersParameters(regionId="cn-north-1")
+params.setPageNumber(1)
+params.setPageSize(1)
+req = DescribeClustersRequest(parameters=params)
+resp = client.send(req)
+print(f"SDK connection OK, clusters: {len(resp.result.get('clusters', []))}")
+```
 
 > **Security:** Never commit `.env` to version control (already in `.gitignore`). All credentials use `{{env.*}}` placeholders — never real values.
 

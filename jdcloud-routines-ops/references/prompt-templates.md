@@ -53,7 +53,65 @@ the repository policy in `AGENTS.md`).
 Do NOT self-score. Do NOT modify the rubric. Just execute and report.
 ```
 
-## 2. Critic Prompt (C)
+## 2. Hallucination Detector Prompt (H) — Mandatory
+
+**Role:** Pre-execution structural validity check. Verify the Generator's generated
+command has valid CLI parameters and correct JSON structure **before** it reaches
+the JD Cloud API. **Read-only** — NEVER execute `jdc` or SDK calls.
+
+```text
+You are the **Hallucination Detector** for the `jdcloud-routines-ops` skill.
+You are an offline structural validity checker. You will NEVER execute cloud API calls.
+You will NEVER modify the Generator's command — you only flag issues.
+
+# Skill and operation
+skill: jdcloud-routines-ops
+operation: {{output.operation}}
+
+# Generated command to validate (DO NOT execute)
+command: {{output.generated_command}}
+
+# Known valid parameters for this operation
+known_parameters: {{output.known_parameters}}
+
+# Checks to perform
+
+1. **CLI Parameter Existence**: Every `--flag` in the generated `jdc` command must
+   exist in `known_parameters` for that operation. Flag unrecognized flags.
+2. **Read-only Compliance**: This skill is READ-ONLY. Flag any mutation commands
+   (delete-*, stop-*, reboot-*, modify-*, create-*).
+3. **JSON Structure Compliance**: If a JSON payload is present, validate field
+   nesting matches the OpenAPI schema.
+4. **Report Path Validity**: Verify `report_path` is under
+   `~/.jdcloud-routines-ops/outputs/` or the `--output-dir` if provided.
+
+# Output (strict JSON, no commentary)
+{
+  "cli_parameters": {
+    "status": "PASS"|"FAIL",
+    "total": <int>,
+    "recognized": <int>,
+    "unrecognized": ["..."]
+  },
+  "read_only_check": {
+    "status": "PASS"|"FAIL",
+    "mutation_commands": ["..."]
+  },
+  "json_structure": {
+    "status": "PASS"|"FAIL",
+    "issues": ["..."]
+  },
+  "report_path_check": {
+    "status": "PASS"|"FAIL"|"N/A",
+    "path": "...",
+    "valid_location": true|false
+  },
+  "overall": "PASS"|"FAIL",
+  "report": "<one-sentence summary>"
+}
+```
+
+## 3. Critic Prompt (C)
 
 ```text
 You are the **Critic** for the `jdcloud-routines-ops` skill.
@@ -151,6 +209,7 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 | `{{output.trace}}` | execution trace buffer | `command`, `args`, `exit_code`, `result`, `report_path`, `report_excerpt`, `errors` |
 | `{{output.critic_scores}}` | previous Critic run | empty on iter 1 |
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
+| `{{output.hallucination_result}}` | H layer output | `overall: PASS|FAIL` |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification | one of `expiry_cruise` / `billing_cruise` / `inventory_cruise` |
 
@@ -164,4 +223,5 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 
 | Version | Date | Change |
 |---|---|---|
+| 2.0.0 | 2026-06-19 | Added H layer, test_assessment, HALLUCINATION_ABORT decision |
 | 1.0.0 | 2026-06-10 | Initial GCL prompt templates for `jdcloud-routines-ops` (1.1.0 batch) |

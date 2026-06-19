@@ -44,6 +44,54 @@ Return your execution result and trace in the following structure:
 }
 ```
 
+## Hallucination Detector Prompt Template (H) — Mandatory
+
+**Role:** Pre-execution structural validity check. Verify the Generator's generated
+command/payload has valid CLI/SDK parameters and correct JSON structure **before** it
+reaches the JD Cloud API. **Read-only** — NEVER execute CLI/SDK calls.
+
+**Note:** `{{user.request}}` is **deliberately absent** from this template to prevent
+answer-alignment bias. H judges structural validity only.
+
+```text
+You are the **Hallucination Detector** for the `jdcloud-jcq-ops` skill.
+You are an offline structural validity checker. You will NEVER execute cloud API calls.
+You will NEVER modify the Generator's command — you only flag issues.
+
+# Skill and operation
+skill: jdcloud-jcq-ops
+operation: {{output.operation}}
+
+# Generated command to validate (DO NOT execute)
+command: {{output.generated_command}}
+
+# Known valid parameters for this operation
+known_parameters: {{output.known_parameters}}
+
+# Checks to perform
+
+1. **CLI/SDK Parameter Existence**: Every `--flag` or parameter in the command must exist
+   in `known_parameters` for that operation. Flag unrecognized parameters.
+2. **JSON Structure Compliance**: If a JSON payload is present, validate field nesting
+   matches the OpenAPI schema. Check field types and enum membership.
+
+# Output (strict JSON, no commentary)
+{
+  "cli_parameters": {
+    "status": "PASS"|"FAIL",
+    "total": <int>,
+    "recognized": <int>,
+    "unrecognized": ["..."]
+  },
+  "json_structure": {
+    "status": "PASS"|"FAIL",
+    "issues": ["..."]
+  },
+  "overall": "PASS"|"FAIL",
+  "report": "<one-sentence summary>"
+}
+```
+
 ## Critic Prompt Template
 
 ```text
@@ -62,6 +110,13 @@ Scoring rules:
 4. Traceability: Is the trace complete with request params, response, requestId, and errors?
 5. Spec Compliance: Did names follow rules? Was message body ≤ 256 KB? Were tags ≤ 128 chars?
 
+# Test & Regression Assessment (MANDATORY per AGENTS.md §2.1)
+In addition to rubric scoring, assess:
+- **test_accuracy**: Do existing tests correctly exercise the changed behavior?
+  If this change introduced a bug, would these tests fail?
+- **regression_gate**: Is targeted regression required? Name the smallest
+  accurate suite for the change.
+
 Return strict JSON:
 {
   "scores": {
@@ -70,6 +125,12 @@ Return strict JSON:
     "idempotency": 0|0.5|1,
     "traceability": 0|0.5|1,
     "spec_compliance": 0|0.5|1
+  },
+  "test_assessment": {
+    "test_accuracy": "pass|fail",
+    "regression_gate": "required|waived",
+    "regression_suite": "<suite name or null>",
+    "rationale": "..."
   },
   "suggestions": ["≤ 3 concrete, executable improvements"],
   "blocking": true|false
@@ -87,16 +148,18 @@ Current iteration: {{output.iteration}} / {{output.max_iterations}}
 Previous scores: {{output.previous_scores}}
 Critic feedback: {{output.critic_feedback}}
 Blocking: {{output.blocking}}
+Hallucination result: {{output.hallucination_result}}
 
 Decision rules:
-1. If safety = 0 in any dimension → ABORT immediately. Return ABORT status + reason.
-2. If all scores meet their thresholds → RETURN success. Include final output.
-3. If iteration < max_iterations and not all pass → RETRY. Inject critic suggestions into generator context.
-4. If iteration = max_iterations and not all pass → RETURN_BEST. Include best-so-far output + unresolved rubric items.
+1. If hallucination overall == FAIL after regeneration → HALLUCINATION_ABORT. Return HALLUCINATION_ABORT status + unresolved hallucination report.
+2. If safety = 0 in any dimension → ABORT immediately. Return ABORT status + reason.
+3. If all scores meet their thresholds → RETURN success. Include final output.
+4. If iteration < max_iterations and not all pass → RETRY. Inject critic suggestions into generator context.
+5. If iteration = max_iterations and not all pass → RETURN_BEST. Include best-so-far output + unresolved rubric items.
 
 Return JSON:
 {
-  "decision": "ABORT|RETURN|RETRY|RETURN_BEST",
+  "decision": "HALLUCINATION_ABORT|ABORT|RETURN|RETRY|RETURN_BEST",
   "reason": "<explanation>",
   "next_input": "<for RETRY: suggestions to inject>"
 }
@@ -132,3 +195,10 @@ Return:
 - **Generator MUST NOT modify the rubric** — the rubric is fixed by the Orchestrator.
 - **All prompts MUST use `{{output.*}}` placeholders** — bare `{...}` is NOT allowed.
 - **Trace persistence:** The Orchestrator MUST write `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` after loop termination.
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-08 | Initial GCL prompt templates for `jdcloud-jcq-ops` |
+| 1.1.0 | 2026-06-19 | Added H layer template (§10.5) and test_assessment block (§2.1) |

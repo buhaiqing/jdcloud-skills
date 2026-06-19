@@ -16,8 +16,8 @@ compatibility: >-
   product is supported by the CLI (dual-path skills).
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-08"
+  version: "1.1.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud VPN API - https://vpn.jdcloud-api.com/v1"
   cli_applicability: dual-path
@@ -165,6 +165,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.0.0 | 2026-06-08 | Initial VPN skill (dual-path); covers VpnGateway, CustomerGateway, VpnConnection; GCL recommended (max_iter=3) |
 
 ## Execution Flows (Agent-Readable)
@@ -744,17 +745,18 @@ done
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
-> The quality gate is **recommended** for all operations exposed by this
-> skill (per `AGENTS.md` §8).
+> The quality gate is **recommended** for this skill (per `AGENTS.md` §8).
 
 ### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-vpn-ops` (recommended); VPN connectivity is mission-critical for hybrid cloud |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
-| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
-| `safety_confirm_required` | **true** for `delete-vpn-gateway`, `delete-customer-gateway`, `delete-vpn-connection` | matches repository safety gate policy |
+| `max_iterations` | **3** | `AGENTS.md` §8 default for recommended skills |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified trace path |
+| `safety_confirm_required` | **true** for VPN tunnel delete | VPN tunnel delete breaks hybrid cloud connectivity |
+| `hallucination_check` | **recommended** | Phase 6 H layer; recommended for CLI/SDK parameter validation |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -763,25 +765,150 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► jdc (primary) → SDK (after 3 fails)
+   │                              generate command (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (recommended for vpn-ops)     - CLI parameter existence
+   │                                   - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the jdc/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<3 & not all pass → RETRY (inject suggestions)
-   └─ iter=3 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<3 & not all pass   → RETRY (inject suggestions)
+   └─ iter=3 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Recommended
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud VPN API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for vpn-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc vpn <operation>` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (e.g., `--vpn-gateway-spec`, `--connection-spec`) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `create-vpn-gateway` | `--vpn-gateway-name`, `--vpc-id` |
+| `delete-vpn-gateway` | `--vpn-gateway-id` |
+| `create-customer-gateway` | `--customer-gateway-name`, `--ip-address` |
+| `delete-customer-gateway` | `--customer-gateway-id` |
+| `create-vpn-connection` | `--vpn-connection-name`, `--vpn-gateway-id`, `--customer-gateway-id`, `--ike-config`, `--ipsec-config` |
+| `delete-vpn-connection` | `--vpn-connection-id` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 CLI Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-vpn-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter|runtime|cross_skill",
+    "skill": "jdcloud-vpn-ops",
+    "command": "jdc vpn create-vpn-connection ...",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
 ```
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
@@ -789,15 +916,16 @@ The GCL **wraps** the jdc-first / SDK-fallback flow defined under
 `## Execution Flows` above. The Generator (G) IS the existing jdc-or-SDK
 executor. The Critic (C) is a new, read-only role with no `jdc` / SDK
 access. The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is a recommended pre-execution structural check.
 
 ### Operation-specific behavior
 
-- **`create vpn gateway`** — Must validate VPC exists. VPN GW must be in `available` state before creating connections.
-- **`create customer gateway`** — Remote IP must be a valid public IPv4 address. Must not duplicate existing CG with same IP.
-- **`create vpn connection`** — Both VPN GW and CG must be `available`. PSK length and complexity should meet security standards (min 8 chars, avoid dictionary words). Subnet CIDRs must not overlap.
-- **`delete vpn gateway`** — Must verify no active VPN connections exist. Deleting a VPN GW with active connections may fail or leave dangling state.
-- **`delete customer gateway`** — Must verify no active VPN connections reference this CG.
-- **`delete vpn connection`** — **Breaks encrypted tunnel** between VPC and remote network. `confirm=DELETE` required. For prod-tagged resources, `confirm=DELETE_PROD` also required.
+- **`create-vpn-gateway`** — VPC must exist. VPN gateway name must be unique.
+- **`delete-vpn-gateway`** — **IRREVERSIBLE** — breaks all VPN connections through this gateway. `confirm=DELETE` required. Must verify no active VPN connections exist.
+- **`create-customer-gateway`** — IP address must be valid public IPv4. Customer gateway name must be unique.
+- **`delete-customer-gateway`** — **IRREVERSIBLE** — breaks all VPN connections using this customer gateway. `confirm=DELETE` required.
+- **`create-vpn-connection`** — Both VPN gateway and customer gateway must exist and be available. IKE and IPsec configs must be valid.
+- **`delete-vpn-connection`** — **IRREVERSIBLE** — breaks encrypted tunnel between VPC and remote network. `confirm=DELETE` required.
 
 ## Prerequisites
 

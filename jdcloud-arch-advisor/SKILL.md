@@ -16,8 +16,8 @@ compatibility: >-
   jdcloud-alert-intelligence skills to be available for full data collection.
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-08"
+  version: "1.1.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   python_version_minimum: "3.10"
   type: advisory-framework
@@ -381,25 +381,146 @@ Phase 3 — 推荐与报告
 
 ## Quality Gate (GCL)
 
-### GCL Classification
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this read-only advisory skill (per `AGENTS.md` §8).
 
-| 属性 | 值 |
-|:----|:---|
-| Classification | `optional` |
-| max_iter | 5 |
-| 触发条件 | 当 Agent 输出的架构建议涉及重大架构变更建议时（如推荐从单体迁移到微服务） |
-| 不触发条件 | 纯数据查询、简单 WAF 评估报告 |
+### Parameters (override `AGENTS.md` §8 defaults)
 
-### Rubric Dimensions
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-arch-advisor` (optional, read-only) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **false** | read-only by definition |
+| `hallucination_check` | **optional** | Phase 6 H layer; recommended for API parameter validation |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
-| 维度 | 阈值 | 说明 |
-|------|:---:|------|
-| **Correctness** | >= 0.7 | 架构分析结论与实际资源状态一致，推荐方案技术可行 |
-| **Safety** | = 1.0 | 没有写操作、没有越权建议、没有凭据暴露 |
-| **Traceability** | >= 0.8 | 报告标注了每个结论的数据来源 skill 和时间戳 |
-| **Spec Compliance** | >= 0.8 | 遵循 WAF 标准定义和评估流程 |
+### Loop overview
 
-> 完整评分规则见 `references/rubric.md`，提示词模板见 `references/prompt-templates.md`。
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │                              optionally load failure-patterns.md
+   ▼
+[1] Generator (G)            ──► jdc CLI (primary) → SDK (after 3 failures)
+   │                              generate command/payload (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for arch-advisor)   - API parameter existence
+   │                                   - JSON structure compliance
+   │
+   ├── PASS → [1a] Execute (run the CLI/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
+   ▼
+[3] Orchestrator decider
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud APIs.
+
+**Two-Category Check (for arch-advisor):**
+
+| Category | Check | Method |
+|---|---|---|
+| **API Parameter Existence** | Verify every query parameter exists in the API spec | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For response parsing | Validate field nesting matches OpenAPI schema |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "api_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-arch-advisor)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- WAF assessment: Must collect data from jdcloud-cloudmonitor-ops before WAF evaluation
+- Architecture recommendation: Validate resource dependencies via jdcloud-vpc-ops before suggesting changes
+- Cross-skill delegation: Route actual changes to product-specific ops skills, not arch-advisor"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails, the Orchestrator SHOULD extract a structured failure pattern:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime",
+    "skill": "jdcloud-arch-advisor",
+    "command": "jdc vm describe-instances --instanceId i-xxx",
+    "error": "InvalidParameter: InvalidInstanceId",
+    "fix": "Validated instance ID format before execution",
+    "reusable": true
+  }
+}
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
+
+### Operation-specific behavior
+
+- **Architecture review** — Read-only analysis. H layer validates resource ID formats across all delegated skills.
+- **WAF assessment** — Read-only evaluation. Must collect data from monitoring/audit skills before assessment.
+- **Architecture recommendation** — Read-only advisory. Any actual changes MUST be delegated to product-specific ops skills (vm-ops, vpc-ops, etc.).
+- **All operations** — Safety=1 required (pure read-only). Any write operation → Safety=0 → ABORT.
 
 ---
 
@@ -423,4 +544,5 @@ Phase 3 — 推荐与报告
 
 | 版本 | 日期 | 变更 |
 |:----|:----|------|
+| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Upgraded to GCL v2 with Phase 6 (Hallucination Detection Layer H — optional, recommended for API parameter validation) and Phase 7 (Lightweight Reflexion Integration — enabled, loads `docs/failure-patterns.md`). Added `HALLUCINATION_ABORT` termination condition. Added operation-specific H layer behavior for architecture review, WAF assessment, and recommendation operations. Rubric version bumped to v2. |
 | 1.0.0 | 2026-06-08 | 初始版本：三模式定义 + WAF 五支柱评估体系 + 委托规则 + GCL optional。镜像 alicloud-arch-advisor，适配京东云产品与 Skill 生态 |

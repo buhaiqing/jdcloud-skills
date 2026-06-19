@@ -34,6 +34,10 @@
 | `{{output.iter}}` | Orchestrator 计数器 | 从 1 开始 |
 | `{{output.max_iter}}` | 配置 | `5` |
 | `{{output.trace}}` | 执行 trace 缓冲 | 完整 G 产出 + 元数据 |
+| `{{output.hallucination_result}}` | Hallucination Detector (H) | H 层的结构有效性检查结果（JSON） |
+| `{{output.generated_report}}` | Generator 输出 | 待验证的架构报告 |
+| `{{output.known_sections}}` | Skill 参考知识库 | 该报告的已知有效章节列表 |
+| `{{output.known_resource_types}}` | Skill 参考知识库 | 京东云已知资源类型列表 |
 
 ---
 
@@ -438,7 +442,7 @@ composite_score = 五支柱得分算术平均
 
 ---
 
-## 5. jdc CLI 调用模板示例（供 Generator 参考）
+## 6. jdc CLI 调用模板示例（供 Generator 参考）
 
 ### 5.1 正确格式
 
@@ -500,8 +504,9 @@ jdc vm delete-instance ...  # arch-advisor NEVER
 
 ---
 
-## 6. Changelog
+## 7. Changelog
 
 | 版本 | 日期 | 变更 |
 |:----|:----|------|
+| 1.1.0 | 2026-06-19 | 添加 Hallucination Detector (H) 提示模板（§2）；Critic JSON 输出添加 test_assessment 块（测试准确性 + 回归门）；Orchestrator 决策规则添加 HALLUCINATION_ABORT；Variable Convention 表添加 `{{output.hallucination_result}}`、`{{output.generated_report}}`、`{{output.known_sections}}`、`{{output.known_resource_types}}` |
 | 1.0.0 | 2026-06-08 | 初始版本: 三模式 (A/B/C) Generator + 通用 Critic + Orchestrator 提示模板; 占位符遵循 AGENTS.md 规范; 含 jdc CLI 正确/错误格式示例; Critic 强调独立判断不参考 user request |

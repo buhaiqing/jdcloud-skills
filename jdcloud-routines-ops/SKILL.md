@@ -332,7 +332,7 @@ find ~/.jdcloud-routines-ops/outputs -type f -mtime +30 -delete
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **5** | `AGENTS.md` §8 default for optional skills |
+| `max_iterations` | **3** | `AGENTS.md` §8 default for optional skills |
 | `rubric_version` | `v2` | see [references/rubric.md](references/rubric.md) |
 | `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified trace path |
 | `safety_confirm_required` | **false** | read-only by default; renewal flows must confirm via delegated ops skills |

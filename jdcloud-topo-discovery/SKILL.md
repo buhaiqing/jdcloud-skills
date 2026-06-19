@@ -22,13 +22,15 @@ compatibility: >-
   Read-only operations (Describe/List/Get) strictly enforced.
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-08"
+  version: "1.1.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: cross-product-discovery
   cli_applicability: jdc-first-with-fallback
   cli_version_locked: "1.2.12"
   sdk_version_locked: ">=1.6.26"
+  gcl_classification: optional
+  gcl_max_iter: 5
   cli_support_evidence: >-
     Confirmed via `jdc --help` output showing the `vpc`, `vm`, `rds`, `redis`,
     `lb`, `iam`, `kms`, `ag`, `mongodb` products required for cross-product
@@ -127,19 +129,139 @@ metadata:
 
 ## Quality Gate (GCL)
 
-本 Skill 遵循 AGENTS.md §12 Generator-Critic-Loop 质量门。
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **optional** for this read-only discovery skill (per `AGENTS.md` §8).
 
-### Rubric Dimensions
+### Parameters (override `AGENTS.md` §8 defaults)
 
-见 [references/gcl-rubric.md](references/gcl-rubric.md)。
-
-| 维度 | 权重 | 说明 |
+| Parameter | Value | Reason |
 |---|---|---|
-| **Correctness** | 25% | 拓扑关系和资源清单与实际情况一致 |
-| **Safety** | 30% | 纯读操作,任何写操作为 0 |
-| **Idempotency** | 15% | 同一输入多次扫描结果一致 |
-| **Traceability** | 20% | 报告含完整执行上下文(命令、参数、输出路径) |
-| **Spec Compliance** | 10% | 遵循 manifest-schema 和字段映射规范 |
+| `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-topo-discovery` (optional, read-only) |
+| `rubric_version` | `v2` | see [gcl-rubric.md](references/gcl-rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **false** | read-only by definition |
+| `hallucination_check` | **optional** | Phase 6 H layer; recommended for API parameter validation |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Orchestrator pre-flight  ──► load rubric, classify operation
+   │                              optionally load failure-patterns.md
+   ▼
+[1] Generator (G)            ──► jdc CLI (primary) → SDK (after 3 failures)
+   │                              generate command/payload (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (optional for topo-discovery) - API parameter existence
+   │                                   - JSON structure compliance
+   │
+   ├── PASS → [1a] Execute (run the CLI/SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
+   ▼
+[2] Critic (C)               ──► isolated context, blind to user request
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
+   ▼
+[3] Orchestrator decider
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<5 & not all pass   → RETRY (inject suggestions)
+   └─ iter=5 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Optional
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud VPC/VPC API.
+
+**Two-Category Check (for topo-discovery):**
+
+| Category | Check | Method |
+|---|---|---|
+| **API Parameter Existence** | Verify every query parameter exists in the VPC/VPC API spec | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For response parsing | Validate field nesting matches OpenAPI schema |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "api_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-topo-discovery)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidVpcId: VPC ID must be in format 'vpc-xxxxxxxx'
+- Subnet pagination: Always use pageNumber/pageSize (≤100) for large deployments
+- Security group rule parsing: Handle both IPv4 and IPv6 CIDR formats"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails, the Orchestrator SHOULD extract a structured failure pattern:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime",
+    "skill": "jdcloud-topo-discovery",
+    "command": "jdc vpc describe-vpcs --vpcId vpc-xxx",
+    "error": "InvalidParameter: InvalidVpcId",
+    "fix": "Validated VPC ID format before execution",
+    "reusable": true
+  }
+}
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/gcl-rubric.md](references/gcl-rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Sub-Mode Rubric
 
@@ -149,6 +271,13 @@ metadata:
 | export-hcl | 字段映射精度 | 无敏感泄露 |
 | baseline | 目录结构完整 | 无数据删除 |
 | baseline-diff | Diff 准确度 | 只读 Diff |
+
+### Operation-specific behavior
+
+- **`scan-topo`** — Read-only topology discovery. H layer validates VPC/Subnet ID formats.
+- **`export-hcl`** — Read-only HCL export. H layer validates resource ID formats and field mappings.
+- **`baseline`** / **`baseline-diff`** — Read-only baseline management. H layer validates snapshot IDs.
+- **All operations** — Safety=1 required (pure read-only). Any write operation → Safety=0 → ABORT.
 
 ## Pre-flight Interaction (用户决策)
 
@@ -526,6 +655,14 @@ This skill uses read-only Describe APIs which are free. Minimal API call volume:
 | Brief mode | ~6-8 Describe calls | < 10s |
 | + Health overlay | +0 (复用已有数据) | +0s |
 | + HCL sketch export | ~10-15 API calls | < 60s |
+
+
+## Changelog
+
+| Version | Date | Change |
+|---------|------|--------|
+| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Upgraded to GCL v2 with Phase 6 (Hallucination Detection Layer H — optional, recommended for API parameter validation) and Phase 7 (Lightweight Reflexion Integration — enabled, loads `docs/failure-patterns.md`). Added `HALLUCINATION_ABORT` termination condition. Added operation-specific H layer behavior for scan-topo, export-hcl, baseline, and baseline-diff operations. Rubric version bumped to v2. |
+| 1.0.0 | 2026-06-08 | Initial release: Network topology discovery, resource inventory, HCL export, baseline & drift detection |
 
 
 ## See Also — Meta-Skill Rules

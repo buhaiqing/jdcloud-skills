@@ -1,6 +1,6 @@
 ---
 name: jdcloud-vpc-ops
-version: "1.0.0"
+version: "1.1.0"
 description: >-
   JD Cloud VPC (Virtual Private Cloud) operations — manage VPCs, Subnets,
   Security Groups (with rules), Route Tables, Network ACLs, and VPC Peering.
@@ -17,11 +17,11 @@ metadata:
   sdk_version_locked: ">=1.6.26"
   python_version_minimum: "3.10"
   author: "jdcloud-skills"
-  last_updated: "2026-06-08"
+  last_updated: "2026-06-18"
   type: product-operations
   cli_applicability: "jdc-first-with-fallback"
-  gcl_classification: "required"
-  gcl_max_iter: 2
+  gcl_classification: "recommended"
+  gcl_max_iter: 3
   token_budget_estimate: "~6000 tokens (full VPC scan)"
   references_index:
     - path: "references/core-concepts.md"
@@ -440,14 +440,145 @@ User Request: "删除 VPC xxx"
 
 ## Quality Gate (GCL)
 
-此 Skill 的 GCL 配置如下:
+> This skill participates in the repository-wide **Generator-Critic-Loop**
+> (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
+> The quality gate is **recommended** for this skill (per `AGENTS.md` §8).
 
-| 配置 | 值 |
-|------|----|
-| GCL classification | `required` |
-| max_iterations | 2 |
-| 关键维度权重 | Safety=1 (任何 delete/remove 操作必须通过) |
-| trace 路径 | `./audit-results/gcl-trace-{timestamp}.json` |
+### Parameters (override `AGENTS.md` §8 defaults)
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-vpc-ops` (recommended) |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
+| `safety_confirm_required` | **true** for `delete-vpc`, `delete-subnet`, `delete-network-security-group` | matches repository safety gate policy |
+| `hallucination_check` | **recommended** | Phase 6 H layer; MANDATORY for CLI parameter existence |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
+
+### Loop overview
+
+```
+User request
+   │
+   ▼
+[0] Pre-flight (Orchestrator)
+    - resolve env.* and user.* variables
+    - pick skill, load its rubric
+    - optionally load failure-patterns.md
+   │
+   ▼
+[1] Generate (G)
+    - generate command/payload (DO NOT execute yet)
+   │
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (recommended for vpc-ops)      - CLI parameter existence
+   │                                    - JSON structure compliance
+   │
+   ├── PASS → [1a] Execute (run jdc / SDK)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
+   ▼
+[2] Critique (C)
+    - isolated prompt context
+    - score every rubric dimension
+    - emit actionable suggestions
+   │
+   ▼
+[3] Decide (Orchestrator)
+    - HALLUCINATION_ABORT → ABORT (no partial)
+    - Safety=0  → ABORT (no partial)
+    - all pass  → RETURN
+    - else & iter<max → inject suggestions into G
+    - else → RETURN best + unresolved rubric items
+```
+
+### Hallucination Detection Layer (H) — Recommended
+
+> **Purpose**: Catch LLM-generated CLI/SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud VPC API.
+
+**Two-Category Check (for vpc-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **CLI Parameter Existence** | Verify every `--flag` exists in `jdc vpc <operation> --help` | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads in create/update operations | Validate field nesting matches OpenAPI schema |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "cli_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-vpc-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+
+# Example injection:
+"Known failure patterns for this skill:
+- InvalidVpcId: VPC ID must be in format 'vpc-xxxxxxxx'
+- Subnet deletion: Must verify subnet is empty before delete-subnet
+- Security group rules: 0.0.0.0/0 on high-risk ports requires explicit confirmation"
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails, the Orchestrator SHOULD extract a structured failure pattern:
+
+```json
+{
+  "failure_pattern": {
+    "category": "cli_parameter" | "skill_generation" | "cross_skill" | "runtime",
+    "skill": "jdcloud-vpc-ops",
+    "command": "jdc vpc describe-vpcs --vpcId vpc-xxx",
+    "error": "InvalidParameter: InvalidVpcId",
+    "fix": "Validated VPC ID format before execution",
+    "reusable": true
+  }
+}
+```
+
+### Artifacts
+
+- Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Per-Operation Safety Rules
 
@@ -462,7 +593,14 @@ User Request: "删除 VPC xxx"
 | `modify-*` | 常规 | — |
 | `describe-*` | 无 | — |
 
-完整 rubric 和 prompt templates 在 `references/rubric.md` 和 `references/prompt-templates.md` 中。
+### Operation-specific behavior
+
+- **`delete-vpc`** — Destructive. VPC must be empty (no subnets, no resources). Safety=1 required. H layer validates vpcId format.
+- **`delete-subnet`** — Destructive. Subnet must be empty. Safety=1 required.
+- **`delete-network-security-group`** — Destructive. SG must not be associated with any resources. Safety=1 required.
+- **`add-security-group-rules`** — Non-destructive but high-risk when adding 0.0.0.0/0 on high-risk ports (22, 3389, etc.). Safety=0.5 required.
+- **`create-*`** — Non-destructive but requires CIDR validation and conflict checking.
+- **`describe-*`** — Read-only. No safety gate required.
 
 ---
 
@@ -470,4 +608,5 @@ User Request: "删除 VPC xxx"
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Upgraded to GCL v2 with Phase 6 (Hallucination Detection Layer H — recommended, MANDATORY for CLI parameter existence) and Phase 7 (Lightweight Reflexion Integration — enabled, loads `docs/failure-patterns.md`). Changed GCL classification from `required` to `recommended` with `max_iterations=3`. Added `HALLUCINATION_ABORT` termination condition. Added operation-specific H layer behavior for delete/create/describe operations. Rubric version bumped to v2. |
 | 1.0.0 | 2026-06-08 | Initial release: VPC / Subnet / Security Group / Route Table / ACL / Peering management |

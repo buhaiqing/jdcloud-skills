@@ -38,6 +38,15 @@ Answers the 5 questions in retrospective §5.2, in priority order:
     # Different trace dir
     python3 scripts/gcl_dashboard.py --trace-dir /var/log/gcl
 
+    # Multi-tenant: filter to a single skill (e.g., for per-team dashboards)
+    python3 scripts/gcl_dashboard.py --skill jdcloud-vm-ops
+
+    # Retention policy: prune trace files older than 90 days
+    python3 scripts/gcl_dashboard.py --retention-days 90
+
+    # Combined: filter + retention + JSON output
+    python3 scripts/gcl_dashboard.py --skill jdcloud-vm-ops --retention-days 90 --format json
+
 ## Exit codes
 
     0   Dashboard rendered (regardless of whether alerts fired)
@@ -143,6 +152,7 @@ def parse_iso(ts: str) -> datetime:
 def load_traces(
     trace_dir: Path,
     since: Optional[timedelta] = None,
+    skill_filter: Optional[str] = None,
 ) -> tuple[list[TraceRecord], list[tuple[Path, str]]]:
     """Load all GCL trace JSON files from a directory.
 
@@ -150,6 +160,13 @@ def load_traces(
         (traces, errors) where:
           - traces: list of successfully-parsed TraceRecord
           - errors: list of (path, error_message) for malformed traces
+
+    Args:
+        trace_dir: directory containing `gcl-trace-*.json` files.
+        since: if set, only include traces whose `started_at` is newer than
+            `now - since`. Useful for "last 24h" views.
+        skill_filter: if set, only include traces whose `skill` field matches
+            this value exactly. Enables multi-tenant per-skill dashboards.
     """
     traces: list[TraceRecord] = []
     errors: list[tuple[Path, str]] = []
@@ -211,11 +228,54 @@ def load_traces(
             if cutoff is not None and record.started_at < cutoff:
                 continue
 
+            # Multi-tenant filter: skip traces that don't match the requested skill.
+            if skill_filter is not None and record.skill != skill_filter:
+                continue
+
             traces.append(record)
         except (KeyError, ValueError) as e:
             errors.append((path, f"parse: {e}"))
 
     return traces, errors
+
+
+def prune_old_traces(trace_dir: Path, retention_days: int) -> tuple[int, list[Path]]:
+    """Delete trace files older than `retention_days` from `trace_dir`.
+
+    Implements the trace retention policy (P2-1). Trace files are named
+    `gcl-trace-YYYYMMDD-HHMMSS.json` and carry an ISO `started_at` inside;
+    we use the file's mtime as the authoritative age to avoid parsing every
+    file (which could fail on malformed traces).
+
+    Args:
+        trace_dir: directory containing `gcl-trace-*.json` files.
+        retention_days: delete files whose mtime is older than this many days.
+
+    Returns:
+        (deleted_count, deleted_paths) — the caller may log these for audit.
+    """
+    if not trace_dir.exists() or retention_days <= 0:
+        return 0, []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    cutoff_ts = cutoff.timestamp()
+
+    deleted: list[Path] = []
+    for path in sorted(trace_dir.glob("gcl-trace-*.json")):
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime < cutoff_ts:
+            try:
+                path.unlink()
+                deleted.append(path)
+            except OSError:
+                # Best-effort prune; don't fail the dashboard run if one
+                # file is locked or permission-denied.
+                continue
+
+    return len(deleted), deleted
 
 
 # ---------------------------------------------------------------------------
@@ -312,13 +372,28 @@ class DashboardData:
 # ---------------------------------------------------------------------------
 
 
-def render_terminal(d: DashboardData, errors: list[tuple[Path, str]]) -> str:
+def render_terminal(
+    d: DashboardData,
+    errors: list[tuple[Path, str]],
+    pruned_count: int = 0,
+    skill_filter: Optional[str] = None,
+) -> str:
     """Render the dashboard as ASCII art. Mirrors retrospective §5.4."""
     out: list[str] = []
     out.append("=" * 78)
     out.append("  GCL Quality Gate Dashboard — Phase 3 (read-only aggregator)".center(78))
     out.append("=" * 78)
     out.append("")
+
+    # ---- Scope banner: show active filters ----
+    scope_parts: list[str] = []
+    if skill_filter is not None:
+        scope_parts.append(f"skill={skill_filter}")
+    if pruned_count > 0:
+        scope_parts.append(f"pruned={pruned_count} old trace(s)")
+    if scope_parts:
+        out.append(f"  Scope: {' | '.join(scope_parts)}")
+        out.append("")
 
     # ---- Top-level panel: GCL health ----
     out.append("[Q1] Top-level — GCL health")
@@ -467,10 +542,19 @@ def render_terminal(d: DashboardData, errors: list[tuple[Path, str]]) -> str:
     return "\n".join(out)
 
 
-def render_json(d: DashboardData, errors: list[tuple[Path, str]]) -> str:
+def render_json(
+    d: DashboardData,
+    errors: list[tuple[Path, str]],
+    pruned_count: int = 0,
+    skill_filter: Optional[str] = None,
+) -> str:
     """Render the dashboard as JSON. Suitable for downstream
     automation (Phase 4 alarms, Grafana, etc.)."""
     payload = {
+        "scope": {
+            "skill_filter": skill_filter,
+            "pruned_count": pruned_count,
+        },
         "total_runs": d.total_runs,
         "overall_abort_rate": d.overall_abort_rate,
         "by_skill": {
@@ -530,6 +614,21 @@ def build_argparser() -> argparse.ArgumentParser:
         help="only include traces newer than this duration (e.g., 24h, 7d)",
     )
     p.add_argument(
+        "--skill",
+        default=None,
+        help="multi-tenant filter: only include traces for this skill "
+             "(e.g., jdcloud-vm-ops). Useful for per-team dashboards.",
+    )
+    p.add_argument(
+        "--retention-days",
+        type=int,
+        default=None,
+        help="trace retention policy: delete trace files older than this "
+             "many days (based on file mtime). Pruning runs BEFORE the "
+             "dashboard is rendered, so pruned files won't appear in the "
+             "current view. Set to 0 to disable (default: disabled).",
+    )
+    p.add_argument(
         "--format",
         choices=["terminal", "json"],
         default="terminal",
@@ -547,15 +646,23 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = build_argparser().parse_args(argv)
 
     trace_dir = Path(args.trace_dir) if args.trace_dir else DEFAULT_TRACE_DIR
-    traces, errors = load_traces(trace_dir, since=args.since)
+
+    # P2-1: Trace retention policy — prune BEFORE rendering so the
+    # dashboard reflects the post-prune state. Best-effort: pruning
+    # errors don't fail the dashboard run.
+    pruned_count = 0
+    if args.retention_days is not None and args.retention_days > 0:
+        pruned_count, _ = prune_old_traces(trace_dir, args.retention_days)
+
+    traces, errors = load_traces(trace_dir, since=args.since, skill_filter=args.skill)
 
     data = DashboardData()
     data.compute(traces)
 
     if args.format == "json":
-        out = render_json(data, errors)
+        out = render_json(data, errors, pruned_count=pruned_count, skill_filter=args.skill)
     else:
-        out = render_terminal(data, errors)
+        out = render_terminal(data, errors, pruned_count=pruned_count, skill_filter=args.skill)
 
     if args.out:
         Path(args.out).write_text(out, encoding="utf-8")

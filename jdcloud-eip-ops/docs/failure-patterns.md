@@ -12,6 +12,7 @@
 - **Command**: `jdc eip describe-address --address-id <id>`
 - **Error**: `InvalidParameter: InvalidAddressId`
 - **Fix**: EIP ID must be in valid format (e.g., `eip-xxxxxxxx`)
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: MissingRegionId
@@ -20,6 +21,7 @@
 - **Command**: `jdc eip <command>` (missing `--region-id`)
 - **Error**: `MissingParameter: regionId is required`
 - **Fix**: Always include `--region-id` in every eip command
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: WrongOutputJsonPosition
@@ -28,6 +30,7 @@
 - **Command**: `jdc eip describe-address --output json` (wrong position)
 - **Error**: `unrecognized arguments: --output json`
 - **Fix**: `--output json` MUST be placed BEFORE the subcommand
+- **Count**: 1
 - **Reusable**: true
 
 ## §2 Skill Generation Errors
@@ -38,6 +41,7 @@
 - **Command**: `jdc eip associate-address --address-id <id>` (when EIP is in-use)
 - **Error**: `AddressAlreadyAssociated`
 - **Fix**: Check EIP status before associating; dissociate first if needed
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: CannotReleaseInUseEIP
@@ -46,6 +50,7 @@
 - **Command**: `jdc eip release-address --address-id <id>` (when EIP is in-use)
 - **Error**: `AddressInUse` or similar
 - **Fix**: EIP must be in `available` state before release; dissociate first
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: InstanceNotRunning
@@ -54,6 +59,7 @@
 - **Command**: `jdc eip associate-address --instance-id <id>` (when instance is stopped)
 - **Error**: `InvalidInstanceState` or similar
 - **Fix**: Target instance must be in `running` state; start instance first
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: QuotaExceeded
@@ -62,6 +68,7 @@
 - **Command**: `jdc eip allocate-address`
 - **Error**: `QuotaExceeded: EIP quota exceeded`
 - **Fix**: Request quota increase or release unused EIPs first
+- **Count**: 1
 - **Reusable**: true
 
 ## §3 Cross-Skill Integration Errors
@@ -72,6 +79,7 @@
 - **Command**: EIP operations targeting VM
 - **Error**: VM not found or not in running state
 - **Fix**: Verify VM exists and is running via `jdcloud-vm-ops` before EIP operations
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: CLBDependenciesNotMet
@@ -80,6 +88,7 @@
 - **Command**: EIP operations targeting CLB
 - **Error**: CLB not found or not active
 - **Fix**: Verify CLB exists and is active via `jdcloud-clb-ops` before EIP operations
+- **Count**: 1
 - **Reusable**: true
 
 ## §4 Runtime Errors
@@ -90,6 +99,7 @@
 - **Command**: Any eip operation
 - **Error**: `Throttling: Rate limit exceeded (HTTP 429)`
 - **Fix**: Retry with exponential backoff; reduce request frequency
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: InternalServerError
@@ -98,6 +108,7 @@
 - **Command**: Any eip operation
 - **Error**: `InternalError: Server error (HTTP 500)`
 - **Fix**: Retry with backoff; contact support if persistent
+- **Count**: 1
 - **Reusable**: true
 
 ### Pattern: CredentialMisconfigured
@@ -106,6 +117,7 @@
 - **Command**: Any eip operation
 - **Error**: `Unauthorized: Invalid credentials`
 - **Fix**: Verify `~/.jdc/config` has correct access_key and secret_key
+- **Count**: 1
 - **Reusable**: true
 
 ## §5 Token Efficiency Warnings
@@ -116,6 +128,7 @@
 - **Command**: `jdc eip describe-addresses --page-size 100`
 - **Warning**: Response too large, consumes excessive tokens
 - **Fix**: Use smaller `--page-size` or add filters to narrow results
+- **Count**: 1
 - **Reusable**: true
 
 ## Pattern Extraction Format

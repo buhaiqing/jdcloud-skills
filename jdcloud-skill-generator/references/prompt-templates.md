@@ -73,7 +73,81 @@ them.
 Do NOT self-score. Do NOT modify the rubric. Just generate and report.
 ```
 
-## 2. Critic Prompt (C)
+## 2. Hallucination Detector Prompt (H) — Mandatory
+
+**Role:** Pre-execution structural validity check. Verify the Generator's
+generated skill content has valid structure, correct API references, and
+no secret leakage. **Read-only** — NEVER execute any generated commands.
+
+```text
+You are the **Hallucination Detector** for the `jdcloud-skill-generator` skill.
+You are an offline structural validity checker. You will NEVER execute cloud API calls.
+You will NEVER modify the Generator's output — you only flag issues.
+
+# Skill and operation
+skill: jdcloud-skill-generator
+operation: {{output.operation}}
+
+# Generated content to validate (DO NOT execute anything)
+generated_content: {{output.generated_content}}
+
+# Known valid structures
+known_frontmatter_fields: {{output.known_frontmatter_fields}}
+known_required_sections: {{output.known_required_sections}}
+known_sdk_products: {{output.known_sdk_products}}
+
+# Checks to perform
+
+1. **Frontmatter Completeness**: Verify all required frontmatter fields exist:
+   name, description, license, compatibility, metadata (with version,
+   last_updated, cli_applicability, cli_version_locked, sdk_version_locked).
+2. **Required Sections**: Verify all required sections exist:
+   ## Overview, ## Trigger & Scope, ## Variable Convention,
+   ## Output Parsing Rules, ## Execution Flows, ## Changelog.
+3. **Secret Leakage**: Flag ANY occurrence of:
+   - Actual .env values, secret keys, access-key ids/secrets, passwords
+   - PII (personal identifiable information)
+   - Hardcoded credentials in code examples
+4. **SDK Import Path Validity**: Verify SDK import paths use PascalCase
+   module names (e.g., `jdcloud_sdk.services.vm.VmClient`).
+5. **jdc CLI Syntax**: Verify all jdc commands use correct syntax:
+   `jdc --output json <product> <subcommand> ...` (NOT with --output json at end).
+6. **Python Version**: Flag any reference to Python 3.12+ (must be 3.10).
+
+# Output (strict JSON, no commentary)
+{
+  "frontmatter": {
+    "status": "PASS"|"FAIL",
+    "missing_fields": ["..."]
+  },
+  "required_sections": {
+    "status": "PASS"|"FAIL",
+    "missing_sections": ["..."]
+  },
+  "secret_leakage": {
+    "status": "PASS"|"FAIL",
+    "leaked_items": ["..."]
+  },
+  "sdk_imports": {
+    "status": "PASS"|"FAIL",
+    "invalid_paths": ["..."]
+  },
+  "cli_syntax": {
+    "status": "PASS"|"FAIL",
+    "invalid_commands": ["..."]
+  },
+  "python_version": {
+    "status": "PASS"|"FAIL",
+    "version_issue": "..."
+  },
+  "overall": "PASS"|"FAIL",
+  "report": "<one-sentence summary>"
+}
+```
+
+---
+
+## 3. Critic Prompt (C)
 
 ```text
 You are the **Critic** for the `jdcloud-skill-generator` skill.
@@ -98,6 +172,18 @@ against the rubric.
     "idempotency":      0|0.5|1,
     "traceability":     0|0.5|1,
     "spec_compliance":  0|0.5|1
+  },
+  "test_assessment": {
+    "test_accuracy": {
+      "status": "PASS"|"FAIL",
+      "rationale": "<说明测试是否准确验证了变更行为>",
+      "required_fixes": ["<如有测试缺陷，列出具体修复>"]
+    },
+    "regression_gate": {
+      "required": true|false,
+      "suite": "<如需要，指明测试套件名称>",
+      "rationale": "<说明为何需要/不需要回归测试>"
+    }
   },
   "justifications": {
     "correctness":     "...",
@@ -131,7 +217,7 @@ against the rubric.
   in `justifications`.
 ```
 
-## 3. Orchestrator Decider Prompt (O)
+## 4. Orchestrator Decider Prompt (O)
 
 ```text
 You are the **Orchestrator** deciding the next step of the GCL loop.
@@ -143,17 +229,19 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 - iteration count:          {{output.iter}}
 - max_iterations:           3   # per AGENTS.md §8 for jdcloud-skill-generator
 - blocking flag:            {{output.critic_blocking}}
+- Hallucination Detector result: {{output.hallucination_result}}
 
 # Decision rules (apply in order, first match wins)
-1. If `safety == 0` OR `blocking == true` → decision = `ABORT`
-2. Else if every score meets its threshold → decision = `RETURN`
-3. Else if `iter < max_iterations`        → decision = `RETRY`, and pass
+1. If `hallucination_result.overall == FAIL` → decision = `HALLUCINATION_ABORT`
+2. Else if `safety == 0` OR `blocking == true` → decision = `ABORT`
+3. Else if every score meets its threshold → decision = `RETURN`
+4. Else if `iter < max_iterations`        → decision = `RETRY`, and pass
                                             `suggestions` back to Generator
-4. Else                                   → decision = `RETURN_BEST`
+5. Else                                   → decision = `RETURN_BEST`
 
 # Output (strict JSON)
 {
-  "decision": "ABORT|RETURN|RETRY|RETURN_BEST",
+  "decision": "HALLUCINATION_ABORT|ABORT|RETURN|RETRY|RETURN_BEST",
   "reason":   "<one sentence>",
   "next_iter_feedback": "<suggestions to inject into Generator, or null>"
 }
@@ -172,9 +260,15 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed generation steps |
+| `{{output.hallucination_result}}` | Hallucination Detector (H) | H 层的结构有效性检查结果（JSON） |
+| `{{output.generated_content}}` | Generator 输出 | 待验证的生成内容 |
+| `{{output.known_frontmatter_fields}}` | Skill 参考知识库 | 已知有效的 frontmatter 字段列表 |
+| `{{output.known_required_sections}}` | Skill 参考知识库 | 已知必需的章节列表 |
+| `{{output.known_sdk_products}}` | Skill 参考知识库 | 已知有效的 SDK 产品列表 |
 
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-06-19 | 添加 Hallucination Detector (H) 提示模板（§2）；Critic JSON 输出添加 test_assessment 块（测试准确性 + 回归门）；Orchestrator 决策规则添加 HALLUCINATION_ABORT；Variable Convention 表添加 `{{output.hallucination_result}}`、`{{output.generated_content}}`、`{{output.known_frontmatter_fields}}`、`{{output.known_required_sections}}`、`{{output.known_sdk_products}}` |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `jdcloud-skill-generator` (meta-skill; secret-leak guard + OpenSpec + 2-round self-review) |

@@ -1,0 +1,320 @@
+# JD Cloud DNS Example Configuration
+# Copy this file and adjust values for your environment
+
+# ---------------------------------------------------------------------------
+# Zone (Domain) Creation
+# ---------------------------------------------------------------------------
+
+# Create a free / personal domain zone
+create-zone-free:
+  pack-id: 0
+  domain-name: example.com
+
+# Create an enterprise paid zone (1-year term, auto-renew enabled)
+create-zone-enterprise:
+  pack-id: 1
+  domain-name: example.com
+  buy-type: 1
+  time-span: 1
+  time-unit: 4
+
+# Create an advanced paid zone with 3-year term
+create-zone-advanced-3y:
+  pack-id: 2
+  domain-name: example.com
+  buy-type: 1
+  time-span: 3
+  time-unit: 4
+
+# ---------------------------------------------------------------------------
+# A Record (IPv4 Host Resolution)
+# ---------------------------------------------------------------------------
+
+# Simple A record pointing www to a VM/CLB public IP
+record-a-www:
+  host-record: www
+  type: A
+  host-value: 1.2.3.4
+  ttl: 600
+  view-value: 1
+
+# A record for apex domain
+record-a-apex:
+  host-record: "@"
+  type: A
+  host-value: 1.2.3.4
+  ttl: 600
+  view-value: 1
+
+# A record with a shorter TTL (for fast failover / canary)
+record-a-short-ttl:
+  host-record: api
+  type: A
+  host-value: 1.2.3.4
+  ttl: 60
+  view-value: 1
+
+# ---------------------------------------------------------------------------
+# CNAME Record (Alias / Canonical Name)
+# ---------------------------------------------------------------------------
+
+# CNAME for a subdomain (www -> cdn endpoint)
+record-cname-www:
+  host-record: www
+  type: CNAME
+  host-value: cdn.example.net
+  ttl: 600
+  view-value: 1
+
+# CNAME for CDN / WAF acceleration
+record-cname-cdn:
+  host-record: static
+  type: CNAME
+  host-value: jdcloud.cdn-provider.com
+  ttl: 600
+  view-value: 1
+
+# WARNING: Do NOT create CNAME at zone apex ("@") - RFC 1035 conflict
+# Use a free A record + forwarding rule instead.
+
+# ---------------------------------------------------------------------------
+# MX Record (Mail Exchange)
+# ---------------------------------------------------------------------------
+
+# Primary MX record with priority 10
+record-mx-primary:
+  host-record: "@"
+  type: MX
+  host-value: 10 mail.example.com
+  ttl: 600
+  view-value: 1
+
+# Secondary MX record with lower priority 20
+record-mx-secondary:
+  host-record: "@"
+  type: MX
+  host-value: 20 mail2.example.com
+  ttl: 600
+  view-value: 1
+
+# MX for a mail subdomain
+record-mx-mail-sub:
+  host-record: mail
+  type: MX
+  host-value: 10 smtp.example.com
+  ttl: 600
+  view-value: 1
+
+# ---------------------------------------------------------------------------
+# TXT Record (SPF / DKIM / Verification)
+# ---------------------------------------------------------------------------
+
+# SPF record
+record-txt-spf:
+  host-record: "@"
+  type: TXT
+  host-value: "v=spf1 include:_spf.example.com ~all"
+  ttl: 600
+  view-value: 1
+
+# DKIM record
+record-txt-dkim:
+  host-record: dkim
+  type: TXT
+  host-value: "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQD..."
+  ttl: 600
+  view-value: 1
+
+# Domain verification for third-party services
+record-txt-verification:
+  host-record: "@"
+  type: TXT
+  host-value: "google-site-verification=abcdefg1234567890"
+  ttl: 300
+  view-value: 1
+
+# ---------------------------------------------------------------------------
+# AAAA Record (IPv6)
+# ---------------------------------------------------------------------------
+
+record-aaaa-www:
+  host-record: www
+  type: AAAA
+  host-value: "2408:8620:480:3e30:0:ff:b0e3:c23a"
+  ttl: 600
+  view-value: 1
+
+# ---------------------------------------------------------------------------
+# SRV Record (Service Record)
+# ---------------------------------------------------------------------------
+
+record-srv-sip:
+  host-record: _sip._tcp
+  type: SRV
+  host-value: "10 60 5060 sipserver.example.com"
+  ttl: 600
+  view-value: 1
+
+# ---------------------------------------------------------------------------
+# NS Record (Name Server Delegation)
+# ---------------------------------------------------------------------------
+
+record-ns-delegation:
+  host-record: ns1
+  type: NS
+  host-value: ns1.example.com
+  ttl: 600
+  view-value: 1
+
+# ---------------------------------------------------------------------------
+# Batch Operations
+# Safety gate: MUST snapshot existing records before applying
+# ---------------------------------------------------------------------------
+
+batch-set-web-stack:
+  records:
+    - host-record: www
+      type: A
+      host-value: 1.2.3.4
+      ttl: 600
+    - host-record: www
+      type: A
+      host-value: 1.2.3.5
+      ttl: 600
+    - host-record: api
+      type: CNAME
+      host-value: api.example.net
+      ttl: 600
+    - host-record: "@"
+      type: MX
+      host-value: 10 mail.example.com
+      ttl: 600
+    - host-record: "@"
+      type: TXT
+      host-value: "v=spf1 include:_spf.example.com ~all"
+      ttl: 600
+
+batch-set-mail-stack:
+  records:
+    - host-record: "@"
+      type: MX
+      host-value: 10 mail.example.com
+      ttl: 600
+    - host-record: "@"
+      type: MX
+      host-value: 20 mail2.example.com
+      ttl: 600
+    - host-record: "@"
+      type: TXT
+      host-value: "v=spf1 include:_spf.example.com ~all"
+      ttl: 600
+    - host-record: dkim
+      type: TXT
+      host-value: "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQD..."
+      ttl: 600
+
+# ---------------------------------------------------------------------------
+# Record Lifecycle (enable / disable / delete)
+# ---------------------------------------------------------------------------
+
+record-disable:
+  action: off
+  record-ids:
+    - 1001
+    - 1002
+
+record-enable:
+  action: on
+  record-ids:
+    - 1001
+
+record-delete:
+  action: del
+  record-ids:
+    - 1001
+  confirm: DELETE_RR
+
+# ---------------------------------------------------------------------------
+# Common DNS Configurations
+# ---------------------------------------------------------------------------
+
+common-load-balanced:
+  domain-id: 12345
+  records:
+    - host-record: www
+      type: A
+      host-value: 1.2.3.4
+      ttl: 60
+    - host-record: www
+      type: A
+      host-value: 1.2.3.5
+      ttl: 60
+    - host-record: www
+      type: A
+      host-value: 1.2.3.6
+      ttl: 60
+
+common-website-stack:
+  domain-id: 12345
+  records:
+    - host-record: "@"
+      type: A
+      host-value: 1.2.3.4
+      ttl: 600
+    - host-record: www
+      type: CNAME
+      host-value: example.com
+      ttl: 600
+    - host-record: mail
+      type: A
+      host-value: 1.2.3.5
+      ttl: 600
+    - host-record: "@"
+      type: MX
+      host-value: 10 mail.example.com
+      ttl: 600
+    - host-record: "@"
+      type: TXT
+      host-value: "v=spf1 include:_spf.example.com ~all"
+      ttl: 600
+
+common-api-waf-cdn:
+  domain-id: 12345
+  records:
+    - host-record: api
+      type: CNAME
+      host-value: waf.example.net
+      ttl: 600
+    - host-record: static
+      type: CNAME
+      host-value: jdcloud.cdn-provider.com
+      ttl: 600
+    - host-record: "@"
+      type: A
+      host-value: 1.2.3.4
+      ttl: 600
+
+common-internal:
+  domain-id: 12345
+  records:
+    - host-record: db
+      type: A
+      host-value: 10.0.0.1
+      ttl: 60
+    - host-record: cache
+      type: A
+      host-value: 10.0.0.2
+      ttl: 60
+    - host-record: queue
+      type: A
+      host-value: 10.0.0.3
+      ttl: 60
+
+# ---------------------------------------------------------------------------
+# Zone Deletion (irreversible - requires explicit confirmation)
+# ---------------------------------------------------------------------------
+
+zone-delete:
+  domain-id: 12345
+  confirm: DELETE
+  note: "All resource records under this zone will be permanently removed."

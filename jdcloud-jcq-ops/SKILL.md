@@ -13,8 +13,8 @@ compatibility: >-
   execution is SDK-only.
 metadata:
   author: jdcloud
-  version: "1.0.0"
-  last_updated: "2026-06-08"
+  version: "1.1.0"
+  last_updated: "2026-06-18"
   runtime: Harness AI Agent
   api_profile: "JD Cloud JCQ API v1 - https://jcq.jdcloud-api.com/v1"
   cli_applicability: sdk-only
@@ -140,6 +140,7 @@ Structured placeholders reduce injection ambiguity and unsafe prompts:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for SDK parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.0.0 | 2026-06-08 | Initial version: SDK-only execution path for JCQ Topic CRUD, ConsumerGroup CRUD, Message send/receive/describe; GCL rollout with rubric v1 and prompt templates; safety gates for destructive ops |
 
 ## Execution Flows (Agent-Readable)
@@ -536,16 +537,18 @@ messages = resp.result["messages"]  # Array of message objects
 
 > This skill participates in the repository-wide **Generator-Critic-Loop**
 > (GCL) defined in [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate).
-> The quality gate is **recommended** (not mandatory) for all operations exposed by this skill.
+> The quality gate is **recommended** for this skill (per `AGENTS.md` §8).
 
 ### Parameters (override `AGENTS.md` §8 defaults)
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `max_iterations` | **3** | Per `AGENTS.md` §8 default for `jdcloud-jcq-ops` (recommended) |
-| `rubric_version` | `v1` | see [rubric.md](references/rubric.md) |
-| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified with `jdcloud-audit-ops` |
-| `safety_confirm_required` | **true** for `delete-topic`, `delete-consumer-group` | matches repository safety gate policy |
+| `max_iterations` | **3** | `AGENTS.md` §8 default for recommended skills |
+| `rubric_version` | `v2` | see [rubric.md](references/rubric.md) |
+| `trace_path` | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | unified trace path |
+| `safety_confirm_required` | **true** for topic delete / consumer group reset | topic delete + consumer group reset can lose messages |
+| `hallucination_check` | **recommended** | Phase 6 H layer; recommended for SDK parameter validation |
+| `reflexion_integration` | **enabled** | Phase 7 lightweight Reflexion; loads `docs/failure-patterns.md` |
 
 ### Loop overview
 
@@ -554,37 +557,167 @@ User request
    │
    ▼
 [0] Orchestrator pre-flight  ──► load rubric, classify operation
-   │
+   │                              optionally load failure-patterns.md
    ▼
 [1] Generator (G)            ──► SDK (sole path; no jdc for JCQ)
+   │                              generate command (DO NOT execute yet)
+   ▼
+[1.5] Hallucination Detection (H) ──► pre-execution structural validity check
+   │   (recommended for jcq-ops)     - SDK parameter existence
+   │                                   - JSON structure compliance
    │
+   ├── PASS → [1a] Execute (run the SDK call)
+   ├── FAIL → [1b] Regenerate (H retriggers G with hallucination report; max 1 retry)
+   │         still FAIL → HALT with "HALLUCINATION_ABORT"
    ▼
 [2] Critic (C)               ──► isolated context, blind to user request
-   │
+   │                              score every rubric dimension (5+3)
+   │                              assess test accuracy + regression gate
    ▼
 [3] Orchestrator decider
-   ├─ Safety=0 / blocking   → ABORT
-   ├─ all pass              → RETURN
-   ├─ iter<3 & not all pass → RETRY (inject suggestions)
-   └─ iter=3 & not all pass → RETURN_BEST
+   ├─ HALLUCINATION_ABORT     → ABORT (no partial)
+   ├─ Safety=0 / blocking     → ABORT
+   ├─ all pass                → RETURN
+   ├─ iter<3 & not all pass   → RETRY (inject suggestions)
+   └─ iter=3 & not all pass   → RETURN_BEST
+```
+
+### Hallucination Detection Layer (H) — Recommended
+
+> **Purpose**: Catch LLM-generated SDK calls that contain structurally invalid elements
+> **before** they reach the JD Cloud JCQ API. This is a **pre-execution** gate placed between
+> G's generation and actual API execution.
+
+**Two-Category Check (for jcq-ops):**
+
+| Category | Check | Method |
+|---|---|---|
+| **SDK Parameter Existence** | Verify every parameter exists in the SDK request class | Compare against `references/api-sdk-usage.md` operation tables |
+| **JSON Structure Compliance** | For JSON payloads (e.g., message body, consumer config) | Validate field nesting matches OpenAPI schema |
+
+**Key Parameters to Validate:**
+
+| Operation | Critical Parameters |
+|---|---|
+| `createTopic` | `regionId`, `topicName` |
+| `deleteTopic` | `regionId`, `topicName` |
+| `createConsumerGroup` | `regionId`, `topicName`, `consumerGroupId` |
+| `deleteConsumerGroup` | `regionId`, `topicName`, `consumerGroupId` |
+| `sendMessage` | `regionId`, `topicName`, `body` |
+| `receiveMessage` | `regionId`, `topicName`, `consumerGroupId` |
+
+**Termination:**
+
+| Condition | Exit Code | Action |
+|---|---|---|
+| **H_PASS** | — | Continue to [1a] Execute |
+| **H_FAIL → Regenerate** | — | Inject hallucination report into G; max 1 regeneration attempt |
+| **HALLUCINATION_ABORT** | 5 | HALT — structural hallucinations persist after regeneration |
+
+**Trace Integration:**
+
+The H result is embedded in the GCL trace JSON under `iterations[].hallucination_detector`:
+
+```json
+{
+  "iter": 1,
+  "hallucination_detector": {
+    "status": "PASS|FAIL",
+    "checks": {
+      "sdk_parameters": { "status": "PASS|FAIL", "unrecognized_params": [] },
+      "json_structure": { "status": "PASS|FAIL", "issues": [] }
+    },
+    "report": "..."
+  },
+  "regenerated": false,
+  "generator": { ... },
+  "critic": { ... }
+}
+```
+
+### Reflexion Integration (Lightweight Reflexion)
+
+> **Purpose**: Enable cross-session learning from failure patterns, complementing the within-session
+> GCL loop with persistent failure memory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GCL Execution (per-session)                   │
+│   [0] Pre-flight → [1] Generate → [1.5] H → [2] C → [3] Decide │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    failure_pattern (in trace)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Reflexion Memory (cross-session)                    │
+│   docs/failure-patterns.md (structured text, ≤200 lines)        │
+│   §1 SDK Parameter Errors | §2 Skill Generation | §3 Cross-Skill│
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    Pre-flight retrieval (optional)
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Prevention (next session)                           │
+│   Inject known patterns into Generator context                  │
+│   Agent avoids repeating known mistakes                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Pre-flight Retrieval (Optional):**
+
+During GCL Pre-flight (step [0]), the Orchestrator MAY:
+
+```bash
+# 1. Load docs/failure-patterns.md (lazy-load, ~150 lines)
+# 2. Filter patterns by current skill name (jdcloud-jcq-ops)
+# 3. Inject top-3 relevant patterns into Generator context as prevention hints
+```
+
+**This is a HINT, not a CONSTRAINT** — the Generator should use these patterns to avoid known mistakes, but is not required to follow them if the context differs.
+
+**Failure Pattern Extraction:**
+
+When a GCL iteration fails (SAFETY_FAIL, HALLUCINATION_ABORT, or rubric dimension < threshold), the Orchestrator SHOULD extract a structured failure pattern and append it to the trace:
+
+```json
+{
+  "failure_pattern": {
+    "category": "sdk_parameter|runtime|cross_skill",
+    "skill": "jdcloud-jcq-ops",
+    "command": "createTopic / deleteTopic / ...",
+    "error": "...",
+    "fix": "...",
+    "reusable": true
+  }
+}
 ```
 
 ### Artifacts
 
 - Rubric (concrete scoring rules): [references/rubric.md](references/rubric.md)
-- Prompt templates (G / C / O): [references/prompt-templates.md](references/prompt-templates.md)
+- Prompt templates (G / C / O / H): [references/prompt-templates.md](references/prompt-templates.md)
+- Failure patterns (cross-session memory): [docs/failure-patterns.md](../docs/failure-patterns.md)
 
 ### Integration with existing flows
 
-The GCL **wraps** the SDK-only flow defined under `## Execution Flows` above. The Generator (G) IS the existing SDK executor. The Critic (C) is a read-only role with no SDK access. The Orchestrator (O) owns the loop and persists the GCL trace.
+The GCL **wraps** the SDK-only flow defined under
+`## Execution Flows` above. The Generator (G) IS the existing SDK
+executor. The Critic (C) is a new, read-only role with no SDK access.
+The Orchestrator (O) owns the loop and persists the GCL trace.
+The Hallucination Detector (H) is a recommended pre-execution structural check.
 
 ### Operation-specific behavior
 
-- **`create-topic`** — Critic verifies topic name uniqueness check was performed (Idempotency = 1 required). Missing → Idempotency = 0.
-- **`delete-topic`** — Critic checks trace contains both pre-delete snapshot and post-delete 404/absent. Missing either → Correctness = 0. Also checks active consumer group cleanup.
-- **`delete-consumer-group`** — Critic checks trace contains pre-delete snapshot and no active consumers. Missing → Correctness = 0.
-- **`send-message`** — Message body > 256 KB without split → Safety = 0.
-- **`receive-message`** — Empty messages array is valid (no Safety penalty).
+- **`create-topic`** — Topic name must be unique within region. Check quota first.
+- **`delete-topic`** — **IRREVERSIBLE** — all messages in the topic will be permanently lost. `confirm=DELETE_TOPIC` required. Must verify no active consumer groups are attached.
+- **`create-consumer-group`** — Consumer group name must be unique. Topic must exist.
+- **`delete-consumer-group`** — **IRREVERSIBLE** — consumer offsets and group state will be permanently lost. `confirm=DELETE_CONSUMER_GROUP` required.
+- **`send-message`** — Message body must be ≤ 256 KB. Larger payloads require OSS storage.
+- **`receive-message`** — Empty messages array is valid (no messages available).
 
 ## Prerequisites
 

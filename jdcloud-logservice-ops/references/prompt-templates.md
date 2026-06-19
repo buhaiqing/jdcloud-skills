@@ -61,6 +61,54 @@ Return a JSON object:
 }
 ```
 
+## Hallucination Detector Prompt Template (H) — Mandatory
+
+**Role:** Pre-execution structural validity check. Verify the Generator's generated
+command/payload has valid CLI/SDK parameters and correct JSON structure **before** it
+reaches the JD Cloud API. **Read-only** — NEVER execute CLI/SDK calls.
+
+**Note:** `{{user.request}}` is **deliberately absent** from this template to prevent
+answer-alignment bias. H judges structural validity only.
+
+```text
+You are the **Hallucination Detector** for the `jdcloud-logservice-ops` skill.
+You are an offline structural validity checker. You will NEVER execute cloud API calls.
+You will NEVER modify the Generator's command — you only flag issues.
+
+# Skill and operation
+skill: jdcloud-logservice-ops
+operation: {{output.operation}}
+
+# Generated command to validate (DO NOT execute)
+command: {{output.generated_command}}
+
+# Known valid parameters for this operation
+known_parameters: {{output.known_parameters}}
+
+# Checks to perform
+
+1. **CLI/SDK Parameter Existence**: Every `--flag` or parameter in the command must exist
+   in `known_parameters` for that operation. Flag unrecognized parameters.
+2. **JSON Structure Compliance**: If a JSON payload is present, validate field nesting
+   matches the OpenAPI schema. Check field types and enum membership.
+
+# Output (strict JSON, no commentary)
+{
+  "cli_parameters": {
+    "status": "PASS"|"FAIL",
+    "total": <int>,
+    "recognized": <int>,
+    "unrecognized": ["..."]
+  },
+  "json_structure": {
+    "status": "PASS"|"FAIL",
+    "issues": ["..."]
+  },
+  "overall": "PASS"|"FAIL",
+  "report": "<one-sentence summary>"
+}
+```
+
 ---
 
 ## Critic Prompt Template
@@ -86,6 +134,13 @@ Do NOT consider the original user request — judge only what was actually done.
 4. Be STRICT: partial compliance = 0.5, not 1.
 5. Suggestions must be concrete and executable (≤ 3 items).
 
+## Test & Regression Assessment (MANDATORY per AGENTS.md §2.1)
+In addition to rubric scoring, assess:
+- **test_accuracy**: Do existing tests correctly exercise the changed behavior?
+  If this change introduced a bug, would these tests fail?
+- **regression_gate**: Is targeted regression required? Name the smallest
+  accurate suite for the change.
+
 ## Return Format
 Return strict JSON:
 {
@@ -95,6 +150,12 @@ Return strict JSON:
     "idempotency": 0 | 0.5 | 1,
     "traceability": 0 | 0.5 | 1,
     "spec_compliance": 0 | 0.5 | 1
+  },
+  "test_assessment": {
+    "test_accuracy": "pass|fail",
+    "regression_gate": "required|waived",
+    "regression_suite": "<suite name or null>",
+    "rationale": "..."
   },
   "suggestions": ["≤ 3 concrete, executable improvements"],
   "blocking": true | false,
@@ -124,11 +185,15 @@ Your job is to control the Generator-Critic loop and decide when to terminate.
 ## Critic Suggestions
 {{output.critic_suggestions}}
 
+## Hallucination Result
+{{output.hallucination_result}}
+
 ## Termination Rules (first match wins)
-1. **PASS**: All rubric dimensions meet thresholds → return final result.
-2. **SAFETY_FAIL**: Safety = 0 → ABORT immediately; never return partial.
-3. **MAX_ITER**: Iteration == 3 → return best-so-far + unresolved rubric items.
-4. **RETRY**: Otherwise → inject suggestions into Generator and continue.
+1. **HALLUCINATION_ABORT**: Hallucination overall == FAIL after regeneration → ABORT; return unresolved hallucination report.
+2. **PASS**: All rubric dimensions meet thresholds → return final result.
+3. **SAFETY_FAIL**: Safety = 0 → ABORT immediately; never return partial.
+4. **MAX_ITER**: Iteration == 3 → return best-so-far + unresolved rubric items.
+5. **RETRY**: Otherwise → inject suggestions into Generator and continue.
 
 ## Trace Persistence
 Every iteration MUST be appended to the trace file:
@@ -137,7 +202,7 @@ Every iteration MUST be appended to the trace file:
 ## Return Format
 Return JSON:
 {
-  "decision": "PASS" | "SAFETY_FAIL" | "MAX_ITER" | "RETRY",
+  "decision": "HALLUCINATION_ABORT|PASS|SAFETY_FAIL|MAX_ITER|RETRY",
   "final_output": "<result if PASS or MAX_ITER>",
   "unresolved_items": ["<rubric items not meeting threshold>"],
   "next_prompt": "<injected feedback for Generator if RETRY>"
@@ -158,3 +223,12 @@ Before finalizing scores, verify NONE of these are present:
 - [ ] Retention value outside [1, 3650]
 - [ ] Missing `requestId` in trace
 - [ ] Subjective scoring instead of rubric-based scoring
+
+---
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-08 | Initial GCL prompt templates for `jdcloud-logservice-ops` |
+| 1.1.0 | 2026-06-19 | Added H layer template (§10.5) and test_assessment block (§2.1) |

@@ -83,7 +83,75 @@ failures, per the repository policy in `AGENTS.md`).
 Do NOT self-score. Do NOT modify the rubric. Just execute and report.
 ```
 
-## 2. Critic Prompt (C)
+## 2. Hallucination Detector Prompt (H) — Mandatory
+
+**Role:** Pre-execution structural validity check. Verify the Generator's generated
+command has valid CLI parameters and correct JSON structure **before** it reaches
+the JD Cloud API. **Read-only** — NEVER execute `jdc` or SDK calls.
+
+```text
+You are the **Hallucination Detector** for the `jdcloud-kubernetes-ops` skill.
+You are an offline structural validity checker. You will NEVER execute cloud API calls.
+You will NEVER modify the Generator's command — you only flag issues.
+
+# Skill and operation
+skill: jdcloud-kubernetes-ops
+operation: {{output.operation}}
+
+# Generated command to validate (DO NOT execute)
+command: {{output.generated_command}}
+
+# Known valid parameters for this operation
+known_parameters: {{output.known_parameters}}
+
+# Checks to perform
+
+1. **CLI Parameter Existence**: Every `--flag` in the generated `jdc` command must
+   exist in `known_parameters` for that operation. Flag unrecognized flags.
+   Common NC flags: `--clusterId`, `--nodeGroupId`, `--name`, `--version`,
+   `--nodeCount`, `--instanceType`.
+2. **JSON Structure Compliance**: If a JSON payload is present, validate field
+   nesting matches the OpenAPI schema.
+3. **Version Upgrade Path**: For `upgrade-cluster`, verify target version is
+   exactly one minor version above current (no skip, no downgrade).
+4. **Kubeconfig Safety**: For `get-credentials`, flag if the command would
+   log kubeconfig content in plaintext (must use SHA-256 hash only).
+5. **Delete Pre-check**: For `delete-cluster`, flag if the command lacks a
+   prior workload check (describe deployments/services/pods).
+
+# Output (strict JSON, no commentary)
+{
+  "cli_parameters": {
+    "status": "PASS"|"FAIL",
+    "total": <int>,
+    "recognized": <int>,
+    "unrecognized": ["..."]
+  },
+  "json_structure": {
+    "status": "PASS"|"FAIL",
+    "issues": ["..."]
+  },
+  "version_upgrade_check": {
+    "status": "PASS"|"FAIL"|"N/A",
+    "current": "...",
+    "target": "...",
+    "valid_path": true|false
+  },
+  "kubeconfig_safety": {
+    "status": "PASS"|"FAIL"|"N/A",
+    "plaintext_risk": true|false
+  },
+  "delete_precheck": {
+    "status": "PASS"|"FAIL"|"N/A",
+    "has_workload_check": true|false,
+    "warning": "..."
+  },
+  "overall": "PASS"|"FAIL",
+  "report": "<one-sentence summary>"
+}
+```
+
+## 3. Critic Prompt (C)
 
 ```text
 You are the **Critic** for the `jdcloud-kubernetes-ops` skill.
@@ -119,6 +187,12 @@ For each of the 5 dimensions in `rubric`, output a score per the allowed scale
     "idempotency":     "...",
     "traceability":    "...",
     "spec_compliance": "..."
+  },
+  "test_assessment": {
+    "test_accuracy": "pass|fail",
+    "regression_gate": "required|waived",
+    "regression_suite": "<suite name or null>",
+    "rationale": "..."
   },
   "suggestions": ["≤ 3 concrete, executable improvements"],
   "blocking": <true if any safety/correctness = 0, else false>
@@ -180,6 +254,7 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 | `{{output.trace}}` | execution trace buffer | `command`, `args`, `exit_code`, `result`, `post_state`, `errors` |
 | `{{output.critic_scores}}` | previous Critic run | empty on iter 1 |
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
+| `{{output.hallucination_result}}` | H layer output | `overall: PASS|FAIL` |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed operation types |
 
@@ -187,4 +262,5 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 
 | Version | Date | Change |
 |---|---|---|
+| 2.0.0 | 2026-06-19 | Added H layer, test_assessment, HALLUCINATION_ABORT decision |
 | 1.0.0 | 2026-06-08 | Initial GCL prompt templates for `jdcloud-kubernetes-ops` (covers cluster CRUD, node group CRUD, credentials, upgrades) |
