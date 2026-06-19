@@ -190,6 +190,16 @@ jobs:
           jdc --output json nc describe-clusters --region-id cn-north-1
 ```
 
+## jdcloud-aiops-cruise Integration
+
+Before destructive operations (especially `delete-cluster`), this skill integrates with `jdcloud-aiops-cruise` for workload analysis via `k8s_analyzer.py`:
+
+- `check_workloads(cluster_id)` — returns running deployments, services, and pods for a cluster
+- `check_namespaces(cluster_id)` — returns active namespaces
+- `analyze_delete_impact(cluster_id)` — analyzes blast radius of cluster deletion
+
+**Pre-delete safety gate:** Before deleting any cluster, the Agent MUST invoke `k8s_analyzer.py` (if available) or use `jdc describe-cluster` / `kubectl get all` (via SSH to master or Cloud Shell) to verify the cluster has zero running workloads. If workloads exist, MUST warn the user and obtain explicit confirmation.
+
 ## Testing Your Setup
 
 ```bash

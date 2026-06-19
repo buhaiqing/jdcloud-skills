@@ -121,3 +121,12 @@ JCS for Kubernetes charges based on:
 - **CLB Fee** — Load balancers created for services of type LoadBalancer
 
 For detailed pricing, refer to JD Cloud official documentation.
+
+## Operational Best Practices
+
+- **Least privilege:** IAM policies scoped to required APIs only (cluster CRUD, node group operations, credential retrieval).
+- **Availability:** Deploy multi-AZ clusters with node groups in at least two availability zones.
+- **Cost:** Right-size node instance types; use auto-scaling for node groups to optimize spend.
+- **Backup:** Regularly backup etcd and persistent volumes (PV). Cluster deletion is irreversible.
+- **Security:** Rotate cluster credentials regularly. Store kubeconfig securely. Use IAM roles for cross-account access.
+- **Upgrades:** Always upgrade one minor version at a time. Test workload compatibility in a staging cluster first.

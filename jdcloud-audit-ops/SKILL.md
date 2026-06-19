@@ -42,13 +42,13 @@ metadata:
 >     1. Confirming that a newer CLI version supports `jdc audit ...`
 >     2. Or using the raw REST API at `https://audit.jdcloud-api.com/v1/...`
 >     3. Or confirming the correct SDK service module name with JD Cloud documentation.
->   - See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for quick look-up.
+>   - See [QUICK_REFERENCE.md](references/QUICK_REFERENCE.md) for quick look-up.
 
 ## Overview
 
 JD Cloud Audit Log (操作审计/云审计) provides comprehensive tracking and recording of user operations and API calls on JD Cloud resources. It enables security auditing, compliance monitoring, operational troubleshooting, and accountability by capturing who did what, when, and from where. This skill is an **operational runbook** for agents: explicit scope, credential rules, pre-flight checks, **SDK/API 优先（当前 CLI 未验证）**, response validation, and failure recovery.
 
-**Quick Reference**: [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - For commonly used commands and quick lookup.
+**Quick Reference**: [QUICK_REFERENCE.md](references/QUICK_REFERENCE.md) - For commonly used commands and quick lookup.
 
 ### CLI applicability (repository policy)
 
@@ -671,7 +671,7 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 ## Reference Directory
 
-- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Quick reference for users
+- [QUICK_REFERENCE.md](references/QUICK_REFERENCE.md) - Quick reference for users
 - [Core Concepts](references/core-concepts.md) - Detailed audit log concepts
 - [API & SDK Usage](references/api-sdk-usage.md) - Complete API/SDK documentation
 - [CLI Usage](references/cli-usage.md) - Complete CLI command reference

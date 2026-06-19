@@ -24,6 +24,30 @@
 | Delete Node Group | deleteNodeGroup | `DeleteNodeGroupRequest` | `nc delete-node-group` |
 | Describe Cluster Credential | describeClusterCredential | `DescribeClusterCredentialRequest` | `nc describe-cluster-credential` |
 
+## Response Field Table
+
+| Operation | JSON Path (API) | Type | Description |
+|-----------|----------------|------|-------------|
+| Create Cluster | `$.result.clusterId` | string | New cluster ID |
+| Describe Cluster | `$.result.cluster.state` | string | Cluster state (running, creating, deleting, error) |
+| List Clusters | `$.result.clusters[*].clusterId` | array | All cluster IDs |
+| Create Node Group | `$.result.nodeGroupId` | string | New node group ID |
+| Describe Node Group | `$.result.nodeGroup.state` | string | Node group state |
+| Modify Node Group | `$.result.nodeGroupId` | string | Modified node group ID |
+| Delete Cluster | `$.requestId` or `$.error` | string / object | Per spec |
+| Describe Credentials | `$.result.kubeconfig` | string | Base64-encoded kubeconfig |
+
+## Expected State Transitions
+
+| Operation | Initial State | Target State | Poll Interval | Max Wait |
+|-----------|---------------|--------------|---------------|----------|
+| Create Cluster | — | `running` | 30s | 600s |
+| Create Node Group | — | `running` | 15s | 300s |
+| Scale Node Group | `running` | `running` | 15s | 300s |
+| Upgrade Cluster | `running` | `running` | 30s | 600s |
+| Delete Cluster | any stable state | (404 on describe) | 30s | 600s |
+| Delete Node Group | any stable state | (404 on describe) | 15s | 300s |
+
 ## Request/Response Examples
 
 ### Create Cluster

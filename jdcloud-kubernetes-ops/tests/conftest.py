@@ -45,5 +45,5 @@ def rubric_template():
             "traceability": 0.5,
             "spec_compliance": 0.5,
         },
-        "max_iterations": 2,
+        "max_iterations": 3,
     }

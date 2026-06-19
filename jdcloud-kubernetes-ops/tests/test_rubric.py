@@ -14,7 +14,7 @@ def rubric_template():
         "thresholds": {"correctness": 0.5, "safety": 1.0,
                        "idempotency": 0.5, "traceability": 0.5,
                        "spec_compliance": 0.5},
-        "max_iterations": 2,
+        "max_iterations": 3,
     }
 
 
@@ -22,7 +22,7 @@ def _build_trace(scores, decision="PASS", iteration=1):
     """Build a GCL trace JSON for testing."""
     return {
         "skill": "jdcloud-kubernetes-ops",
-        "rubric_version": "1.0.0",
+        "rubric_version": "v2",
         "iterations": [
             {
                 "iter": iteration,
@@ -136,12 +136,12 @@ def test_delete_cluster_safety_gate_protocol():
 
 
 def test_rubric_max_iterations_limits(rubric_template):
-    """max_iterations=2 limit check."""
+    """max_iterations=3 limit check."""
     max_iter = rubric_template["max_iterations"]
-    assert max_iter == 2
+    assert max_iter == 3
     for i in range(1, max_iter + 1):
         assert i <= max_iter
-    assert 3 > max_iter
+    assert 4 > max_iter
 
 
 def test_k8s_version_upgrade_path():

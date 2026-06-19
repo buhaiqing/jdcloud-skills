@@ -2,6 +2,71 @@
 
 ## Install and Config
 
+> **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
+
+### Python Runtime (uv)
+
+Both `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
+
+**Install uv (system-wide, one-time per machine):**
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Or via Homebrew: brew install uv
+
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### Configure Credentials
+
+**CRITICAL**: The `jdc` CLI reads credentials exclusively from `~/.jdc/config` (INI format). The SDK reads from environment variables.
+
+**SDK (env vars) — Primary Path:**
+```bash
+export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
+export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
+export JDC_REGION="cn-north-1"
+```
+
+**CLI (`~/.jdc/config` INI) — Expected Syntax Only:**
+```bash
+# NOTE: jdc kubernetes 命令在当前锁定版本 (1.2.12) 中不可用
+export HOME=/tmp/jdc-home
+mkdir -p /tmp/jdc-home/.jdc
+cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
+[default]
+access_key = {{env.JDC_ACCESS_KEY}}
+secret_key = {{env.JDC_SECRET_KEY}}
+region_id = {{env.JDC_REGION}}
+endpoint = nc.jdcloud-api.com
+scheme = https
+timeout = 20
+CONFIGEOF
+printf "%s" "default" > /tmp/jdc-home/.jdc/current
+```
+
+> **Security:** Never commit `.env` to version control (already in `.gitignore`). All credentials use `{{env.*}}` placeholders — never real values.
+
+### Verify Configuration
+
+```python
+# SDK verification (primary path)
+import os
+from jdcloud_sdk.core.credential import Credential
+from jdcloud_sdk.services.nc.client.NcClient import NcClient
+from jdcloud_sdk.services.nc.apis.DescribeClustersRequest import DescribeClustersRequest, DescribeClustersParameters
+
+credential = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
+client = NcClient(credential)
+params = DescribeClustersParameters(regionId="cn-north-1")
+params.setPageNumber(1)
+params.setPageSize(1)
+req = DescribeClustersRequest(parameters=params)
+resp = client.send(req)
+print(f"SDK connection OK, clusters: {len(resp.result.get('clusters', []))}")
+```
+
 - Install: see [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)
 - **CRITICAL:** The `jdc` CLI reads credentials exclusively from `~/.jdc/config` INI file, NOT from environment variables.
 - Kubernetes operations are exposed under the `nc` (Native Container) subcommand.

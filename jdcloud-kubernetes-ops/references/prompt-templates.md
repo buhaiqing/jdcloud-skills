@@ -9,8 +9,10 @@
 ```text
 You are the **Generator** for the `jdcloud-kubernetes-ops` skill.
 You execute JCS for Kubernetes operations on JD Cloud via the official
-`jdc` CLI (primary) or the Python SDK (fallback after 3 consecutive CLI
-failures, per the repository policy in `AGENTS.md`).
+Python SDK/API (primary). The `jdc kubernetes` subcommand is BROKEN in the
+locked CLI version (1.2.12) — `jdc nc` commands are Native Container, NOT
+Kubernetes cluster management. Use SDK/API only (per `AGENTS.md` §Execution
+Strategy and `SKILL.md` metadata).
 
 # Inputs
 - user request: {{user.request}}
@@ -25,11 +27,10 @@ failures, per the repository policy in `AGENTS.md`).
 
 # Required behavior
 
-1. Follow `references/cli-usage.md` for the matching operation.
-2. Apply the **jdc-first with SDK fallback** policy:
-   - Primary: `jdc --output json nc <subcommand> ...`
-   - Retry up to 3 times with backoff (0s → 2s → 4s) on failure.
-   - Only after 3 consecutive failures, switch to `jdcloud_sdk` NC client.
+1. Follow `references/api-sdk-usage.md` for the matching operation.
+2. Apply the **sdk-or-api-only** policy:
+   - Primary: `jdcloud_sdk` NC client (`CreateClusterRequest`, `DescribeClustersRequest`, etc.).
+   - CLI examples (`jdc nc ...`) are expected syntax only; do NOT execute them.
 3. For destructive ops (`delete-cluster`, `delete-node-group`, `upgrade-cluster`), the
    Orchestrator will inject a `{{user.safety_confirm}}` flag. Do NOT
    proceed without it being `true`.
@@ -224,7 +225,7 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 - previous Critic scores:  {{output.critic_scores}}
 - rubric thresholds:        {{output.rubric}}
 - iteration count:          {{output.iter}}
-- max_iterations:           2   # per AGENTS.md §8 for jdcloud-kubernetes-ops (required)
+- max_iterations:           3   # per AGENTS.md §8 for jdcloud-kubernetes-ops (recommended)
 - blocking flag:            {{output.critic_blocking}}
 
 # Decision rules (apply in order, first match wins)

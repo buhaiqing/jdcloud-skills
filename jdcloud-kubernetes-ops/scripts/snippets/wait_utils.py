@@ -10,6 +10,8 @@ Based on the state transition table in SKILL.md:
 
 import time
 
+from jdcloud_sdk.core.exception import ServerException
+
 from snippets.cluster_ops import describe_cluster
 from snippets.node_group_ops import describe_node_group
 
@@ -36,6 +38,14 @@ def wait_cluster_running(
     )
 
 
+def _is_not_found(exc: Exception) -> bool:
+    """Return True if exception indicates a 404 / NotFound response."""
+    if isinstance(exc, ServerException):
+        return exc.status == 404 or "NotFound" in (exc.code or "")
+    # Fallback for non-SDK exceptions (e.g. wrapped HTTP errors)
+    return "NotFound" in str(exc) or "404" in str(exc)
+
+
 def wait_cluster_deleted(
     client, region_id: str, cluster_id: str, poll_interval: int = 30, max_wait: int = 600
 ) -> None:
@@ -45,7 +55,7 @@ def wait_cluster_deleted(
         try:
             describe_cluster(client, region_id, cluster_id)
         except Exception as e:
-            if "NotFound" in str(e) or "404" in str(e):
+            if _is_not_found(e):
                 return
             raise
         time.sleep(poll_interval)
@@ -89,7 +99,7 @@ def wait_node_group_deleted(
         try:
             describe_node_group(client, region_id, cluster_id, node_group_id)
         except Exception as e:
-            if "NotFound" in str(e) or "404" in str(e):
+            if _is_not_found(e):
                 return
             raise
         time.sleep(poll_interval)

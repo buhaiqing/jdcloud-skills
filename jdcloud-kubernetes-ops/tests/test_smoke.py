@@ -54,7 +54,7 @@ def test_rubric_has_five_dimensions(rubric_template):
 
 
 def test_rubric_max_iterations(rubric_template):
-    assert rubric_template["max_iterations"] == 2
+    assert rubric_template["max_iterations"] == 3
 
 
 def test_skilL_metadata_required_fields():

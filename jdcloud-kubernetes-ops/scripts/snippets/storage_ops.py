@@ -16,7 +16,7 @@ SAFETY:
     - Always check PVC status before deletion
 """
 
-from typing import Optional
+from typing import Optional, List, Set
 
 try:
     from kubernetes import client
@@ -32,9 +32,11 @@ from .k8s_client import (
     handle_k8s_api_errors,
     retry_on_failure,
     K8sResourceNotFoundError,
+    K8sClientError,
 )
 
 
+@handle_k8s_api_errors
 def list_storage_classes(kubeconfig_path: Optional[str] = None) -> dict:
     """List all StorageClass resources in the cluster.
 
@@ -102,8 +104,39 @@ def create_pvc(
     SAFETY:
         - PVC creation is non-destructive
         - PVC will remain Pending until a matching PV is available
+        - IDEMPOTENT: If PVC already exists, returns existing PVC info
     """
     api = get_k8s_client(kubeconfig_path)
+
+    # Check if PVC already exists (idempotency)
+    try:
+        existing_pvc = api.read_namespaced_persistent_volume_claim(
+            name=name, namespace=namespace
+        )
+        return {
+            "name": existing_pvc.metadata.name,
+            "namespace": existing_pvc.metadata.namespace,
+            "status": existing_pvc.status.phase,
+            "size": (existing_pvc.spec.resources.requests or {}).get("storage", "unknown"),
+            "storage_class": existing_pvc.spec.storage_class_name,
+            "access_mode": existing_pvc.spec.access_modes[0] if existing_pvc.spec.access_modes else None,
+            "message": "PVC already exists (idempotent)",
+        }
+    except K8sResourceNotFoundError:
+        # PVC doesn't exist, proceed with creation
+        pass
+
+    # Validate StorageClass exists if specified
+    if storage_class:
+        storage_api = get_storage_v1_client(kubeconfig_path)
+        try:
+            storage_api.read_storage_class(name=storage_class)
+        except K8sResourceNotFoundError:
+            raise K8sClientError(
+                f"StorageClass '{storage_class}' does not exist",
+                resource_type="StorageClass",
+                resource_name=storage_class,
+            )
 
     pvc_spec = client.V1PersistentVolumeClaim(
         metadata=client.V1ObjectMeta(name=name, namespace=namespace),
@@ -128,6 +161,7 @@ def create_pvc(
         "size": size,
         "storage_class": storage_class,
         "access_mode": access_mode,
+        "message": "PVC created",
     }
 
 
@@ -159,7 +193,7 @@ def list_pvcs(
             "name": pvc.metadata.name,
             "namespace": pvc.metadata.namespace,
             "status": pvc.status.phase,
-            "size": pvc.spec.resources.requests.get("storage", "unknown"),
+            "size": (pvc.spec.resources.requests or {}).get("storage", "unknown"),
             "storage_class": pvc.spec.storage_class_name,
             "access_mode": pvc.spec.access_modes[0] if pvc.spec.access_modes else None,
             "volume_name": pvc.spec.volume_name,
@@ -170,6 +204,53 @@ def list_pvcs(
         pvcs.append(pvc_info)
 
     return {"pvcs": pvcs, "total": len(pvcs)}
+
+
+def _get_pods_using_pvc(
+    api: client.CoreV1Api, pvc_name: str, namespace: str
+) -> List[str]:
+    """Find Pod names that are using a given PVC.
+
+    Checks both regular container volumes and init container volumeMounts.
+
+    Args:
+        api: CoreV1Api client.
+        pvc_name: Name of the PVC to check.
+        namespace: Kubernetes namespace.
+
+    Returns:
+        List[str]: Sorted, deduplicated Pod names using the PVC.
+    """
+    pods = api.list_namespaced_pod(namespace=namespace)
+    using_pods: Set[str] = set()
+
+    for pod in pods.items:
+        # Direct volume claim reference
+        for volume in (pod.spec.volumes or []):
+            if (
+                volume.persistent_volume_claim
+                and volume.persistent_volume_claim.claim_name == pvc_name
+            ):
+                using_pods.add(pod.metadata.name)
+                break
+        else:
+            # Defensive check via init container volumeMounts
+            for container in (pod.spec.init_containers or []):
+                for mount in (container.volume_mounts or []):
+                    for volume in (pod.spec.volumes or []):
+                        if (
+                            volume.name == mount.name
+                            and volume.persistent_volume_claim
+                            and volume.persistent_volume_claim.claim_name == pvc_name
+                        ):
+                            using_pods.add(pod.metadata.name)
+                            break
+                    if pod.metadata.name in using_pods:
+                        break
+                if pod.metadata.name in using_pods:
+                    break
+
+    return sorted(using_pods)
 
 
 @handle_k8s_api_errors
@@ -196,10 +277,32 @@ def delete_pvc(
     """
     api = get_k8s_client(kubeconfig_path)
 
-    # Get PVC details for logging
-    pvc = api.read_namespaced_persistent_volume_claim(
-        name=name, namespace=namespace
-    )
+    # Get PVC details for logging (handle case where PVC doesn't exist)
+    try:
+        pvc = api.read_namespaced_persistent_volume_claim(
+            name=name, namespace=namespace
+        )
+    except K8sResourceNotFoundError:
+        # PVC doesn't exist - return early with appropriate message
+        return {
+            "name": name,
+            "namespace": namespace,
+            "deleted": False,
+            "message": "PVC does not exist",
+        }
+
+    # Check if PVC is in use by any Pod (including init containers)
+    using_pods = _get_pods_using_pvc(api, name, namespace)
+
+    if using_pods:
+        return {
+            "name": name,
+            "namespace": namespace,
+            "deleted": False,
+            "message": f"PVC is in use by Pods: {', '.join(sorted(using_pods))}",
+            "bound_volume": pvc.spec.volume_name,
+            "status_before_delete": pvc.status.phase,
+        }
 
     # Delete the PVC
     api.delete_namespaced_persistent_volume_claim(
@@ -287,16 +390,14 @@ def check_pvc_health(
         pvc = api.read_namespaced_persistent_volume_claim(
             name=name, namespace=namespace
         )
-    except ApiException as e:
-        if e.status == 404:
-            return {
-                "name": name,
-                "namespace": namespace,
-                "status": "NotFound",
-                "healthy": False,
-                "issues": ["PVC does not exist"],
-            }
-        raise
+    except K8sResourceNotFoundError:
+        return {
+            "name": name,
+            "namespace": namespace,
+            "status": "NotFound",
+            "healthy": False,
+            "issues": ["PVC does not exist"],
+        }
 
     issues = []
     status = pvc.status.phase
@@ -316,11 +417,8 @@ def check_pvc_health(
             pv = api.read_persistent_volume(name=bound_volume)
             if pv.status.phase != "Bound":
                 issues.append(f"Bound PV {bound_volume} status is {pv.status.phase}")
-        except ApiException as e:
-            if e.status == 404:
-                issues.append(f"Bound PV {bound_volume} does not exist")
-            else:
-                raise
+        except K8sResourceNotFoundError:
+            issues.append(f"Bound PV {bound_volume} does not exist")
     else:
         if status == "Bound":
             issues.append("PVC is Bound but no volume_name set (unusual)")

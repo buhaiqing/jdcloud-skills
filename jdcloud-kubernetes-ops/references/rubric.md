@@ -6,7 +6,7 @@
 
 ## Rubric version
 
-`v1` — see `AGENTS.md` §11.
+`v2` — see `AGENTS.md` §11.
 
 ## Dimensions
 
@@ -47,12 +47,13 @@
 
 | Parameter | Value | Source |
 |---|---|---|
-| `max_iterations` | **2** | `AGENTS.md` §8 default for `jdcloud-kubernetes-ops` (required) |
+| `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-kubernetes-ops` (recommended) |
 | Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `AGENTS.md` §6 |
-| Rubric version | `v1` | this file |
+| Rubric version | `v2` | this file |
 
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
+| 2.0.0 | 2026-06-18 | Bumped rubric version to v2, max_iterations to 3, GCL classification changed from `required` to `recommended`. Added HALLUCINATION_ABORT and operation-specific H-layer behavior. |
 | 1.0.0 | 2026-06-08 | Initial rubric for `jdcloud-kubernetes-ops` GCL rollout (covers cluster CRUD, node group CRUD, credentials, upgrades) |
