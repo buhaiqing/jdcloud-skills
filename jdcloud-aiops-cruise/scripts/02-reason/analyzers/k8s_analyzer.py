@@ -11,10 +11,10 @@ Limited by JD Cloud OpenAPI scope:
 Pod-level analysis is NOT available via OpenAPI.
 """
 
-import sys, os
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag, tag_dict
@@ -24,7 +24,7 @@ K8S_CLUSTER_TAG = "kubernetes.jdcloud.com/cluster_id"
 
 class K8sAnalyzer(BaseAnalyzer):
     service_name = "k8s"
-    icon = "☸️"
+    icon = "[集群]"
 
     def discover(self, topology: dict) -> list:
         """Discover K8s clusters from tagged VMs + CLBs."""

@@ -14,12 +14,10 @@ mutation (scale, index creation, whitelist/security-group changes) to the
 appropriate ops skill with human confirmation.
 """
 
-import os
 import sys
-
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
@@ -28,7 +26,7 @@ from lib.jdc_client import get_tag, tag_dict
 
 class MongoDBAnalyzer(BaseAnalyzer):
     service_name = "mongodb"
-    icon = "🍃"
+    icon = "[数据库]"
 
     METRICS = [
         "mongodb_cpu_utilization",

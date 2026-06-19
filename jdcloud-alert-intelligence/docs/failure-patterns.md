@@ -38,9 +38,9 @@
 ### Pattern: SuppressWithoutConfirm
 - **Category**: skill_generation
 - **Skill**: jdcloud-alert-intelligence
-- **Command**: `jdc cloudmonitor disable-alarm-rule` (without user confirmation)
-- **Error**: Safety gate violation
-- **Fix**: Always obtain explicit user confirmation before suppressing alarms
+- **Command**: Analysis output recommends `jdc cloudmonitor disable-alarm-rule` (without user confirmation)
+- **Error**: Safety gate violation — this skill is read-only and must not suggest mutating alert rules
+- **Fix**: Route all alert-rule disable/modify/delete actions to `jdcloud-cloudmonitor-ops`; analysis output may only demote/suppress clusters analytically
 - **Count**: 1
 - **Reusable**: true
 

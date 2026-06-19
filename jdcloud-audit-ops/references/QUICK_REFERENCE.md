@@ -1,10 +1,10 @@
 # JD Cloud Audit Log Quick Reference
 
-> This document provides the most commonly used audit log operations commands for quick reference. For detailed usage, refer to the [CLI Usage Guide](references/cli-usage.md).
+> This document provides the most commonly used audit log operations commands for quick reference. For detailed usage, refer to the [CLI Usage Guide](cli-usage.md).
 >
 > **⚠️ 当前状态**：`jdc audit` 命令在当前锁定版本 (`jdcloud_cli==1.2.12`) 中不可用；下面 CLI 块均为**期望语法示例**，实际执行前请确认 CLI 版本支持。
 >
-> **脱敏要求**：任何 `requestParameters` / `responseElements` 输出或外发前必须调用 `mask_sensitive(data)` / `redact_sensitive_fields(data)`。必须脱敏字段：`password`, `passwd`, `pwd`, `secret`, `secretKey`, `accessKeySecret`, `accessKey`, `token`, `authorization`, `credential`, `privateKey`, `sessionKey`, `apiKey`；手机号、邮箱等 PII 按策略 mask/hash。参考实现见 [Redaction Reference](references/redaction.md)。
+> **脱敏要求**：任何 `requestParameters` / `responseElements` 输出或外发前必须调用 `mask_sensitive(data)` / `redact_sensitive_fields(data)`。必须脱敏字段：`password`, `passwd`, `pwd`, `secret`, `secretKey`, `accessKeySecret`, `accessKey`, `token`, `authorization`, `credential`, `privateKey`, `sessionKey`, `apiKey`；手机号、邮箱等 PII 按策略 mask/hash。参考实现见 [Redaction Reference](redaction.md)。
 
 ## Audit Log Quick Reference
 
@@ -289,12 +289,12 @@ if response.error is None:
 
 | Document | Description |
 |----------|-------------|
-| [CLI Usage Guide](references/cli-usage.md) | Complete CLI command reference |
-| [Core Concepts](references/core-concepts.md) | Core concepts explanation |
-| [API & SDK Usage](references/api-sdk-usage.md) | Detailed API/SDK guide |
-| [Troubleshooting](references/troubleshooting.md) | Detailed troubleshooting guide |
-| [Monitoring](references/monitoring.md) | Monitoring & alert configuration |
-| [Integration](references/integration.md) | SDK/MCP integration |
+| [CLI Usage Guide](cli-usage.md) | Complete CLI command reference |
+| [Core Concepts](core-concepts.md) | Core concepts explanation |
+| [API & SDK Usage](api-sdk-usage.md) | Detailed API/SDK guide |
+| [Troubleshooting](troubleshooting.md) | Detailed troubleshooting guide |
+| [Monitoring](monitoring.md) | Monitoring & alert configuration |
+| [Integration](integration.md) | SDK/MCP integration |
 | [Official Docs](https://docs.jdcloud.com/cn/audit-log) | JD Cloud official documentation |
 | [API Docs](https://docs.jdcloud.com/cn/api/audit) | API reference documentation |
 | [Console](https://console.jdcloud.com) | JD Cloud Console |

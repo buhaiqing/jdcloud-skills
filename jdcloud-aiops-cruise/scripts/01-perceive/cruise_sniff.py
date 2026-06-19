@@ -15,9 +15,8 @@ import sys, json, argparse
 from pathlib import Path
 from datetime import datetime
 
-_scripts_dir = Path(__file__).parent
-_project_dir = _scripts_dir.parent
-sys.path.insert(0, str(_project_dir))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import path_setup
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources
@@ -37,7 +36,7 @@ def main():
     customer = args.customer
     output_dir = args.output_dir or str(_project_dir.parent / "reports" / "output")
 
-    print(f"\n🔍 嗅探阶段: 客户={customer}, 区域={regions or '全部'}")
+    print(f"\n[检索] 嗅探阶段: 客户={customer}, 区域={regions or '全部'}")
     print("=" * 60)
 
     result = discover_customer_resources(client, customer, regions)
@@ -45,12 +44,12 @@ def main():
     topology = result["topology"]
 
     # ── Print topology preview ──
-    print(f"\n🌐 拓扑初判")
+    print(f"\n[拓扑] 拓扑初判")
     print(f"  VPC 数量: {len(topology['vpcs'])}")
     for vpc_id, info in topology["vpcs"].items():
         print(f"    {info['name']} ({info['cidr']}): {len(info['vms'])} VMs, {len(info['subnets'])} 子网")
 
-    print(f"\n📦 资源分布")
+    print(f"\n[资源] 资源分布")
     customer_vms = [r for r in cls["resources"] if r.get("mode") != "unknown"]
     print(f"  已分类: {len(customer_vms)} 个资源")
     modes = {}
@@ -60,7 +59,7 @@ def main():
         print(f"    {m}: {c} 个")
 
     # ── Print classification ──
-    print(f"\n🏷️  部署模式分类")
+    print(f"\n[分类] 部署模式分类")
     for r in cls["resources"]:
         conf_bar = "█" * int(r["confidence"] * 20)
         print(f"  [{conf_bar}] {r.get('name',''):35s} {r['mode']:15s} 置信度={r['confidence']:.0%} 原因:{r['reason']}")
@@ -68,13 +67,13 @@ def main():
     # ── Needs confirmation? ──
     needs = cls.get("needs_confirmation", [])
     if needs:
-        print(f"\n⚠️  以下 {len(needs)} 个资源需要人工确认:")
+        print(f"\n[警告] 以下 {len(needs)} 个资源需要人工确认:")
         for r in needs:
-            print(f"  ❓ {r.get('name','')} ({r.get('id','')}) — {r['reason']}")
+            print(f"  [待确认] {r.get('name','')} ({r.get('id','')}) — {r['reason']}")
         print("\n  请人工确认后，重新运行或跳过确认继续 Phase 2。")
         exit_code = 1
     else:
-        print(f"\n✅ 所有资源已自动分类，可直接进入 Phase 2。")
+        print(f"\n[通过] 所有资源已自动分类，可直接进入 Phase 2。")
         exit_code = 0
 
     # ── Save JSON ──
@@ -83,7 +82,7 @@ def main():
     date_str = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_path = output_path / f"sniff-{customer}-{date_str}.json"
     out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    print(f"\n💾 JSON 已保存: {out_path}")
+    print(f"\n[已保存] JSON 已保存: {out_path}")
 
     return exit_code
 

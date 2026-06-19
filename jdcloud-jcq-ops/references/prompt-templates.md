@@ -1,7 +1,7 @@
 # GCL Prompt Templates — jdcloud-jcq-ops
 
 > These templates are used by the **Orchestrator (O)** to construct prompts for the **Generator (G)** and **Critic (C)**.
-> See [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate) for loop mechanics.
+> See [`AGENTS.md` §Quality Gate](../../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate) for loop mechanics.
 
 ## Placeholder Convention
 

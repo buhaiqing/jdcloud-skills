@@ -14,11 +14,10 @@ Spec limits: checks against instance type and disk type upper limits.
 
 from . import register
 from .base_analyzer import BaseAnalyzer
-import sys, os
-# Make imports work both as a module and as a standalone script
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from lib.jdc_client import tag_dict, get_tag
 
 
@@ -56,7 +55,7 @@ K8S_TAG_KEYS = [
 
 class VmAnalyzer(BaseAnalyzer):
     service_name = "vm"
-    icon = "🖥️"
+    icon = "[主机]"
 
     METRICS = [
         "cpu_util", "memory.usage",

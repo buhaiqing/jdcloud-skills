@@ -1,6 +1,8 @@
 """
-Tests for jdc_client.py — JD Cloud API client.
-Run with: python -m pytest tests/test_jdc_client.py -v
+Core tests for jdcloud-aiops-cruise.
+Covers jdc_client signing/credentials, resource discovery, analyzer contracts,
+and cross-phase integration.
+Run with: python -m pytest tests/test_core.py -v
 """
 
 import sys, os, json

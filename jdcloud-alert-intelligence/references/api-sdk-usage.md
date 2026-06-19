@@ -2,7 +2,7 @@
 
 > **本 Skill 全程只读**：仅使用 `describe*` 类查询接口，**不**调用 `createAlarm` /
 > `updateAlarm` / `enableAlarm` / `disableAlarm` / `deleteAlarms` 等变更接口。
-> 任何告警规则的变更请委派 [`jdcloud-cloudmonitor-ops`](../jdcloud-cloudmonitor-ops/SKILL.md)。
+> 任何告警规则的变更请委派 [`jdcloud-cloudmonitor-ops`](../../jdcloud-cloudmonitor-ops/SKILL.md)。
 
 ## OpenAPI 规格
 
@@ -15,7 +15,7 @@
 
 > **明确不调用**：`createAlarm` / `updateAlarm` / `enableAlarm` / `disableAlarm` /
 > `deleteAlarms` / `createAlarmContact` / `updateAlarmContact` —— 这些都委派给
-> [`jdcloud-cloudmonitor-ops`](../jdcloud-cloudmonitor-ops/SKILL.md)。
+> [`jdcloud-cloudmonitor-ops`](../../jdcloud-cloudmonitor-ops/SKILL.md)。
 
 ## SDK 操作映射（本 Skill 用到的子集）
 
@@ -39,7 +39,7 @@ uv pip install jdcloud_sdk>=1.6.26
 pip install jdcloud_sdk>=1.6.26
 ```
 
-> **版本锁定**：与 [`jdcloud-cloudmonitor-ops`](../jdcloud-cloudmonitor-ops/SKILL.md)
+> **版本锁定**：与 [`jdcloud-cloudmonitor-ops`](../../jdcloud-cloudmonitor-ops/SKILL.md)
 > 一致，固定 `jdcloud_cli==1.2.12` + `jdcloud_sdk>=1.6.26`。本 Skill 仅使用 SDK 作为
 > **fallback** 路径，主路径是 `jdc --output json monitor ...` CLI。
 
@@ -162,7 +162,7 @@ jdc --output json monitor describe-alarm-history \
 | `RateLimitExceeded` | 限流 | 重试 3 次（指数退避 0s/2s/4s）|
 | `InternalError` | 内部错误 | 重试 3 次（指数退避），仍失败则返回错误 |
 
-完整错误码见 [`jdcloud-cloudmonitor-ops` integration.md](../jdcloud-cloudmonitor-ops/references/integration.md) § 错误处理。
+完整错误码见 [`jdcloud-cloudmonitor-ops` integration.md](../../jdcloud-cloudmonitor-ops/references/integration.md) § 错误处理。
 
 ## 调用频率约束
 
@@ -172,6 +172,6 @@ jdc --output json monitor describe-alarm-history \
 
 ## 跨 Skill 引用
 
-- 告警规则变更（创建/修改/删除）→ [`jdcloud-cloudmonitor-ops`](../jdcloud-cloudmonitor-ops/SKILL.md)
+- 告警规则变更（创建/修改/删除）→ [`jdcloud-cloudmonitor-ops`](../../jdcloud-cloudmonitor-ops/SKILL.md)
 - 资源问题排查（VM/RDS/LB/Redis）→ 各 `jdcloud-*-ops`
-- 告警联系人配置 → [`jdcloud-cloudmonitor-ops`](../jdcloud-cloudmonitor-ops/SKILL.md) `alarmContacts` 子命令
+- 告警联系人配置 → [`jdcloud-cloudmonitor-ops`](../../jdcloud-cloudmonitor-ops/SKILL.md) `alarmContacts` 子命令

@@ -7,10 +7,10 @@ Checks: dangerous open ports (0.0.0.0/0 to DB/management ports),
 rule count explosion, overly permissive CIDRs.
 """
 
-import sys, os
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag
@@ -25,7 +25,7 @@ DANGER_PORTS = {
 
 class SgAnalyzer(BaseAnalyzer):
     service_name = "security_group"
-    icon = "🔒"
+    icon = "[安全]"
 
     def discover(self, topology: dict) -> list:
         self.topology = topology

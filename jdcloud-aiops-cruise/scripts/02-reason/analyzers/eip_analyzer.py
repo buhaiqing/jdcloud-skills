@@ -7,10 +7,10 @@ Checks: bandwidth utilization, association/binding status, public exposure risk.
 Read-only output: audit findings and recommendations only; no EIP mutation.
 """
 
-import sys, os
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag
@@ -30,7 +30,7 @@ def _first_present(data: dict, keys: tuple, default=None):
 
 class EipAnalyzer(BaseAnalyzer):
     service_name = "eip"
-    icon = "🌐"
+    icon = "[拓扑]"
 
     def discover(self, topology: dict) -> list:
         self.topology = topology

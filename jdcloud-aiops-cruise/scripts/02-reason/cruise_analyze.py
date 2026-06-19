@@ -12,10 +12,10 @@ Otherwise runs Phase 1 discovery first.
 
 import sys, os, json, argparse
 from datetime import datetime
+from pathlib import Path
 
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-_project_dir = os.path.join(_scripts_dir, "..")
-sys.path.insert(0, _project_dir)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import path_setup
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources
@@ -38,11 +38,11 @@ def main():
 
     # ── Phase 1: Discovery ──
     if args.sniff_file:
-        print(f"📂 从文件加载拓扑: {args.sniff_file}")
+        print(f"[加载] 从文件加载拓扑: {args.sniff_file}")
         with open(args.sniff_file, "r", encoding="utf-8") as f:
             topology_data = json.load(f)
     else:
-        print(f"🔍 执行嗅探 (客户={customer})...")
+        print(f"[检索] 执行嗅探 (客户={customer})...")
         topology_data = discover_customer_resources(client, customer)
         os.makedirs(output_dir, exist_ok=True)
         date_str = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -52,7 +52,7 @@ def main():
         print(f"  拓扑已保存: {sniff_path}")
 
     # ── Phase 2: Run all analyzers ──
-    print(f"\n🔍 开始深度巡检 ({args.hours}h)...")
+    print(f"\n[检索] 开始深度巡检 ({args.hours}h)...")
     analyzers = create_all()
     all_reports = []
 
@@ -61,10 +61,10 @@ def main():
         try:
             resources = analyzer.discover(topology_data)
             if not resources:
-                print(f"  ⏭️  {svc}: 无相关资源，跳过")
+                print(f"  [跳过] {svc}: 无相关资源，跳过")
                 continue
 
-            print(f"  🔄 {svc}: 发现 {len(resources)} 个资源，采集监控...")
+            print(f"  [分析] {svc}: 发现 {len(resources)} 个资源，采集监控...")
             analyzer.query_metrics(client, hours=args.hours)
             findings = analyzer.analyze()
             report = analyzer.report()
@@ -72,16 +72,16 @@ def main():
 
             # Print findings summary
             for f in findings:
-                icon = {"critical": "🔴", "warning": "🟡", "info": "🔵"}.get(f["severity"], "❓")
+                icon = {"critical": "[严重]", "warning": "[警告]", "info": "[信息]"}.get(f["severity"], "[待确认]")
                 print(f"    {icon} [{f['severity']}] {f['resource']}: {f['message']}")
 
         except Exception as e:
-            print(f"  ❌ {svc}: 分析失败 — {e}")
+            print(f"  [禁止] {svc}: 分析失败 — {e}")
             continue
 
     # ── Output report ──
     print(f"\n{'='*60}")
-    print(f"  📋 巡检报告 ({customer})")
+    print(f"  [报告] 巡检报告 ({customer})")
     print(f"{'='*60}")
 
     # Print table of all findings
@@ -126,20 +126,20 @@ def main():
             lines.append(f"  操作入口: {ops}（需人工确认后执行）")
         return "\n".join(lines)
 
-    print(f"\n🔴 Critical: {len(criticals)} 条")
+    print(f"\n[严重] Critical: {len(criticals)} 条")
     for f in criticals:
         print(f"\n  • {_fmt(f)}")
 
-    print(f"\n\n🟡 Warning: {len(warnings)} 条")
+    print(f"\n\n[警告] Warning: {len(warnings)} 条")
     for f in warnings:
         print(f"\n  • {_fmt(f)}")
 
-    print(f"\n\n🔵 Info: {len(infos)} 条")
+    print(f"\n\n[信息] Info: {len(infos)} 条")
     for f in infos:
         print(f"\n  • {_fmt(f)}")
 
     # ── Save JSON report ──
-    if args.json or True:
+    if args.json:
         os.makedirs(output_dir, exist_ok=True)
         date_str = datetime.now().strftime("%Y%m%d-%H%M%S")
         report_path = os.path.join(output_dir, f"cruise-{customer}-{date_str}.json")
@@ -158,7 +158,7 @@ def main():
         }
         with open(report_path, "w", encoding="utf-8") as f:
             json.dump(report_data, f, ensure_ascii=False, indent=2, default=str)
-        print(f"\n💾 JSON 报告已保存: {report_path}")
+        print(f"\n[已保存] JSON 报告已保存: {report_path}")
 
 
 if __name__ == "__main__":

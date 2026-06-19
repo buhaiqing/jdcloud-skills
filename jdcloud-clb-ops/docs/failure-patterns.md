@@ -9,7 +9,7 @@
 ### Pattern: InvalidResourceId
 - **Category**: cli_parameter
 - **Skill**: jdcloud-clb-ops
-- **Command**: `jdc clb describe-load-balancer --load-balancer-id <invalid>`
+- **Command**: `jdc lb describe-load-balancer --load-balancer-id <invalid>`
 - **Error**: `InvalidParameter: InvalidResourceId`
 - **Fix**: Resource ID must be in valid format (lb-xxxxxxxx)
 - **Count**: 1
@@ -18,7 +18,7 @@
 ### Pattern: MissingRegionId
 - **Category**: cli_parameter
 - **Skill**: jdcloud-clb-ops
-- **Command**: `jdc clb describe-load-balancers` (missing --region-id)
+- **Command**: `jdc lb describe-load-balancers` (missing --region-id)
 - **Error**: `MissingParameter: regionId is required`
 - **Fix**: Always include --region-id in every command
 - **Count**: 1
@@ -27,7 +27,7 @@
 ### Pattern: WrongOutputJsonPosition
 - **Category**: cli_parameter
 - **Skill**: jdcloud-clb-ops
-- **Command**: `jdc clb describe-load-balancers --output json` (wrong position)
+- **Command**: `jdc lb describe-load-balancers --output json` (wrong position)
 - **Error**: `unrecognized arguments: --output json`
 - **Fix**: `--output json` MUST be placed BEFORE the subcommand
 - **Count**: 1
@@ -38,7 +38,7 @@
 ### Pattern: DeleteResourceInUse
 - **Category**: skill_generation
 - **Skill**: jdcloud-clb-ops
-- **Command**: `jdc clb delete-load-balancer --load-balancer-id <id>` (when load-balancer is in use)
+- **Command**: `jdc lb delete-load-balancer --load-balancer-id <id>` (when load-balancer is in use)
 - **Error**: `ResourceInUse`
 - **Fix**: Stop/detach dependent resources first before deleting
 - **Count**: 1
@@ -47,7 +47,7 @@
 ### Pattern: QuotaExceeded
 - **Category**: skill_generation
 - **Skill**: jdcloud-clb-ops
-- **Command**: `jdc clb create-load-balancer`
+- **Command**: `jdc lb create-load-balancer`
 - **Error**: `QuotaExceeded: resource quota exceeded`
 - **Fix**: Request quota increase or release unused resources first
 - **Count**: 1
@@ -107,7 +107,7 @@
 ### Pattern: LargeListResult
 - **Category**: token_efficiency
 - **Skill**: jdcloud-clb-ops
-- **Command**: `jdc clb describe-load-balancers --page-size 100`
+- **Command**: `jdc lb describe-load-balancers --page-size 100`
 - **Warning**: Response too large, consumes excessive tokens
 - **Fix**: Use smaller --page-size or add filters to narrow results
 - **Count**: 1
@@ -134,3 +134,4 @@ When a GCL iteration fails, extract failure pattern using this format:
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0.0 | 2026-06-19 | Initial failure patterns for `jdcloud-clb-ops` |
+| 1.0.1 | 2026-06-19 | Fixed `jdc clb` → `jdc lb` in all command examples; aligned with SKILL.md 1.3.1 |

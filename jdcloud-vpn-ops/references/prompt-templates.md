@@ -1,7 +1,7 @@
 # GCL Prompt Templates — jdcloud-vpn-ops
 
 > Prompt templates for the Generator-Critic-Loop (GCL) defined in
-> [`AGENTS.md` §Quality Gate](../AGENTS.md).
+> [`AGENTS.md` §Quality Gate](../../AGENTS.md).
 > Placeholder syntax follows the repository-wide `{{env.*}}` / `{{user.*}}` /
 > `{{output.*}}` convention. Bare `{...}` placeholders are NOT allowed.
 

@@ -2,7 +2,7 @@
 
 > 本文件列出 `jdcloud-alert-intelligence` v0.1 在聚合/分级/抑制阶段用到的核心监控指标，
 > 以及常见的告警模式（pattern）。完整监控指标清单见
-> [`jdcloud-cloudmonitor-ops` monitoring.md](../jdcloud-cloudmonitor-ops/references/monitoring.md)。
+> [`jdcloud-cloudmonitor-ops` monitoring.md](../../jdcloud-cloudmonitor-ops/references/monitoring.md)。
 >
 > 本 Skill **不**对监控指标做"全量解释"，仅聚焦"分析告警时需要看到的指标子集"。
 

@@ -11,10 +11,10 @@ Delegates to jdcloud-postgresql-ops skill for actual DB operations.
 
 from . import register
 from .base_analyzer import BaseAnalyzer
-import sys, os
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from lib.jdc_client import tag_dict, get_tag
 
 
@@ -48,37 +48,37 @@ VACUUM_THRESHOLDS = {
 # Root cause patterns for PostgreSQL
 ROOT_CAUSE_PATTERNS = {
     "missing_index": {
-        "icon": "🏷️",
+        "icon": "[分类]",
         "label": "Missing Index",
         "description": "Sequential scan detected, high rows examined vs returned",
     },
     "seq_scan_heavy": {
-        "icon": "📊",
+        "icon": "[指标]",
         "label": "Heavy Sequential Scan",
         "description": "Frequent sequential scans on large tables",
     },
     "lock_contention": {
-        "icon": "🔒",
+        "icon": "[安全]",
         "label": "Lock Contention",
         "description": "High lock wait time detected",
     },
     "idle_in_transaction": {
-        "icon": "⏸️",
+        "icon": "[暂停]",
         "label": "Idle in Transaction",
         "description": "Connections idle in transaction for long time",
     },
     "vacuum_lag": {
-        "icon": "🧹",
+        "icon": "[清理]",
         "label": "VACUUM Lag",
         "description": "Dead tuples accumulation exceeds threshold",
     },
     "connection_leak": {
-        "icon": "🔌",
+        "icon": "[连接]",
         "label": "Connection Leak",
         "description": "Idle connections growing continuously",
     },
     "replication_lag": {
-        "icon": "⏱️",
+        "icon": "[延迟]",
         "label": "Replication Lag",
         "description": "Read replica lag exceeds threshold",
     },
@@ -89,7 +89,7 @@ class RdsPostgresqlAnalyzer(BaseAnalyzer):
     """RDS PostgreSQL Health and Performance Analyzer."""
 
     service_name = "rds_postgresql"
-    icon = "🐘"
+    icon = "[数据库]"
 
     def discover(self, topology: dict) -> list:
         """Extract PostgreSQL instances from topology."""

@@ -58,7 +58,7 @@ uv pip install jdcloud_cli jdcloud_sdk
 
 **Pin versions for reproducibility (optional):**
 ```bash
-uv pip install jdcloud_cli==1.2.30 jdcloud_sdk==1.6.26
+uv pip install jdcloud_cli==1.2.12 jdcloud_sdk==1.6.26
 ```
 > Replace version numbers with the latest stable releases verified against CLB OpenAPI.
 
@@ -217,7 +217,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Setup uv
         uses: astral-sh/setup-uv@v1

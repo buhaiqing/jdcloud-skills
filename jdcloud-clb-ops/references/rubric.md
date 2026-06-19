@@ -6,7 +6,7 @@
 
 ## Rubric version
 
-`v1` — see `AGENTS.md` §11.
+`v2` — aligned with SKILL.md 1.3.0 GCL v2 rollout.
 
 ## Dimensions
 
@@ -54,10 +54,11 @@
 |---|---|---|
 | `max_iterations` | **3** | `AGENTS.md` §8 default for `jdcloud-clb-ops` (recommended) |
 | Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `AGENTS.md` §6 |
-| Rubric version | `v1` | this file |
+| Rubric version | `v2` | this file |
 
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-06-19 | Bump rubric version to `v2`; align with SKILL.md 1.3.0 GCL v2 rollout. |
 | 1.0.0 | 2026-06-04 | Initial rubric for `jdcloud-clb-ops` GCL rollout (covers LB, listener, target register/deregister, health check) |

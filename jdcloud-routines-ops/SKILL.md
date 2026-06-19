@@ -113,6 +113,17 @@ metadata:
 
 ---
 
+## Execution Flow
+
+本 Skill 覆盖两类日常运维场景，执行流程如下：
+
+1. **资源到期巡检**：Pre-flight 检查 → 遍历区域 → 调用各产品 jdc/SDK 收集到期信息 → 输出 JSON 报告
+2. **资源盘点报告**：按客户/区域维度汇总资源 → 生成结构化报告
+
+详细执行流程见各场景下的 `### Execution Flow` 子章节。脚本入口见 [scripts/](../scripts/) 目录。
+
+---
+
 ## 资源到期巡检
 
 ### Description

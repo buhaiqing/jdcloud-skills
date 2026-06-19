@@ -18,6 +18,7 @@ Usage:
 
 import json, os, time, hashlib, hmac, urllib.parse, urllib.request, urllib.error
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Optional
 
 # ──────────────────────────────────────────────
@@ -56,10 +57,13 @@ def resolve_credentials(ak: str | None = None, sk: str | None = None) -> tuple[s
     )
 
 def _load_dotenv() -> dict:
-    """Load .env file from project root. Returns dict."""
-    env_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")
+    """Load .env file. Honors JDC_DOTENV_PATH, then walks up from this file."""
+    env_path = os.environ.get("JDC_DOTENV_PATH")
+    if not env_path:
+        start_dir = Path(__file__).resolve().parent
+        env_path = _find_dotenv(start_dir)
     result = {}
-    if os.path.exists(env_path):
+    if env_path and os.path.exists(env_path):
         with open(env_path) as f:
             for line in f:
                 line = line.strip()
@@ -68,6 +72,22 @@ def _load_dotenv() -> dict:
                 k, v = line.split("=", 1)
                 result[k.strip()] = v.strip().strip("\"'")
     return result
+
+
+def _find_dotenv(start_dir: Path) -> str | None:
+    """Walk upward from start_dir looking for a .env file."""
+    cur = start_dir
+    visited = set()
+    while cur and cur not in visited:
+        visited.add(cur)
+        candidate = cur / ".env"
+        if candidate.exists():
+            return str(candidate)
+        # Stop at filesystem root or a directory that looks like a repo root
+        if cur.parent == cur or (cur / ".git").exists():
+            break
+        cur = cur.parent
+    return None
 
 # ──────────────────────────────────────────────
 #  JDCLOUD3-HMAC-SHA256 signing helpers

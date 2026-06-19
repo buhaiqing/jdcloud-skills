@@ -366,7 +366,7 @@ You DO NOT execute or score — you decide based on the Critic's verdict.
 
 ## GCL Critic — Test & Regression Assessment (MANDATORY)
 
-> **Accuracy over coverage** ([`AGENTS.md` §12](../../AGENTS.md#critic-test--regression-assessment-mandatory)) — applies to **every** Critic template in this file. Canonical block: [`docs/gcl-critic-test-assessment-block.md`](../../docs/gcl-critic-test-assessment-block.md).
+> **Accuracy over coverage** ([`AGENTS.md` §2.1](../../AGENTS.md#21-critic-test--regression-assessment-mandatory)) — applies to **every** Critic template in this file.
 
 On each critique, the Critic MUST also evaluate:
 

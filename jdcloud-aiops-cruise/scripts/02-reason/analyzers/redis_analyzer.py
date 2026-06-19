@@ -8,10 +8,10 @@ Metrics:  memory usage, hit rate, connections, CPU (if available).
 Features: detects high-memory (OOM risk), low hit rate (cache miss / penetration).
 """
 
-import sys, os
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag, tag_dict
@@ -19,7 +19,7 @@ from lib.jdc_client import get_tag, tag_dict
 
 class RedisAnalyzer(BaseAnalyzer):
     service_name = "redis"
-    icon = "🗄️"
+    icon = "[缓存]"
 
     def discover(self, topology: dict) -> list:
         self.topology = topology

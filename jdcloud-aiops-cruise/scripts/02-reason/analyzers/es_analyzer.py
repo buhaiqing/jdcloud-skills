@@ -6,10 +6,10 @@ Elasticsearch analyzer.
 Checks: cluster health, version, node count, disk type, encryption status.
 """
 
-import sys, os
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag
@@ -17,7 +17,7 @@ from lib.jdc_client import get_tag
 
 class EsAnalyzer(BaseAnalyzer):
     service_name = "elasticsearch"
-    icon = "🔎"
+    icon = "[搜索]"
 
     def discover(self, topology: dict) -> list:
         self.topology = topology

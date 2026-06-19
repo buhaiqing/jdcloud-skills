@@ -6,7 +6,7 @@
 
 ## Rubric version
 
-`v1` — see `AGENTS.md` §11.
+`v2` — see `AGENTS.md` §11.
 
 ## Dimensions
 
@@ -50,10 +50,11 @@ This skill does not have a `### Operation:` structure; it has a 5-step
 |---|---|---|
 | `max_iterations` | **5** | `AGENTS.md` §8 default for `jdcloud-alert-intelligence` (optional, read-only) |
 | Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `AGENTS.md` §6 |
-| Rubric version | `v1` | this file |
+| Rubric version | `v2` | this file |
 
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
+| 2.0.0 | 2026-06-18 | Aligned with AGENTS.md GCL v2 (Phase 6 H + Phase 7 Reflexion); updated rubric version to `v2` |
 | 1.0.0 | 2026-06-04 | Initial rubric for `jdcloud-alert-intelligence` GCL rollout (read-only report generator; severity + suppression + traceability guards) |

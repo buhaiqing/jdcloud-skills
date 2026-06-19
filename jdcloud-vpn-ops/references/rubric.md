@@ -1,7 +1,7 @@
 # GCL Rubric — jdcloud-vpn-ops
 
 > This rubric instance applies to the Generator-Critic-Loop (GCL) for
-> `jdcloud-vpn-ops`. See [`AGENTS.md` §Quality Gate](../AGENTS.md)
+> `jdcloud-vpn-ops`. See [`AGENTS.md` §Quality Gate](../../AGENTS.md)
 > for the global GCL specification.
 
 ## Dimensions

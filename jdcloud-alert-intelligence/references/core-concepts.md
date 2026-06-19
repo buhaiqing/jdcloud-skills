@@ -313,7 +313,7 @@ monitor:DescribeMetricData
 ```
 
 > 其他权限（如 `CreateAlarm` / `DeleteAlarms`）**不应**授予本 skill 使用的 IAM 用户/角色。
-> 详细 IAM 策略配置委派 [`jdcloud-iam-ops`](../jdcloud-iam-ops/SKILL.md)。
+> 详细 IAM 策略配置委派 [`jdcloud-iam-ops`](../../jdcloud-iam-ops/SKILL.md)。
 
 ### 6.3 报告输出安全
 

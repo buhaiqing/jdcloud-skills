@@ -67,7 +67,7 @@ mutate any alert rule (that is `jdcloud-cloudmonitor-ops`'s job).
 Do NOT self-score. Do NOT modify the rubric. Just execute and report.
 ```
 
-## 2. Hallucination Detector Prompt (H) — Mandatory
+## 2. Hallucination Detector Prompt (H) — Optional
 
 **Role:** Pre-execution structural validity check. Verify the Generator's generated
 command has valid CLI parameters and correct JSON structure **before** it reaches

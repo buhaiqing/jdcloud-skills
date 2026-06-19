@@ -60,52 +60,52 @@ def discover_customer_resources(client: JdcClient, customer: str,
             vms = client.list_vms(region=region)
             raw["vms"].extend(vms)
         except Exception as e:
-            print(f"  ⚠️  {region} VM discovery failed: {e}")
+            print(f"  [警告]  {region} VM discovery failed: {e}")
         try:
             lbs = client.list_lbs(region=region)
             raw["lbs"].extend(lbs)
         except Exception as e:
-            print(f"  ⚠️  {region} LB discovery failed: {e}")
+            print(f"  [警告]  {region} LB discovery failed: {e}")
         try:
             redis = client.list_redis(region=region)
             raw["redis"].extend(redis)
         except Exception as e:
-            print(f"  ⚠️  {region} Redis discovery failed: {e}")
+            print(f"  [警告]  {region} Redis discovery failed: {e}")
         try:
             mongodb = client.list_mongodb(region=region)
             raw["mongodb"].extend(mongodb)
         except Exception as e:
-            print(f"  ⚠️  {region} MongoDB discovery failed: {e}")
+            print(f"  [警告]  {region} MongoDB discovery failed: {e}")
         try:
             vpcs = client.list_vpcs(region=region)
             raw["vpcs"].extend(vpcs)
         except Exception as e:
-            print(f"  ⚠️  {region} VPC discovery failed: {e}")
+            print(f"  [警告]  {region} VPC discovery failed: {e}")
         try:
             subnets = client.list_subnets(region=region)
             raw["subnets"].extend(subnets)
         except Exception as e:
-            print(f"  ⚠️  {region} Subnet discovery failed: {e}")
+            print(f"  [警告]  {region} Subnet discovery failed: {e}")
         try:
             sgs = client.list_security_groups(region=region)
             raw["security_groups"].extend(sgs)
         except Exception as e:
-            print(f"  ⚠️  {region} Security Group discovery failed: {e}")
+            print(f"  [警告]  {region} Security Group discovery failed: {e}")
         try:
             es = client.list_es(region=region)
             raw["es"].extend(es)
         except Exception as e:
-            print(f"  ⚠️  {region} ES discovery failed: {e}")
+            print(f"  [警告]  {region} ES discovery failed: {e}")
         try:
             eips = client.list_eips(region=region)
             raw["eips"].extend(eips)
         except Exception as e:
-            print(f"  ⚠️  {region} EIP discovery failed: {e}")
+            print(f"  [警告]  {region} EIP discovery failed: {e}")
         try:
             rds = client.list_rds(region=region)
             raw["rds"].extend(rds)
         except Exception as e:
-            print(f"  ⚠️  {region} RDS discovery failed: {e}")
+            print(f"  [警告]  {region} RDS discovery failed: {e}")
 
     # Filter to customer resources
     customer_vms = filter_by_tag(raw["vms"], "客户", customer)

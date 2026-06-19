@@ -156,6 +156,8 @@ jdc --output json lb describe-targets \
 
 ## Log Analysis Queries
 
+> **Note:** These are pseudo-SQL examples for illustration. CLB access logs are delivered to OSS (Object Storage Service). For actual querying, use JD Cloud LogService with LogQL, or parse OSS log files directly.
+
 ### Find Slow Requests
 
 ```sql

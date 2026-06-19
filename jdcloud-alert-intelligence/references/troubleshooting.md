@@ -246,7 +246,7 @@ FAIL: JDC_SECRET_KEY 未设置
 **处理**：
 - 检查 IAM：下游 skill 需要 `clb:Describe*` + `clb:Update*` 权限
 - 当前 IAM 仅有 `monitor:Describe*` 读权限，无法执行变更
-- 详细 IAM 配置委派 [`jdcloud-iam-ops`](../jdcloud-iam-ops/SKILL.md)
+- 详细 IAM 配置委派 [`jdcloud-iam-ops`](../../jdcloud-iam-ops/SKILL.md)
 
 ### 7.2 委派循环
 
@@ -300,7 +300,7 @@ jdc --output json monitor describe-alarm-history \
 
 - **Skill 自身 bug / 文档疑问**：在仓库提 Issue
 - **京东云 API 错误**：京东云工单系统（jdcloud 控制台 → 工单）
-- **IAM / 权限问题**：委派 [`jdcloud-iam-ops`](../jdcloud-iam-ops/SKILL.md)
+- **IAM / 权限问题**：委派 [`jdcloud-iam-ops`](../../jdcloud-iam-ops/SKILL.md)
 - **数据保留期问题**：联系京东云技术支持
 
 > 本 Skill 仅做"告警后处理"，不直接修复底层资源问题。资源问题请委派各 `jdcloud-*-ops`。

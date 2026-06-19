@@ -1,7 +1,7 @@
 # GCL Rubric — jdcloud-jcq-ops
 
 > This rubric is used by the **Critic (C)** in the Generator-Critic-Loop (GCL) for JCQ operations.
-> See [`AGENTS.md` §Quality Gate](../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate) for loop mechanics.
+> See [`AGENTS.md` §Quality Gate](../../AGENTS.md#generator-critic-loop-gcl--adversarial-quality-gate) for loop mechanics.
 
 ## Rubric Version
 

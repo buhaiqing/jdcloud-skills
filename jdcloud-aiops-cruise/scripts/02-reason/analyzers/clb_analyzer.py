@@ -12,12 +12,11 @@ Metrics: active connections, new connections, healthy host count.
 Read-only output: upgrade assessment recommendations only; no CLB mutation.
 """
 
-import sys, os
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 from datetime import datetime, timezone
-
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag, tag_dict
@@ -39,7 +38,7 @@ CLB_SPEC_LIMITS = {
 
 class ClbAnalyzer(BaseAnalyzer):
     service_name = "clb"
-    icon = "⚖️"
+    icon = "[负载均衡]"
 
     def discover(self, topology: dict) -> list:
         self.topology = topology

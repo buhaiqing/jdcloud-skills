@@ -162,7 +162,7 @@ multi_protocol_lb:
       port: 8080
       backendPort: 8080
   
-  targetGroups:
+  targetGroup:
     - name: web-servers
       targets:
         - instanceId: vm-web-01

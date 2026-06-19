@@ -185,7 +185,7 @@ monitor:DescribeMetrics
 monitor:DescribeMetricData
 ```
 
-详细 IAM 策略配置委派 [`jdcloud-iam-ops`](../jdcloud-iam-ops/SKILL.md)。
+详细 IAM 策略配置委派 [`jdcloud-iam-ops`](../../jdcloud-iam-ops/SKILL.md)。
 
 ## 安全审计集成
 

@@ -14,7 +14,7 @@ from typing import Any
 
 class BaseAnalyzer(ABC):
     service_name = "base"
-    icon = "❓"
+    icon = "[待确认]"
 
     def __init__(self):
         self.resources = []

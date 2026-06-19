@@ -4,13 +4,13 @@ jdcloud-aiops-cruise / analyzers / __init__.py
 Analyzer registry. Auto-imports all registered analyzers.
 """
 
-import sys, os
+import sys
+from pathlib import Path
 
 # Ensure scripts/ is in path for all analyzer submodules
 # analyzers/ is at scripts/02-reason/analyzers/, so project root is two levels up
-_scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import path_setup
 
 _A = {}
 
