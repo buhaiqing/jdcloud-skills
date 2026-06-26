@@ -309,13 +309,12 @@ JD Cloud Redis supports IAM for access control:
 
 ```bash
 # Create Redis ACL account
-jdc redis create-account \
+jdc --output json redis create-account \
   --region-id "{{user.region}}" \
   --cache-instance-id "{{user.instance_id}}" \
   --account-name "readonly_user" \
   --account-password "SecurePassword" \
-  --account-privilege "read" \
-  --output json
+  --account-privilege "read"
 ```
 
 ## Cloud Monitor Integration
@@ -352,11 +351,10 @@ Monitoring and alerting for Redis is handled by `jdcloud-cloudmonitor-ops`:
 ### Download Backup
 
 ```bash
-jdc redis describe-download-url \
+jdc --output json redis describe-download-url \
   --region-id "{{user.region}}" \
   --cache-instance-id "{{user.instance_id}}" \
-  --backup-id "{{backup_id}}" \
-  --output json
+  --backup-id "{{backup_id}}"
 ```
 
 Store backup in Object Storage (delegate to `jdcloud-oss-ops` if skill exists):
@@ -476,13 +474,13 @@ Use JD Cloud Redis API in deployment pipelines:
 # Example: Create Redis instance in deployment pipeline
 - name: Create Redis Instance
   run: |
-    jdc redis create-cache-instance \
+    jdc --output json redis create-cache-instance \
       --region-id "${{ env.REGION }}" \
       --cache-instance-name "app-redis-${{ env.ENV }}" \
       --cache-instance-class "${{ env.REDIS_SPEC }}" \
       --vpc-id "${{ env.VPC_ID }}" \
       --subnet-id "${{ env.SUBNET_ID }}" \
-      --output json > redis_info.json
+      > redis_info.json
     
     REDIS_ID=$(jq -r '.result.cacheInstanceId' redis_info.json)
     echo "REDIS_INSTANCE_ID=$REDIS_ID" >> $GITHUB_ENV
@@ -495,10 +493,10 @@ Configure application environment with Redis connection:
 ```yaml
 - name: Configure Redis Connection
   run: |
-    REDIS_HOST=$(jdc redis describe-cache-instance \
+    REDIS_HOST=$(jdc --output json redis describe-cache-instance \
       --region-id "${{ env.REGION }}" \
       --cache-instance-id "${{ env.REDIS_INSTANCE_ID }}" \
-      --output json | jq -r '.result.cacheInstance.connectionDomain')
+      | jq -r '.result.cacheInstance.connectionDomain')
     
     echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
     echo "REDIS_PORT=6379" >> $GITHUB_ENV

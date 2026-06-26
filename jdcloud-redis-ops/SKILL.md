@@ -13,8 +13,8 @@ compatibility: >-
   product is supported by the CLI (jdc-first with SDK fallback).
 metadata:
   author: buhaiqing
-  version: "1.5.0"
-  last_updated: "2026-06-18"
+  version: "1.5.1"
+  last_updated: "2026-06-27"
   runtime: Harness AI Agent
   api_profile: "JD Cloud Redis API v1 - https://redis.jdcloud-api.com/v1"
   cli_applicability: jdc-first-with-fallback
@@ -103,6 +103,8 @@ The CLI's `ProfileManager.__init__()` calls `__make_config_dir()` which does `os
 - Task is IAM / permission model only → delegate to: `jdcloud-iam-ops` (when present)
 - Task is about VPC / subnet / security group → delegate to: `jdcloud-vpc-ops`
 - Task is about monitoring metrics / alarms → delegate to: `jdcloud-cloudmonitor-ops`
+- Task is **SSL/TLS certificate** management for Redis connections → delegate to: `jdcloud-cert-ops` (when present)
+- Task is **DNS** record management for Redis domain names → delegate to: `jdcloud-dns-ops` (when present)
 - User insists on **console-only** flows with no API → state limitation; do not invent undocumented HTTP steps
 
 ### Delegation Rules
@@ -168,6 +170,7 @@ All runbooks follow the **Perceive → Reason → Execute** three-phase model. T
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.1 | 2026-06-27 | **Optimization release**: Fixed `--output json` placement in monitoring.md (6 occurrences) and troubleshooting.md (7 occurrences) — moved to top-level before subcommand. Fixed wrong CLI subcommand names in failure-patterns.md (`describe-instance`→`describe-cache-instance`, `delete-instance`→`delete-cache-instance`). Bumped rubric.md version to v2 to match SKILL.md reference. Added cert-ops and dns-ops cross-skill delegation. Fixed stale CLI version example in cli-usage.md. |
 | 1.5.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, mandatory) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
 | 1.4.0 | 2026-06-10 | **Runbooks added**: Added `runbooks/` directory with 2 runbooks (01-daily-health-check, 02-resource-optimization) covering proactive Redis health monitoring and cost optimization. Runbook index at `runbooks/00-index.md`. |
 | 1.3.0 | 2026-06-04 | **GCL rollout**: Added `## Quality Gate (GCL)` chapter wiring this skill into the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, op-specific overrides including spec-shrink and cross-instance restore) and `references/prompt-templates.md` (G/C/O prompt skeletons). `max_iterations=2`. `safety_confirm_required=true` for delete, restore, spec shrink, flush. |

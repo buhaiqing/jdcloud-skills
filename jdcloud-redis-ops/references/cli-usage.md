@@ -42,7 +42,7 @@ printf "%s" "default" > /tmp/jdc-home/.jdc/current
 
 ```bash
 jdc --version
-# Expected output: version number, e.g., 0.7.2
+# Expected output: version number, e.g., 1.2.12
 
 jdc redis help
 # Expected output: list of redis subcommands

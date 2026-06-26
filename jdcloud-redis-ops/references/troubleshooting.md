@@ -25,10 +25,9 @@ When troubleshooting Redis issues, follow this systematic approach:
 **Step**: Describe the Redis instance to check current state.
 
 ```bash
-jdc redis describe-cache-instance \
+jdc --output json redis describe-cache-instance \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
 ```
 
 **Check**:
@@ -41,10 +40,9 @@ jdc redis describe-cache-instance \
 **Step**: Query instance configuration parameters.
 
 ```bash
-jdc redis describe-instance-config \
+jdc --output json redis describe-instance-config \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
 ```
 
 **Check**:
@@ -68,12 +66,11 @@ jdc redis describe-instance-config \
 **Step**: Query slow operation logs.
 
 ```bash
-jdc redis describe-slow-log \
+jdc --output json redis describe-slow-log \
   --region-id "{{user.region}}" \
   --cache-instance-id "{{user.instance_id}}" \
   --start-time "2026-05-01T00:00:00Z" \
-  --end-time "2026-05-03T00:00:00Z" \
-  --output json
+  --end-time "2026-05-03T00:00:00Z"
 ```
 
 **Check**:
@@ -86,10 +83,9 @@ jdc redis describe-slow-log \
 **Step**: Verify VPC/subnet configuration and IP whitelist.
 
 ```bash
-jdc redis describe-ip-white-list \
+jdc --output json redis describe-ip-white-list \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
 ```
 
 **Check**:
@@ -102,10 +98,9 @@ jdc redis describe-ip-white-list \
 **Step**: Check active client connections.
 
 ```bash
-jdc redis describe-client-list \
+jdc --output json redis describe-client-list \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
 ```
 
 **Check**:
@@ -145,10 +140,9 @@ jdc redis describe-client-list \
 **Resolution**:
 1. Run big key analysis:
    ```bash
-   jdc redis create-big-key-analysis \
-     --region-id "{{user.region}}" \
-     --cache-instance-id "{{user.instance_id}}" \
-     --output json
+jdc --output json redis create-big-key-analysis \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}"
    ```
 2. Check memory eviction policy
 3. Scale up instance if needed (modifyCacheInstanceClass)
@@ -197,10 +191,9 @@ jdc redis describe-client-list \
 **Resolution**:
 1. Run cache analysis for hot keys:
    ```bash
-   jdc redis create-cache-analysis \
-     --region-id "{{user.region}}" \
-     --cache-instance-id "{{user.instance_id}}" \
-     --output json
+jdc --output json redis create-cache-analysis \
+  --region-id "{{user.region}}" \
+  --cache-instance-id "{{user.instance_id}}"
    ```
 2. Identify hot keys from analysis results
 3. Redistribute keys using hash tags

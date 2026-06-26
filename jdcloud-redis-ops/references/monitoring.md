@@ -249,14 +249,13 @@ Use Cloud Monitor API (delegate to `jdcloud-cloudmonitor-ops`):
 ### Query Slow Log via Redis API
 
 ```bash
-jdc redis describe-slow-log \
+jdc --output json redis describe-slow-log \
   --region-id "{{user.region}}" \
   --cache-instance-id "{{user.instance_id}}" \
   --start-time "2026-05-01T00:00:00Z" \
   --end-time "2026-05-03T00:00:00Z" \
   --page-number 1 \
-  --page-size 100 \
-  --output json
+  --page-size 100
 ```
 
 **Interpret Slow Log**:
@@ -278,35 +277,31 @@ jdc redis describe-slow-log \
 ### Hot Key Analysis
 
 ```bash
-jdc redis create-cache-analysis \
+jdc --output json redis create-cache-analysis \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
 ```
 
 Query results:
 ```bash
-jdc redis describe-cache-analysis-result \
+jdc --output json redis describe-cache-analysis-result \
   --region-id "{{user.region}}" \
-  --analysis-id "{{analysis_id}}" \
-  --output json
+  --analysis-id "{{analysis_id}}"
 ```
 
 ### Big Key Analysis
 
 ```bash
-jdc redis create-big-key-analysis \
+jdc --output json redis create-big-key-analysis \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
 ```
 
 Query results:
 ```bash
-jdc redis describe-big-key-detail \
+jdc --output json redis describe-big-key-detail \
   --region-id "{{user.region}}" \
-  --analysis-id "{{analysis_id}}" \
-  --output json
+  --analysis-id "{{analysis_id}}"
 ```
 
 ## Node Health Monitoring
@@ -314,10 +309,9 @@ jdc redis describe-big-key-detail \
 ### Query Cluster Info
 
 ```bash
-jdc redis describe-cluster-info \
+jdc --output json redis describe-cluster-info \
   --region-id "{{user.region}}" \
-  --cache-instance-id "{{user.instance_id}}" \
-  --output json
+  --cache-instance-id "{{user.instance_id}}"
 ```
 
 **Check**:

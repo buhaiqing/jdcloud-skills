@@ -9,7 +9,7 @@
 ### Pattern: InvalidResourceId
 - **Category**: cli_parameter
 - **Skill**: jdcloud-redis-ops
-- **Command**: `jdc redis describe-instance --instance-id <invalid>`
+- **Command**: `jdc redis describe-cache-instance --cache-instance-id <invalid>`
 - **Error**: `InvalidParameter: InvalidResourceId`
 - **Fix**: Resource ID must be in valid format (redis-xxxxxxxx)
 - **Count**: 1
@@ -18,7 +18,7 @@
 ### Pattern: MissingRegionId
 - **Category**: cli_parameter
 - **Skill**: jdcloud-redis-ops
-- **Command**: `jdc redis describe-instances` (missing --region-id)
+- **Command**: `jdc redis describe-cache-instances` (missing --region-id)
 - **Error**: `MissingParameter: regionId is required`
 - **Fix**: Always include --region-id in every command
 - **Count**: 1
@@ -27,7 +27,7 @@
 ### Pattern: WrongOutputJsonPosition
 - **Category**: cli_parameter
 - **Skill**: jdcloud-redis-ops
-- **Command**: `jdc redis describe-instances --output json` (wrong position)
+- **Command**: `jdc redis describe-cache-instances --output json` (wrong position)
 - **Error**: `unrecognized arguments: --output json`
 - **Fix**: `--output json` MUST be placed BEFORE the subcommand
 - **Count**: 1
@@ -38,7 +38,7 @@
 ### Pattern: DeleteResourceInUse
 - **Category**: skill_generation
 - **Skill**: jdcloud-redis-ops
-- **Command**: `jdc redis delete-instance --instance-id <id>` (when instance is in use)
+- **Command**: `jdc redis delete-cache-instance --cache-instance-id <id>` (when instance is in use)
 - **Error**: `ResourceInUse`
 - **Fix**: Stop/detach dependent resources first before deleting
 - **Count**: 1
@@ -47,7 +47,7 @@
 ### Pattern: QuotaExceeded
 - **Category**: skill_generation
 - **Skill**: jdcloud-redis-ops
-- **Command**: `jdc redis create-instance`
+- **Command**: `jdc redis create-cache-instance`
 - **Error**: `QuotaExceeded: resource quota exceeded`
 - **Fix**: Request quota increase or release unused resources first
 - **Count**: 1
@@ -107,7 +107,7 @@
 ### Pattern: LargeListResult
 - **Category**: token_efficiency
 - **Skill**: jdcloud-redis-ops
-- **Command**: `jdc redis describe-instances --page-size 100`
+- **Command**: `jdc redis describe-cache-instances --page-size 100`
 - **Warning**: Response too large, consumes excessive tokens
 - **Fix**: Use smaller --page-size or add filters to narrow results
 - **Count**: 1

@@ -6,7 +6,7 @@
 
 ## Rubric version
 
-`v1` — see `AGENTS.md` §11.
+`v2` — see `AGENTS.md` §11.
 
 ## Dimensions
 
@@ -47,10 +47,11 @@
 |---|---|---|
 | `max_iterations` | **2** | `AGENTS.md` §8 default for `jdcloud-redis-ops` |
 | Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `AGENTS.md` §6 |
-| Rubric version | `v1` | this file |
+| Rubric version | `v2` | this file |
 
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial rubric for `jdcloud-redis-ops` GCL rollout |
+| 2.0.0 | 2026-06-27 | Bump to v2: align with SKILL.md rubric_version reference; add cross-skill delegation for cert-ops, dns-ops; fix --output json placement in monitoring.md and troubleshooting.md; fix CLI subcommand names in failure-patterns.md |
