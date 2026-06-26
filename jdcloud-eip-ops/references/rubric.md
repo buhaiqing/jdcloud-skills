@@ -6,7 +6,7 @@
 
 ## Rubric version
 
-`v1` — see `AGENTS.md` §11.
+`v2` — see `AGENTS.md` §11.
 
 ## Dimensions
 
@@ -48,10 +48,33 @@
 |---|---|---|
 | `max_iterations` | **2** | `AGENTS.md` §8 default for `jdcloud-eip-ops` |
 | Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `AGENTS.md` §6 |
-| Rubric version | `v1` | this file |
+| Rubric version | `v2` | this file |
+
+## §2.1 Critic Test & Regression Assessment
+
+Per `AGENTS.md` §2.1, the Critic MUST evaluate two acceptance dimensions on every critique iteration:
+
+| Assessment | What to check | On failure |
+|---|---|---|
+| **Test accuracy** | Does existing tests correctly exercise and assert behaviors touched by this change? Would these tests fail if this change introduced a bug? | `blocking=true`; concrete test fixes/additions in `suggestions`; RETRY |
+| **Regression gate** | Is targeted regression required? Pick the **smallest accurate suite** for the change and adjacent risk — not blanket coverage | If required: name suite(s) and rationale; require green runs in trace/summary. If waived: document zero-behavioral-delta rationale |
+
+**Banned**: padding test count, chasing coverage %, PASSing on green suites that do not assert the changed behavior.
+
+### Per-operation regression guidance
+
+| Operation | Test accuracy check | Regression gate default |
+|---|---|---|
+| `release EIP` | Safety confirm echoed in trace; EIP must be free or confirm given | **Required**: describe-EIP must show `instanceId == null` or confirm flag in trace |
+| `dissociate EIP` | Safety confirm echoed in trace; EIP removed from instance post_state | **Required**: describe-EIP must show `instanceId == null` after dissociate |
+| `associate EIP` | NAT/VM ID present in post_state; force-rebind confirm if pre-existing binding | **Required**: describe-EIP showing updated `instanceId` |
+| `allocate EIP` | EIP ID present in post_state; state == `available` | **Required**: describe-EIP after allocate |
+| `modify EIP` | Bandwidth/name reflected in post_state | **Required**: describe-EIP after modify |
+| `describe EIP` / `list EIPs` | Read-only: no mutation, no side-effects | **Waived**: zero-behavioral-delta |
 
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
+| 2.0.0 | 2026-06-27 | Aligned with prompt-templates.md v1.1.0: added §2.1 test_assessment dimensions, rubric version bumped to v2 |
 | 1.0.0 | 2026-06-04 | Initial rubric for `jdcloud-eip-ops` GCL rollout (covers allocate, associate, dissociate, release) |

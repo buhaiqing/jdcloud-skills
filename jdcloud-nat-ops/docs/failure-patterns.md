@@ -9,7 +9,7 @@
 ### Pattern: InvalidResourceId
 - **Category**: cli_parameter
 - **Skill**: jdcloud-nat-ops
-- **Command**: `jdc nat describe-gateway --nat-gateway-id <invalid>`
+- **Command**: `jdc vpc describe-nat-gateway --nat-gateway-id <invalid>`
 - **Error**: `InvalidParameter: InvalidResourceId`
 - **Fix**: Resource ID must be in valid format (nat-xxxxxxxx)
 - **Count**: 1
@@ -18,7 +18,7 @@
 ### Pattern: MissingRegionId
 - **Category**: cli_parameter
 - **Skill**: jdcloud-nat-ops
-- **Command**: `jdc nat describe-gateways` (missing --region-id)
+- **Command**: `jdc vpc describe-nat-gateways` (missing --region-id)
 - **Error**: `MissingParameter: regionId is required`
 - **Fix**: Always include --region-id in every command
 - **Count**: 1
@@ -27,9 +27,9 @@
 ### Pattern: WrongOutputJsonPosition
 - **Category**: cli_parameter
 - **Skill**: jdcloud-nat-ops
-- **Command**: `jdc nat describe-gateways --output json` (wrong position)
+- **Command**: `jdc vpc describe-nat-gateways --output json` (wrong position — must be before `vpc`)
 - **Error**: `unrecognized arguments: --output json`
-- **Fix**: `--output json` MUST be placed BEFORE the subcommand
+- **Fix**: `--output json` MUST be placed BEFORE the subcommand: `jdc --output json vpc describe-nat-gateways`
 - **Count**: 1
 - **Reusable**: true
 
@@ -38,7 +38,7 @@
 ### Pattern: DeleteResourceInUse
 - **Category**: skill_generation
 - **Skill**: jdcloud-nat-ops
-- **Command**: `jdc nat delete-gateway --nat-gateway-id <id>` (when gateway has SNAT/DNAT rules)
+- **Command**: `jdc vpc delete-nat-gateway --nat-gateway-id <id>` (when gateway has SNAT/DNAT rules)
 - **Error**: `ResourceInUse`
 - **Fix**: Stop/detach dependent resources first before deleting (remove SNAT/DNAT rules first)
 - **Count**: 1
@@ -47,7 +47,7 @@
 ### Pattern: QuotaExceeded
 - **Category**: skill_generation
 - **Skill**: jdcloud-nat-ops
-- **Command**: `jdc nat create-gateway`
+- **Command**: `jdc vpc create-nat-gateway`
 - **Error**: `QuotaExceeded: resource quota exceeded`
 - **Fix**: Request quota increase or release unused resources first
 - **Count**: 1
@@ -107,7 +107,7 @@
 ### Pattern: LargeListResult
 - **Category**: token_efficiency
 - **Skill**: jdcloud-nat-ops
-- **Command**: `jdc nat describe-gateways --page-size 100`
+- **Command**: `jdc vpc describe-nat-gateways --page-size 100`
 - **Warning**: Response too large, consumes excessive tokens
 - **Fix**: Use smaller --page-size or add filters to narrow results
 - **Count**: 1
@@ -133,4 +133,5 @@ When a GCL iteration fails, extract failure pattern using this format:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.1.0 | 2026-06-27 | Fixed all CLI paths: `jdc nat` → `jdc vpc` (NAT Gateway is under the `vpc` product group in jdc) |
 | 1.0.0 | 2026-06-19 | Initial failure patterns for `jdcloud-nat-ops` |

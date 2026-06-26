@@ -19,6 +19,8 @@ metadata:
   cli_applicability: jdc-first-with-fallback
   cli_version_locked: "1.2.12"
   sdk_version_locked: ">=1.6.26"
+  gcl_classification: required
+  gcl_max_iter: 2
   cli_support_evidence: >-
     Confirmed via `jdc` help output showing 'eip' in product list.
     Official CLI documentation: https://docs.jdcloud.com/cn/cli/introduction

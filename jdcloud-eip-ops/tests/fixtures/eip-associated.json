@@ -1,0 +1,12 @@
+{
+  "allocationId": "eip-test-002",
+  "eipAddress": "115.115.115.115",
+  "bandwidthMbps": 10,
+  "isp": "bgp",
+  "lineType": "bgp",
+  "status": "available",
+  "instanceType": "nat",
+  "instanceId": "nat-test-001",
+  "chargeMode": "bandwidth",
+  "description": "eip associated with NAT"
+}

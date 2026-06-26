@@ -1,0 +1,12 @@
+{
+  "allocationId": "eip-test-001",
+  "eipAddress": "114.114.114.114",
+  "bandwidthMbps": 10,
+  "isp": "bgp",
+  "lineType": "bgp",
+  "status": "available",
+  "instanceType": null,
+  "instanceId": null,
+  "chargeMode": "bandwidth",
+  "description": "test eip"
+}

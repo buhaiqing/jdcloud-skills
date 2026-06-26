@@ -67,7 +67,7 @@
 {
   "skill": "jdcloud-vpc-ops",
   "request": "<sanitized user request>",
-  "rubric_version": "1.0.0",
+  "rubric_version": "1.1.0",
   "iterations": [
     {
       "iter": 1,
