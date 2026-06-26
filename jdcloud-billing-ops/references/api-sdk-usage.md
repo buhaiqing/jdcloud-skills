@@ -116,7 +116,7 @@ params = QueryBillDetailParameters(
     startTime="2026-05-01 00:00:00",
     endTime="2026-05-31 23:59:59",
 )
-params.setBillingType(3)  # 1=按配置 2=按用量 3=包年包月 4=按次
+params.setBillingType(3)  # 1=pay-as-you-go 2=pay-by-usage 3=monthly/yearly 4=per-execution
 params.setPageIndex(1)
 params.setPageSize(100)
 
@@ -130,7 +130,7 @@ resp = billing_client.send(req)
 | `regionId` | Yes | string | Region ID |
 | `startTime` | Yes | string | Start time |
 | `endTime` | Yes | string | End time |
-| `billingType` | No | int | 1=按配置 2=按用量 3=包年包月 4=按次 |
+| `billingType` | No | int | 1=pay-as-you-go 2=pay-by-usage 3=monthly/yearly 4=per-execution |
 | `appCode` | No | string | Product line code |
 | `serviceCode` | No | string | Product code |
 | `pageIndex` | No | int | Page number |
@@ -177,14 +177,14 @@ from jdcloud_sdk.services.billing.apis.CalculateTotalPriceRequest import (
 
 params = CalculateTotalPriceParameters(
     regionId="cn-north-1",
-    cmd=1,        # 1=创建 2=续费 3=升配 4=删除
+    cmd=1,        # 1=create 2=renew 3=upgrade 4=delete
     packageCount=1,
 )
 params.setOrderList([{
     "appCode": "jcloud",
     "serviceCode": "vm",
     "region": "cn-north-1",
-    "billingType": 3,       # 包年包月
+    "billingType": 3,       # monthly/yearly
     "timeSpan": 1,
     "timeUnit": "month",
     "spec": "c.n1.large",

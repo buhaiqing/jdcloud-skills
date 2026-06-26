@@ -1,118 +1,50 @@
 # Core Concepts — JD Cloud Load Balancer (CLB)
 
-## Architecture Overview
+> **ponytail: trimmed to essentials. Full details in SKILL.md execution flows.**
 
-JD Cloud Load Balancer (CLB) distributes incoming application traffic across multiple backend servers to improve application availability and scalability.
-
-### Key Components
+## Key Components
 
 | Component | Description |
 |-----------|-------------|
-| **Load Balancer (LB)** | The entry point for traffic distribution. Provides a virtual IP (VIP) and DNS name. |
-| **Listener** | Defines the protocol and port for incoming traffic. Supports TCP, UDP, HTTP, HTTPS. |
-| **Target Group** | A collection of backend servers that receive traffic from the load balancer. |
-| **Backend Server (Target)** | VM instances or containers that process the distributed traffic. |
-| **Health Check** | Monitors the health of backend servers and removes unhealthy instances from rotation. |
+| **Load Balancer (LB)** | Entry point providing VIP and DNS name |
+| **Listener** | Defines protocol (TCP/UDP/HTTP/HTTPS) and port |
+| **Target Group** | Collection of backend servers receiving traffic |
+| **Backend Server** | VM instances processing traffic |
+| **Health Check** | Monitors backend health, removes unhealthy instances |
 
-## Load Balancer Types
-
-### By Network Type
-
-| Type | Description | Use Case |
-|------|-------------|----------|
-| **Internal LB** | Deployed within a VPC, only accessible from internal networks | Internal microservices, backend APIs |
-| **External LB** | Exposed to the internet with public IP | Public-facing web applications |
-
-### By Specification
-
-| Specification | Capacity | Use Case |
-|-------------|----------|----------|
-| **Small** | Low throughput, suitable for dev/test | Development, testing environments |
-| **Medium** | Moderate throughput | Small to medium production workloads |
-| **Large** | High throughput | Large-scale production applications |
-
-## Protocol Support
-
-### Layer 4 (Transport Layer)
-
-| Protocol | Description | Health Check |
-|----------|-------------|--------------|
-| **TCP** | Raw TCP traffic forwarding | TCP connect check |
-| **UDP** | UDP packet forwarding | UDP echo check |
-
-### Layer 7 (Application Layer)
-
-| Protocol | Description | Features |
-|----------|-------------|----------|
-| **HTTP** | HTTP/1.1 traffic | URL-based routing, session persistence |
-| **HTTPS** | TLS-terminated HTTP | SSL offloading, certificate management |
-
-## Key Features
-
-### Health Checks
-
-- **Protocol**: TCP, HTTP, or custom protocol
-- **Interval**: 5-300 seconds (default: 5s)
-- **Timeout**: 2-60 seconds
-- **Healthy Threshold**: 2-10 consecutive successes (default: 2)
-- **Unhealthy Threshold**: 2-10 consecutive failures (default: 3)
-
-### Session Persistence
+## Types
 
 | Type | Description |
 |------|-------------|
-| **Source IP** | Routes requests from same client IP to same backend |
-| **Cookie** | Uses HTTP cookie for session stickiness (HTTP/HTTPS only) |
+| Internal LB | VPC-internal only |
+| External LB | Public-facing with internet IP |
+| Specs | Small / Medium / Large (throughput tiers) |
 
-### Load Balancing Algorithms
+## Protocol Support
 
-| Algorithm | Description |
-|-----------|-------------|
-| **Round Robin** | Distributes traffic sequentially to each backend |
-| **Least Connections** | Routes to backend with fewest active connections |
-| **Source IP Hash** | Uses client IP hash for consistent routing |
+| Layer | Protocols | Features |
+|-------|-----------|----------|
+| L4 | TCP, UDP | Raw forwarding, simple health checks |
+| L7 | HTTP, HTTPS | URL routing, session persistence, SSL offload |
 
-## Limits and Quotas
+## Key Features
 
-| Resource | Default Limit | Adjustable |
-|----------|---------------|------------|
-| Load Balancers per Region | 10 | Yes |
-| Listeners per LB | 10 | Yes |
-| Backend Servers per LB | 50 | Yes |
-| Target Groups per LB | 5 | Yes |
+- **Health Checks**: Interval 5-300s, timeout 2-60s, configurable thresholds
+- **Session Persistence**: Source IP or Cookie (HTTP/HTTPS)
+- **Algorithms**: Round Robin, Least Connections, Source IP Hash
 
-## Regions and Availability Zones
+## Default Limits
 
-CLB is available in the following regions:
-
-| Region ID | Region Name |
-|-----------|-------------|
-| cn-north-1 | 华北-北京 |
-| cn-east-1 | 华东-宿迁 |
-| cn-south-1 | 华南-广州 |
-| cn-east-2 | 华东-上海 |
+| Resource | Limit |
+|----------|-------|
+| LBs per region | 10 |
+| Listeners per LB | 10 |
+| Backend servers per LB | 50 |
+| Target groups per LB | 5 |
 
 ## Security Considerations
 
-1. **Security Groups**: Control inbound/outbound traffic to the load balancer
-2. **Network ACLs**: Additional layer of subnet-level security
-3. **SSL/TLS**: Use HTTPS listeners with valid certificates for encrypted traffic
-4. **Access Logging**: Enable access logs for audit and analysis
-
-## Integration with Other Services
-
-| Service | Integration |
-|---------|-------------|
-| **VPC** | CLB must be deployed in a VPC and subnet |
-| **VM** | Backend servers are typically VM instances |
-| **CloudMonitor** | Metrics and alarms for CLB performance |
-| **SSL Certificate** | HTTPS listeners require SSL certificates |
-
-## Pricing Model
-
-CLB charges based on:
-- **Instance Fee**: Hourly rate per load balancer
-- **Data Processing**: Per GB of data processed
-- **Bandwidth**: Peak bandwidth usage (for external LBs)
-
-For detailed pricing, refer to JD Cloud official documentation.
+1. Security groups control traffic to/from LB
+2. HTTPS listeners need valid SSL certificates
+3. Enable access logs for audit
+4. Follow least-privilege for VPC/subnet placement

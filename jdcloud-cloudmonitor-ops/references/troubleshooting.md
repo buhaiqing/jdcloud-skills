@@ -1,102 +1,102 @@
-# 云监控故障排查指南
+# Cloud Monitor Troubleshooting Guide
 
-## 常见错误代码
+## Common Error Codes
 
-| 错误代码 | 描述 | 解决方案 |
-|----------|------|----------|
-| `InvalidParameter` | 参数无效或缺失 | 检查请求参数是否符合 API 要求 |
-| `InvalidParameterValue` | 参数值无效 | 检查参数值格式和取值范围 |
-| `MissingParameter` | 缺少必填参数 | 补充缺失的必填参数 |
-| `ResourceNotFound` | 资源不存在 | 检查资源 ID 是否正确 |
-| `MetricNotFound` | 监控项不存在 | 确认监控项名称是否正确 |
-| `AlarmNotFound` | 告警规则不存在 | 检查告警规则 ID 是否正确 |
-| `ServiceNotFound` | 服务不存在 | 确认服务代码是否正确 |
-| `QuotaExceeded` | 超出配额限制 | 检查是否达到资源配额上限 |
-| `RateLimitExceeded` | 请求频率超限 | 降低请求频率或申请提高限流 |
-| `InternalError` | 内部错误 | 稍后重试或联系技术支持 |
-| `Unauthorized` | 未授权 | 检查访问密钥和权限配置 |
-| `RegionNotFound` | 区域不存在 | 确认区域 ID 是否正确 |
+| Error Code | Description | Solution |
+|-----------|-------------|----------|
+| `InvalidParameter` | Invalid or missing parameters | Check request parameters against API requirements |
+| `InvalidParameterValue` | Invalid parameter value | Check parameter value format and allowed range |
+| `MissingParameter` | Missing required parameter | Provide the missing required parameter |
+| `ResourceNotFound` | Resource not found | Verify the resource ID is correct |
+| `MetricNotFound` | Metric not found | Confirm the metric name is correct |
+| `AlarmNotFound` | Alarm rule not found | Check the alarm rule ID is correct |
+| `ServiceNotFound` | Service not found | Confirm the service code is correct |
+| `QuotaExceeded` | Quota limit exceeded | Check if resource quota limit has been reached |
+| `RateLimitExceeded` | Request rate limit exceeded | Reduce request frequency or request a rate limit increase |
+| `InternalError` | Internal error | Retry later or contact technical support |
+| `Unauthorized` | Unauthorized | Check access key and permission configuration |
+| `RegionNotFound` | Region not found | Confirm the region ID is correct |
 
-## 监控数据查询问题
+## Monitoring Data Query Issues
 
-### 问题1：查询不到监控数据
+### Issue 1: No monitoring data returned
 
-**现象**：调用 `describe-metric-data` 返回空数据。
+**Symptom**: Calling `describe-metric-data` returns empty data.
 
-**可能原因及解决方案**：
+**Possible causes and solutions**:
 
-1. **资源未产生数据**
-   - 新创建的资源可能还没有监控数据
-   - 等待 5-10 分钟后重试
+1. **Resource has not generated data yet**
+   - Newly created resources may not have monitoring data yet
+   - Wait 5-10 minutes and retry
 
-2. **时间范围不正确**
-   - 检查 `start-time` 和 `end-time` 格式是否正确（ISO8601）
-   - 确保查询的时间范围在数据保留期内（默认 15 天）
+2. **Incorrect time range**
+   - Check `start-time` and `end-time` format (ISO8601)
+   - Ensure the query time range is within the data retention period (default 15 days)
    ```bash
-   # 正确的时间格式
+   # Correct time format
    --start-time "2024-01-01T00:00:00Z"
    --end-time "2024-01-01T23:59:59Z"
    ```
 
-3. **资源 ID 错误**
-   - 确认 `resource-id` 参数值正确
-   - 使用 `jdc vm describe-instances` 确认资源存在
+3. **Incorrect resource ID**
+   - Confirm the `resource-id` parameter value is correct
+   - Use `jdc vm describe-instances` to verify the resource exists
 
-4. **监控项名称错误**
-   - 使用 `describe-metrics` 查询可用的监控项列表
-   - 注意监控项名称区分大小写
+4. **Incorrect metric name**
+   - Use `describe-metrics` to query the available metric list
+   - Note that metric names are case-sensitive
 
-### 问题2：监控数据延迟
+### Issue 2: Monitoring data delay
 
-**现象**：查询到的数据比当前时间延迟几分钟。
+**Symptom**: Queried data is several minutes behind the current time.
 
-**解决方案**：
-- 云监控数据采集和处理需要时间，通常有 3-5 分钟延迟
-- 对于实时性要求高的场景，可使用 `last-downsample` 接口查询最新数据
-- 如需更低延迟，考虑使用应用性能监控(SGM)或自定义监控
+**Solutions**:
+- Cloud monitoring data collection and processing takes time, typically a 3-5 minute delay
+- For real-time scenarios, use the `last-downsample` API to query the latest data
+- For lower latency, consider using Application Performance Monitoring (SGM) or custom monitoring
 
-### 问题3：监控数据不连续
+### Issue 3: Discontinuous monitoring data
 
-**现象**：监控数据曲线有断点或缺失。
+**Symptom**: Monitoring data curve has gaps or missing points.
 
-**可能原因及解决方案**：
+**Possible causes and solutions**:
 
-1. **资源状态变化**
-   - 资源关机、重启期间不会产生监控数据
-   - 检查资源运行状态
+1. **Resource state changes**
+   - Resources do not generate monitoring data during shutdown or restart
+   - Check resource running status
 
-2. **网络问题**
-   - 资源网络不通可能导致数据采集失败
-   - 检查资源网络连接
+2. **Network issues**
+   - Unreachable resources may cause data collection failure
+   - Check resource network connectivity
 
-3. **采集异常**
-   - 联系京东云技术支持检查采集服务状态
+3. **Collection anomalies**
+   - Contact JD Cloud technical support to check collection service status
 
-## 告警规则问题
+## Alarm Rule Issues
 
-### 问题1：告警规则未触发
+### Issue 1: Alarm rule not triggered
 
-**现象**：监控指标已超过阈值，但告警未触发。
+**Symptom**: Monitoring metrics have exceeded the threshold, but the alarm has not triggered.
 
-**排查步骤**：
+**Troubleshooting steps**:
 
-1. **检查告警规则状态**
+1. **Check alarm rule status**
    ```bash
    jdc monitor describe-alarm --region-id cn-north-1 --alarm-id alarm-xxx
    ```
-   - 确认规则状态为 `enabled`
-   - 检查 `status` 字段是否为 `ALARM`
+   - Confirm the rule status is `enabled`
+   - Check if the `status` field is `ALARM`
 
-2. **检查阈值和比较运算符**
-   - 确认阈值设置正确
-   - 检查比较运算符方向（gt/lt/ge/le）
-   - 注意数值类型（整数 vs 浮点数）
+2. **Check threshold and comparison operator**
+   - Confirm the threshold value is correct
+   - Check the comparison operator direction (gt/lt/ge/le)
+   - Note the numeric type (integer vs float)
 
-3. **检查连续周期数**
-   - `evaluation-periods` 表示连续多少个周期满足条件才触发
-   - 如需立即触发，设置为 1
+3. **Check evaluation periods**
+   - `evaluation-periods` specifies how many consecutive periods must be met before triggering
+   - Set to 1 for immediate triggering
 
-4. **检查监控数据**
+4. **Check monitoring data**
    ```bash
    jdc monitor describe-metric-data \
      --region-id cn-north-1 \
@@ -107,117 +107,117 @@
      --end-time "2024-01-01T23:59:59Z"
    ```
 
-### 问题2：告警通知未收到
+### Issue 2: Alarm notification not received
 
-**现象**：告警已触发，但未收到通知。
+**Symptom**: Alarm has been triggered, but no notification was received.
 
-**排查步骤**：
+**Troubleshooting steps**:
 
-1. **检查通知类型配置**
-   - 确认 `notice-type` 包含需要的通知方式
-   - 支持的类型：`sms`、`email`、`callback`
+1. **Check notification type configuration**
+   - Confirm `notice-type` includes the required notification methods
+   - Supported types: `sms`, `email`, `callback`
 
-2. **检查联系人配置**
-   - 确认 `contact-group-id` 正确
-   - 检查联系人信息是否完整（手机号、邮箱）
+2. **Check contact configuration**
+   - Confirm `contact-group-id` is correct
+   - Verify contact information is complete (phone number, email)
    ```bash
    jdc monitor describe-alarm-contacts --region-id cn-north-1
    ```
 
-3. **检查通知时段**
-   - 确认告警触发时间在通知时段内
-   - 检查 `notice-time` 配置
+3. **Check notification time window**
+   - Confirm the alarm time falls within the notification window
+   - Check the `notice-time` configuration
 
-4. **检查通知周期**
-   - `notice-period` 控制重复通知间隔
-   - 如设置为 0，告警持续期间不会重复通知
+4. **Check notification period**
+   - `notice-period` controls the repeat notification interval
+   - If set to 0, no repeat notifications will be sent during the alarm duration
 
-5. **检查短信/邮件配额**
-   - 确认账户短信/邮件配额未用完
+5. **Check SMS/email quota**
+   - Confirm the account SMS/email quota has not been exhausted
 
-### 问题3：告警频繁触发
+### Issue 3: Alarm fires too frequently
 
-**现象**：告警频繁在 ALARM 和 OK 状态间切换（告警震荡）。
+**Symptom**: Alarm frequently toggles between ALARM and OK states (alarm flapping).
 
-**解决方案**：
+**Solutions**:
 
-1. **调整阈值**
-   - 适当提高或降低阈值，避免临界值波动
-   - 建议设置合理的缓冲区
+1. **Adjust threshold**
+   - Raise or lower the threshold appropriately to avoid marginal value fluctuations
+   - It is recommended to set a reasonable buffer
 
-2. **增加连续周期数**
-   - 将 `evaluation-periods` 从 1 增加到 2 或 3
-   - 避免瞬时波动触发告警
+2. **Increase evaluation periods**
+   - Increase `evaluation-periods` from 1 to 2 or 3
+   - Avoid transient fluctuations triggering alarms
 
-3. **使用数据聚合**
-   - 增大 `period` 值，使用更长时间窗口的数据
-   - 平滑瞬时波动
+3. **Use data aggregation**
+   - Increase the `period` value to use data over a longer time window
+   - Smooth out transient fluctuations
 
-4. **设置告警抑制**
-   - 配置 `notice-period` 控制重复通知频率
-   - 避免告警风暴
+4. **Configure alarm suppression**
+   - Set `notice-period` to control repeat notification frequency
+   - Avoid alarm storms
 
-## CLI 使用问题
+## CLI Usage Issues
 
-### 问题1：认证失败
+### Issue 1: Authentication failure
 
-**现象**：返回 `Unauthorized` 或 `InvalidAccessKey` 错误。
+**Symptom**: Returns `Unauthorized` or `InvalidAccessKey` error.
 
-**解决方案**：
+**Solutions**:
 
-1. **检查环境变量（不要打印实际值，避免泄露）**
+1. **Check environment variables (NEVER print actual values to prevent leaks)**
    ```bash
    # SECURITY: NEVER print the actual secret key value
    if [ -n "$JDC_ACCESS_KEY" ] && [ -n "$JDC_SECRET_KEY" ]; then
-       echo "环境变量已设置 (JDC_SECRET_KEY=<masked>)"
+       echo "Environment variables set (JDC_SECRET_KEY=<masked>)"
    else
-       echo "错误：JDC_ACCESS_KEY 或 JDC_SECRET_KEY 未设置"
+       echo "Error: JDC_ACCESS_KEY or JDC_SECRET_KEY not set"
    fi
    ```
 
-2. **重新配置凭证**
+2. **Reconfigure credentials**
    ```bash
    jdc config init
    ```
 
-3. **检查密钥权限**
-   - 确认 Access Key 有调用云监控 API 的权限
-   - 检查密钥是否被禁用或删除
+3. **Check key permissions**
+   - Confirm the Access Key has permission to call the Cloud Monitor API
+   - Check whether the key has been disabled or deleted
 
-4. **检查系统时间**
-   - 确保系统时间与标准时间同步
-   - 时间偏差会导致签名验证失败
+4. **Check system time**
+   - Ensure system time is synchronized with standard time
+   - Time deviation can cause signature verification failure
 
-### 问题2：命令找不到
+### Issue 2: Command not found
 
-**现象**：执行 `jdc monitor` 提示命令不存在。
+**Symptom**: Running `jdc monitor` reports command not found.
 
-**解决方案**：
+**Solutions**:
 
-1. **检查 CLI 版本**
+1. **Check CLI version**
    ```bash
    jdc --version
    ```
-   - 云监控功能需要 CLI 1.x 以上版本
+   - Cloud Monitor functionality requires CLI 1.x or above
 
-2. **更新 CLI**
+2. **Update CLI**
    ```bash
    pip install --upgrade jdcloud-cli
    ```
 
-3. **检查安装路径**
+3. **Check installation path**
    ```bash
    which jdc
    ```
-   - 确保安装路径在 PATH 环境变量中
+   - Ensure the installation path is in the PATH environment variable
 
-### 问题3：JSON 参数解析错误
+### Issue 3: JSON parameter parsing error
 
-**现象**：包含 JSON 参数的命令执行失败。
+**Symptom**: Commands with JSON parameters fail to execute.
 
-**解决方案**：
+**Solutions**:
 
-1. **正确使用引号**
+1. **Use quotes correctly**
    ```bash
    # Linux/macOS
    --dimensions '{"key":"value"}'
@@ -229,113 +229,113 @@
    --dimensions "{\"key\":\"value\"}"
    ```
 
-2. **验证 JSON 格式**
-   - 使用在线工具验证 JSON 格式
-   - 确保键名和字符串值使用双引号
+2. **Validate JSON format**
+   - Use online tools to validate JSON format
+   - Ensure key names and string values use double quotes
 
-## 自定义监控问题
+## Custom Monitoring Issues
 
-### 问题1：自定义数据上报失败
+### Issue 1: Custom data submission failure
 
-**现象**：调用 `put-metric-data` 返回错误。
+**Symptom**: Calling `put-metric-data` returns an error.
 
-**解决方案**：
+**Solutions**:
 
-1. **检查命名空间**
-   - 命名空间只能包含字母、数字、下划线、中划线
-   - 不能以数字开头
+1. **Check namespace**
+   - Namespace can only contain letters, digits, underscores, and hyphens
+   - Cannot start with a digit
 
-2. **检查指标名称**
-   - 指标名称只能包含字母、数字、下划线、点号
-   - 不能以数字或点号开头
+2. **Check metric name**
+   - Metric name can only contain letters, digits, underscores, and dots
+   - Cannot start with a digit or dot
 
-3. **检查维度**
-   - 维度键名只能包含字母、数字、下划线
-   - 维度值长度限制为 256 字符
+3. **Check dimensions**
+   - Dimension key names can only contain letters, digits, and underscores
+   - Dimension value length is limited to 256 characters
 
-4. **检查时间戳**
-   - 时间戳必须在最近 2 小时内
-   - 格式为 ISO8601
+4. **Check timestamp**
+   - Timestamp must be within the last 2 hours
+   - Must be in ISO8601 format
 
-### 问题2：自定义数据查询不到
+### Issue 2: Custom data not queryable
 
-**现象**：上报数据成功，但查询不到。
+**Symptom**: Data was submitted successfully, but cannot be queried.
 
-**解决方案**：
+**Solutions**:
 
-1. **等待数据入库**
-   - 自定义监控数据有 1-2 分钟延迟
-   - 等待后重试查询
+1. **Wait for data ingestion**
+   - Custom monitoring data has a 1-2 minute delay
+   - Wait and retry the query
 
-2. **检查查询参数**
-   - 确保 `namespace` 和 `metric-name` 与上报时一致
-   - 检查时间范围是否包含上报时间
+2. **Check query parameters**
+   - Ensure `namespace` and `metric-name` match the submission parameters
+   - Check if the time range includes the submission time
 
-3. **检查维度匹配**
-   - 查询时的维度必须与上报时完全匹配
-   - 或使用正确的维度过滤
+3. **Check dimension matching**
+   - Query dimensions must exactly match the submission dimensions
+   - Or use the correct dimension filtering
 
-## 性能问题
+## Performance Issues
 
-### 问题1：API 调用缓慢
+### Issue 1: Slow API calls
 
-**现象**：API 响应时间过长。
+**Symptom**: API response time is too long.
 
-**解决方案**：
+**Solutions**:
 
-1. **优化查询范围**
-   - 缩小 `start-time` 和 `end-time` 范围
-   - 减少单次查询的数据量
+1. **Optimize query scope**
+   - Narrow the `start-time` and `end-time` range
+   - Reduce the data volume per query
 
-2. **使用分页**
-   - 设置合适的 `page-size`（建议 20-50）
-   - 避免一次返回过多数据
+2. **Use pagination**
+   - Set an appropriate `page-size` (recommended 20-50)
+   - Avoid returning too much data at once
 
-3. **使用缓存**
-   - 监控数据变化较慢，可适当缓存查询结果
-   - 避免重复查询相同数据
+3. **Use caching**
+   - Monitoring data changes slowly, cache query results when appropriate
+   - Avoid querying the same data repeatedly
 
-4. **并发控制**
-   - 控制并发请求数量
-   - 避免触发限流
+4. **Concurrency control**
+   - Limit the number of concurrent requests
+   - Avoid triggering rate limiting
 
-### 问题2：达到限流
+### Issue 2: Rate limit reached
 
-**现象**：返回 `RateLimitExceeded` 错误。
+**Symptom**: Returns `RateLimitExceeded` error.
 
-**解决方案**：
+**Solutions**:
 
-1. **降低请求频率**
-   - 增加请求间隔时间
-   - 使用指数退避重试
+1. **Reduce request frequency**
+   - Increase the request interval
+   - Use exponential backoff retry
 
-2. **批量操作**
-   - 使用批量接口替代多次单个查询
-   - 合并多个请求
+2. **Batch operations**
+   - Use batch APIs instead of multiple individual queries
+   - Combine multiple requests
 
-3. **申请提额**
-   - 联系京东云技术支持申请提高限流阈值
+3. **Request quota increase**
+   - Contact JD Cloud technical support to request a higher rate limit
 
-## 获取帮助
+## Getting Help
 
-### 查看 CLI 帮助
+### View CLI help
 
 ```bash
-# 查看 monitor 命令帮助
+# View monitor command help
 jdc monitor --help
 
-# 查看具体命令帮助
+# View specific command help
 jdc monitor describe-metric-data --help
 ```
 
-### 开启调试模式
+### Enable debug mode
 
 ```bash
 jdc monitor describe-alarms --region-id cn-north-1 --debug
 ```
 
-### 联系技术支持
+### Contact technical support
 
-- 京东云工单系统：https://ticket.jdcloud.com/
-- 客服热线：400-615-1212
-- 技术支持邮箱：support@jdcloud.com
+- JD Cloud Ticket System: https://ticket.jdcloud.com/
+- Customer Service Hotline: 400-615-1212
+- Technical Support Email: support@jdcloud.com

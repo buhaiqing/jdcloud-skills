@@ -1,8 +1,8 @@
-# 集成指南 — Java SDK
+# Integration Guide — Java SDK
 
-> 本文档从 `integration.md` 提取。
+> This document is extracted from `integration.md`.
 
-## Maven 依赖
+## Maven Dependency
 
 ```xml
 <dependency>
@@ -12,7 +12,7 @@
 </dependency>
 ```
 
-## SDK 初始化
+## SDK Initialization
 
 ```java
 import com.jdcloud.sdk.JdcloudSdkException;
@@ -23,13 +23,13 @@ import com.jdcloud.sdk.service.monitor.model.*;
 
 public class MonitorExample {
     public static void main(String[] args) {
-        // 配置凭证
+        // Configure credentials
         CredentialProvider credential = new CredentialProvider(
             System.getenv("JDC_ACCESS_KEY"),
             System.getenv("JDC_SECRET_KEY")
         );
         
-        // 创建客户端
+        // Create client
         MonitorClient client = MonitorClient.builder()
             .credentialsProvider(credential)
             .regionId("cn-north-1")
@@ -38,7 +38,7 @@ public class MonitorExample {
 }
 ```
 
-## 查询监控数据
+## Query Monitoring Data
 
 ```java
 DescribeMetricDataRequest request = new DescribeMetricDataRequest();

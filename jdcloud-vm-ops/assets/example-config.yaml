@@ -1,8 +1,8 @@
 # JD Cloud VM Configuration Examples
 
-## 实例配置示例
+## Instance Configuration Examples
 
-### 1. Web服务器配置
+### 1. Web Server Configuration
 
 ```yaml
 # web-server-config.yaml
@@ -61,7 +61,7 @@ tags:
   CostCenter: "IT-001"
 ```
 
-### 2. 数据库服务器配置
+### 2. Database Server Configuration
 
 ```yaml
 # database-server-config.yaml
@@ -70,7 +70,7 @@ instance:
   description: "Primary MySQL database server"
   region_id: "cn-north-1"
   az: "cn-north-1a"
-  instance_type: "r.n2.xlarge"  # 内存优化型
+  instance_type: "r.n2.xlarge"  # Memory optimized
   image_id: "img-centos-7.9"
   
 network:
@@ -78,7 +78,7 @@ network:
   subnet_id: "subnet-db"
   security_groups:
     - "sg-database"
-  private_ip_only: true  # 不分配公网IP
+  private_ip_only: true  # No public IP assigned
   
 storage:
   system_disk:
@@ -95,7 +95,7 @@ storage:
 backup:
   snapshot_policy:
     enabled: true
-    cron_expression: "0 2 * * *"  # 每天凌晨2点
+    cron_expression: "0 2 * * *"  # Daily at 2 AM
     retention_days: 7
     
 monitoring:
@@ -131,7 +131,7 @@ tags:
   Team: "dba"
 ```
 
-### 3. 批处理任务配置
+### 3. Batch Job Configuration
 
 ```yaml
 # batch-job-config.yaml
@@ -142,7 +142,7 @@ instance:
   az: 
     - "cn-north-1a"
     - "cn-north-1b"
-  instance_type: "c.n2.xlarge"  # 计算优化型
+  instance_type: "c.n2.xlarge"  # Compute optimized
   image_id: "img-ubuntu-20.04"
   count: 5
   
@@ -174,9 +174,9 @@ tags:
   Team: "data-engineering"
 ```
 
-## 安全组规则示例
+## Security Group Rule Examples
 
-### Web服务器安全组
+### Web Server Security Group
 
 ```yaml
 # web-security-group.yaml
@@ -202,7 +202,7 @@ rules:
     - protocol: "tcp"
       from_port: 22
       to_port: 22
-      source: "192.168.1.0/24"  # 仅允许办公网络
+      source: "192.168.1.0/24"  # Office network only
       description: "Allow SSH from office"
       
   egress:
@@ -213,7 +213,7 @@ rules:
       description: "Allow all outbound"
 ```
 
-### 数据库安全组
+### Database Security Group
 
 ```yaml
 # database-security-group.yaml
@@ -227,13 +227,13 @@ rules:
     - protocol: "tcp"
       from_port: 3306
       to_port: 3306
-      source: "192.168.1.0/24"  # 应用服务器网段
+      source: "192.168.1.0/24"  # Application server CIDR
       description: "Allow MySQL from app servers"
       
     - protocol: "tcp"
       from_port: 22
       to_port: 22
-      source: "192.168.100.0/24"  # 堡垒机网段
+      source: "192.168.100.0/24"  # Bastion host CIDR
       description: "Allow SSH from bastion"
       
   egress:
@@ -244,32 +244,32 @@ rules:
       description: "Allow all outbound"
 ```
 
-## 监控告警配置示例
+## Monitoring Alarm Configuration Examples
 
-### 生产环境告警策略
+### Production Environment Alarm Policy
 
 ```yaml
 # production-alarms.yaml
 contact_groups:
   - id: 1
-    name: "运维团队"
+    name: "Ops Team"
     members:
-      - name: "张三"
+      - name: "Zhang San"
         phone: "138****8888"
         email: "zhangsan@example.com"
-      - name: "李四"
+      - name: "Li Si"
         phone: "139****9999"
         email: "lisi@example.com"
         
   - id: 2
-    name: "开发团队"
+    name: "Dev Team"
     members:
-      - name: "王五"
+      - name: "Wang Wu"
         phone: "137****7777"
         email: "wangwu@example.com"
 
 alarms:
-  # CPU告警
+  # CPU alarms
   - name: "Prod-VM-CPU-Warning"
     service_code: "vm"
     metric_name: "vm.cpu.util"
@@ -292,7 +292,7 @@ alarms:
     contact_group_id: 1
     notice_type: "sms,email"
     
-  # 内存告警
+  # Memory alarms
   - name: "Prod-VM-Memory-Warning"
     service_code: "vm"
     metric_name: "vm.memory.util"
@@ -315,7 +315,7 @@ alarms:
     contact_group_id: 1
     notice_type: "sms,email"
     
-  # 磁盘告警
+  # Disk alarms
   - name: "Prod-VM-Disk-Warning"
     service_code: "vm"
     metric_name: "vm.disk.util"
@@ -338,7 +338,7 @@ alarms:
     contact_group_id: 1
     notice_type: "sms,email"
     
-  # 网络告警
+  # Network alarms
   - name: "Prod-VM-NetworkIn-Warning"
     service_code: "vm"
     metric_name: "vm.network.in.bytes"
@@ -351,9 +351,9 @@ alarms:
     notice_type: "email"
 ```
 
-## Terraform变量文件示例
+## Terraform Variable File Examples
 
-### 开发环境
+### Development Environment
 
 ```hcl
 # dev.tfvars
@@ -370,7 +370,7 @@ tags = {
 }
 ```
 
-### 测试环境
+### Testing Environment
 
 ```hcl
 # test.tfvars
@@ -387,7 +387,7 @@ tags = {
 }
 ```
 
-### 生产环境
+### Production Environment
 
 ```hcl
 # prod.tfvars
@@ -408,7 +408,7 @@ tags = {
 }
 ```
 
-## Ansible Inventory示例
+## Ansible Inventory Example
 
 ```yaml
 # inventory.yml
@@ -442,10 +442,10 @@ all:
       ansible_python_interpreter: /usr/bin/python3
 ```
 
-## Docker部署示例
+## Docker Deployment Example
 
 ```yaml
-# docker-compose.yml (在VM上运行)
+# docker-compose.yml (running on VM)
 version: '3.8'
 
 services:
@@ -504,7 +504,7 @@ networks:
   backend:
 ```
 
-## Kubernetes节点配置示例
+## Kubernetes Node Configuration Example
 
 ```yaml
 # k8s-node-config.yaml
@@ -545,7 +545,7 @@ kubernetes:
       memory: "512Mi"
 ```
 
-## 备份策略示例
+## Backup Policy Example
 
 ```yaml
 # backup-policy.yaml
@@ -584,25 +584,25 @@ backup:
     min_retention_count: 3
 ```
 
-## 成本优化配置示例
+## Cost Optimization Configuration Example
 
 ```yaml
 # cost-optimization.yaml
 instances:
-  # 使用预留实例降低长期运行成本
+  # Use reserved instances to reduce long-running costs
   reserved_instances:
     - instance_type: "g.n2.large"
       quantity: 5
       term: "1 year"
-      payment_option: "all_upfront"  # 全预付，折扣最大
+      payment_option: "all_upfront"  # Full upfront, maximum discount
       
-  # 使用抢占式实例处理临时任务
+  # Use spot instances for temporary tasks
   spot_instances:
     - instance_type: "c.n2.xlarge"
-      max_price: 0.5  # 最高出价（元/小时）
+      max_price: 0.5  # Max bid (CNY/hour)
       interruption_behavior: "terminate"
       
-  # 自动伸缩配置
+  # Auto-scaling configuration
   auto_scaling:
     min_instances: 2
     max_instances: 10
@@ -632,7 +632,7 @@ resource_cleanup:
     retention_days: 30
 ```
 
-## 标签规范示例
+## Tagging Policy Example
 
 ```yaml
 # tagging-policy.yaml
@@ -645,13 +645,13 @@ required_tags:
       - "production"
       
   - key: "Application"
-    description: "应用名称"
+    description: "Application name"
     
   - key: "Owner"
-    description: "资源负责人邮箱"
+    description: "Resource owner email"
     
   - key: "CostCenter"
-    description: "成本中心代码"
+    description: "Cost center code"
     
   - key: "ManagedBy"
     allowed_values:
@@ -661,13 +661,13 @@ required_tags:
       
 optional_tags:
   - key: "Project"
-    description: "项目名称"
+    description: "Project name"
     
   - key: "Team"
-    description: "团队名称"
+    description: "Team name"
     
   - key: "Version"
-    description: "应用版本"
+    description: "Application version"
     
 enforcement:
   auto_tag_new_resources: true
@@ -675,4 +675,4 @@ enforcement:
   block_creation_without_required_tags: false
 ```
 
-这些配置示例可以根据实际需求进行调整和扩展。建议将配置文件纳入版本控制系统，并建立配置审查流程。
+These configuration examples can be adjusted and extended based on actual requirements. It is recommended to place configuration files under version control and establish a configuration review process.

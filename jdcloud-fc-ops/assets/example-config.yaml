@@ -1,4 +1,3 @@
-# 函数计算配置示例
 # Function Compute Configuration Example
 
 service:
@@ -21,7 +20,7 @@ function:
     subnet_id: subnet-xxxxxxxx
     security_group_id: sg-xxxxxxxx
 
-# 触发器配置
+# Trigger configuration
 trigger:
   http:
     name: http-trigger
@@ -34,7 +33,7 @@ trigger:
     cron: "0 0 * * * *"  # Every hour at minute 0
     enable: true
 
-# 版本和别名
+# Version and alias
 alias:
   name: prod
   version: "1"

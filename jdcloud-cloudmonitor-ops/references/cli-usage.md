@@ -1,86 +1,191 @@
-# CLI — 云监控(CloudMonitor) (`jdc`)
+# CLI — CloudMonitor (`jdc`)
 
-## 安装和配置
+## Quick Command Reference
 
-- 安装: 参考 [京东云 CLI](https://github.com/jdcloud-api/jdcloud-cli)
-- **重要：`jdc` CLI 仅从 `~/.jdc/config` INI 文件读取凭证，不支持环境变量 `JDC_ACCESS_KEY`/`JDC_SECRET_KEY`**
-- 沙箱环境需将 HOME 重定向到可写目录并预创建配置文件（参见 SKILL.md "Critical jdc CLI Behavioral Notes"）
+### List Monitoring Services
+```bash
+jdc --output json monitor describe-services --region-id cn-north-1
+```
 
-## 约定（Agent 执行）
+### Query Metrics for a Specific Product
+```bash
+jdc --output json monitor describe-metrics \
+  --region-id cn-north-1 \
+  --service-code vm \
+  --resource-id i-xxx
+```
 
-- `--output json` 是**顶层参数**，必须放在子命令**之前**：`jdc --output json monitor <command> ...`
-- `--no-interactive` **不存在**于 `jdc` CLI — 所有命令默认非交互式，删除此标志
-- JSON 路径需通过实际调用验证，CLI 输出可能与原始 API 字段名不同
+### Query Monitoring Data
+```bash
+jdc --output json monitor describe-metric-data \
+  --region-id cn-north-1 \
+  --metric vm.cpu.util \
+  --service-code vm \
+  --resource-id i-xxx \
+  --start-time "2024-01-01T00:00:00Z" \
+  --end-time "2024-01-01T23:59:59Z"
+```
 
-## CLI vs API 覆盖对比
+### Query Latest Monitoring Data (Downsampled)
+```bash
+jdc --output json monitor last-downsample \
+  --region-id cn-north-1 \
+  --service-code vm \
+  --resource-id i-xxx \
+  --metrics '["vm.cpu.util","vm.memory.util"]'
+```
 
-| 操作 (API / SDK) | CLI 支持 | 说明 |
-|------------------|---------|------|
-| describeServices | ✓ | 查询监控服务列表 |
-| describeMetrics | ✓ | 查询监控项 |
-| describeMetricData | ✓ | 查询监控数据 |
-| lastDownsample | ✓ | 查询最新数据（降采样） |
-| createAlarm | ✓ | 创建告警规则 |
-| describeAlarms | ✓ | 查询告警列表 |
-| describeAlarm | ✓ | 查询告警详情 |
-| updateAlarm | ✓ | 修改告警规则 |
-| enableAlarm | ✓ | 启用/禁用告警 |
-| deleteAlarms | ✓ | 删除告警规则 |
-| describeAlarmHistory | ✓ | 查询告警历史 |
-| describeAlarmContacts | ✓ | 查询告警联系人 |
-| putMetricData | ✓ | 上报自定义数据 |
-| describeCustomMetricData | ✓ | 查询自定义数据 |
+### Create Alarm Rule
+```bash
+jdc --output json monitor create-alarm \
+  --region-id cn-north-1 \
+  --alarm-name "HighCPUAlarm" \
+  --service-code vm \
+  --resource-id i-xxx \
+  --metric-name "vm.cpu.util" \
+  --comparison-operator "gt" \
+  --threshold 80 \
+  --period 300 \
+  --evaluation-periods 2 \
+  --contact-group-id 1 \
+  --notice-type "sms,email"
+```
 
-> **覆盖率**: CLI 覆盖云监控所有核心 API 操作，无 SDK-only 操作。
+### Query Alarm Rule List
+```bash
+jdc --output json monitor describe-alarms \
+  --region-id cn-north-1 \
+  --page-number 1 \
+  --page-size 20
+```
 
-## 命令概览
+### Enable/Disable Alarm Rule
+```bash
+# Enable alarm
+jdc --output json monitor enable-alarm \
+  --region-id cn-north-1 \
+  --alarm-id alarm-xxx \
+  --enabled true
 
-云监控相关的 CLI 命令统一在 `jdc monitor` 命名空间下。
+# Disable alarm
+jdc --output json monitor enable-alarm \
+  --region-id cn-north-1 \
+  --alarm-id alarm-xxx \
+  --enabled false
+```
+
+### Query Alarm History
+```bash
+jdc --output json monitor describe-alarm-history \
+  --region-id cn-north-1 \
+  --alarm-id alarm-xxx \
+  --start-time "2024-01-01T00:00:00Z" \
+  --end-time "2024-01-31T23:59:59Z"
+```
+
+### Report Custom Monitoring Data
+```bash
+jdc --output json monitor put-metric-data \
+  --region-id cn-north-1 \
+  --namespace custom-namespace \
+  --metric-name custom-metric \
+  --value 100 \
+  --dimensions '{"instance":"app-server-01"}'
+```
+
+### Query Custom Monitoring Data
+```bash
+jdc --output json monitor describe-custom-metric-data \
+  --region-id cn-north-1 \
+  --namespace custom-namespace \
+  --metric-name custom-metric \
+  --start-time "2024-01-01T00:00:00Z" \
+  --end-time "2024-01-01T23:59:59Z"
+```
+
+---
+
+## Installation and Configuration
+
+- Installation: Refer to [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)
+- **Important: `jdc` CLI only reads credentials from the `~/.jdc/config` INI file, it does NOT support `JDC_ACCESS_KEY`/`JDC_SECRET_KEY` environment variables**
+- In sandbox environments, redirect HOME to a writable directory and pre-create the config file (see SKILL.md "Critical jdc CLI Behavioral Notes")
+
+## Conventions (Agent Execution)
+
+- `--output json` is a **top-level parameter** and must be placed **before** the subcommand: `jdc --output json monitor <command> ...`
+- `--no-interactive` does **not** exist in the `jdc` CLI — all commands are non-interactive by default; remove this flag
+- JSON paths must be verified through actual API calls; CLI output may differ from raw API field names
+
+## CLI vs API Coverage Comparison
+
+| Operation (API / SDK) | CLI Support | Description |
+|-----------------------|-------------|-------------|
+| describeServices | ✓ | List monitoring services |
+| describeMetrics | ✓ | Query metric items |
+| describeMetricData | ✓ | Query monitoring data |
+| lastDownsample | ✓ | Query latest data (downsampled) |
+| createAlarm | ✓ | Create alarm rule |
+| describeAlarms | ✓ | Query alarm list |
+| describeAlarm | ✓ | Query alarm details |
+| updateAlarm | ✓ | Modify alarm rule |
+| enableAlarm | ✓ | Enable/disable alarm |
+| deleteAlarms | ✓ | Delete alarm rules |
+| describeAlarmHistory | ✓ | Query alarm history |
+| describeAlarmContacts | ✓ | Query alarm contacts |
+| putMetricData | ✓ | Report custom data |
+| describeCustomMetricData | ✓ | Query custom data |
+
+> **Coverage**: CLI covers all core CloudMonitor API operations, no SDK-only operations.
+
+## Command Overview
+
+CloudMonitor CLI commands are unified under the `jdc monitor` namespace.
 
 ```bash
 jdc monitor <command> [options]
 ```
 
-## 常用命令分类
+## Common Command Categories
 
-| 分类 | 命令 | 说明 |
-|------|------|------|
-| 服务查询 | describe-services | 查询支持的监控服务列表 |
-| 监控项查询 | describe-metrics | 查询指定服务的监控项 |
-| 数据查询 | describe-metric-data | 查询监控数据 |
-| 数据查询 | last-downsample | 查询最新监控数据 |
-| 告警管理 | create-alarm | 创建告警规则 |
-| 告警管理 | describe-alarms | 查询告警规则列表 |
-| 告警管理 | describe-alarm | 查询告警规则详情 |
-| 告警管理 | update-alarm | 修改告警规则 |
-| 告警管理 | enable-alarm | 启用/禁用告警规则 |
-| 告警管理 | delete-alarms | 删除告警规则 |
-| 告警历史 | describe-alarm-history | 查询告警历史 |
-| 告警联系人 | describe-alarm-contacts | 查询告警联系人 |
-| 自定义监控 | put-metric-data | 上报自定义监控数据 |
-| 自定义监控 | describe-custom-metric-data | 查询自定义监控数据 |
+| Category | Command | Description |
+|----------|---------|-------------|
+| Service Query | describe-services | List supported monitoring services |
+| Metric Query | describe-metrics | Query metrics for a specific service |
+| Data Query | describe-metric-data | Query monitoring data |
+| Data Query | last-downsample | Query latest monitoring data |
+| Alarm Management | create-alarm | Create alarm rule |
+| Alarm Management | describe-alarms | Query alarm rule list |
+| Alarm Management | describe-alarm | Query alarm rule details |
+| Alarm Management | update-alarm | Modify alarm rule |
+| Alarm Management | enable-alarm | Enable/disable alarm rule |
+| Alarm Management | delete-alarms | Delete alarm rules |
+| Alarm History | describe-alarm-history | Query alarm history |
+| Alarm Contacts | describe-alarm-contacts | Query alarm contacts |
+| Custom Monitoring | put-metric-data | Report custom monitoring data |
+| Custom Monitoring | describe-custom-metric-data | Query custom monitoring data |
 
-## 详细命令说明
+## Detailed Command Reference
 
-### 1. describe-services - 查询监控服务列表
+### 1. describe-services — List Monitoring Services
 
-查询云监控支持的所有服务列表。
+List all services supported by CloudMonitor.
 
 ```bash
 jdc --output json monitor describe-services \
   --region-id cn-north-1
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --service-code | string | 否 | 按服务代码过滤 |
-| --page-number | integer | 否 | 页码，默认 1 |
-| --page-size | integer | 否 | 每页数量，默认 20 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --service-code | string | No | Filter by service code |
+| --page-number | integer | No | Page number, default 1 |
+| --page-size | integer | No | Items per page, default 20 |
 
-**返回示例**
+**Response Example**
 
 ```json
 {
@@ -96,9 +201,9 @@ jdc --output json monitor describe-services \
 }
 ```
 
-### 2. describe-metrics - 查询监控项
+### 2. describe-metrics — Query Metrics
 
-查询指定服务的监控项列表。
+Query the list of metrics for a specified service.
 
 ```bash
 jdc --output json monitor describe-metrics \
@@ -107,18 +212,18 @@ jdc --output json monitor describe-metrics \
   --resource-id i-xxx
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --service-code | string | 是 | 服务代码 |
-| --resource-id | string | 否 | 资源 ID |
-| --metric | string | 否 | 监控项名称过滤 |
-| --page-number | integer | 否 | 页码 |
-| --page-size | integer | 否 | 每页数量 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --service-code | string | Yes | Service code |
+| --resource-id | string | No | Resource ID |
+| --metric | string | No | Filter by metric name |
+| --page-number | integer | No | Page number |
+| --page-size | integer | No | Items per page |
 
-**返回示例**
+**Response Example**
 
 ```json
 {
@@ -135,9 +240,9 @@ jdc --output json monitor describe-metrics \
 }
 ```
 
-### 3. describe-metric-data - 查询监控数据
+### 3. describe-metric-data — Query Monitoring Data
 
-查询指定时间范围内的监控数据。
+Query monitoring data within a specified time range.
 
 ```bash
 jdc --output json monitor describe-metric-data \
@@ -150,21 +255,21 @@ jdc --output json monitor describe-metric-data \
   --aggr-type avg
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --metric | string | 是 | 监控项名称 |
-| --service-code | string | 是 | 服务代码 |
-| --resource-id | string | 是 | 资源 ID |
-| --start-time | string | 是 | 开始时间(ISO8601) |
-| --end-time | string | 是 | 结束时间(ISO8601) |
-| --aggr-type | string | 否 | 聚合类型(avg/max/min/sum) |
-| --period | integer | 否 | 时间粒度(秒) |
-| --dimensions | string | 否 | 维度过滤(JSON) |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --metric | string | Yes | Metric name |
+| --service-code | string | Yes | Service code |
+| --resource-id | string | Yes | Resource ID |
+| --start-time | string | Yes | Start time (ISO8601) |
+| --end-time | string | Yes | End time (ISO8601) |
+| --aggr-type | string | No | Aggregation type (avg/max/min/sum) |
+| --period | integer | No | Time granularity (seconds) |
+| --dimensions | string | No | Dimension filter (JSON) |
 
-**返回示例**
+**Response Example**
 
 ```json
 {
@@ -180,9 +285,9 @@ jdc --output json monitor describe-metric-data \
 }
 ```
 
-### 4. last-downsample - 查询最新监控数据
+### 4. last-downsample — Query Latest Monitoring Data
 
-查询资源的最新监控数据点。
+Query the latest monitoring data point for a resource.
 
 ```bash
 jdc --output json monitor last-downsample \
@@ -192,18 +297,18 @@ jdc --output json monitor last-downsample \
   --metrics '["vm.cpu.util","vm.memory.util"]'
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --service-code | string | 是 | 服务代码 |
-| --resource-id | string | 是 | 资源 ID |
-| --metrics | string | 是 | 监控项列表(JSON数组) |
-| --start-time | string | 否 | 查询起始时间 |
-| --end-time | string | 否 | 查询结束时间 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --service-code | string | Yes | Service code |
+| --resource-id | string | Yes | Resource ID |
+| --metrics | string | Yes | Metric list (JSON array) |
+| --start-time | string | No | Query start time |
+| --end-time | string | No | Query end time |
 
-**返回示例**
+**Response Example**
 
 ```json
 {
@@ -220,9 +325,9 @@ jdc --output json monitor last-downsample \
 }
 ```
 
-### 5. create-alarm - 创建告警规则
+### 5. create-alarm — Create Alarm Rule
 
-创建新的告警规则。
+Create a new alarm rule.
 
 ```bash
 jdc --output json monitor create-alarm \
@@ -239,25 +344,25 @@ jdc --output json monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --alarm-name | string | 是 | 告警规则名称 |
-| --service-code | string | 是 | 服务代码 |
-| --resource-id | string | 是 | 资源 ID |
-| --metric-name | string | 是 | 监控项名称 |
-| --comparison-operator | string | 是 | 比较运算符(gt/lt/ge/le/eq/ne) |
-| --threshold | number | 是 | 阈值 |
-| --period | integer | 是 | 统计周期(秒) |
-| --evaluation-periods | integer | 是 | 连续周期数 |
-| --contact-group-id | integer | 否 | 联系组 ID |
-| --notice-type | string | 否 | 通知类型(sms/email/callback) |
-| --notice-period | integer | 否 | 通知周期(分钟) |
-| --notice-time | string | 否 | 通知时段 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --alarm-name | string | Yes | Alarm rule name |
+| --service-code | string | Yes | Service code |
+| --resource-id | string | Yes | Resource ID |
+| --metric-name | string | Yes | Metric name |
+| --comparison-operator | string | Yes | Comparison operator (gt/lt/ge/le/eq/ne) |
+| --threshold | number | Yes | Threshold |
+| --period | integer | Yes | Statistical period (seconds) |
+| --evaluation-periods | integer | Yes | Number of consecutive periods |
+| --contact-group-id | integer | No | Contact group ID |
+| --notice-type | string | No | Notification type (sms/email/callback) |
+| --notice-period | integer | No | Notification period (minutes) |
+| --notice-time | string | No | Notification time window |
 
-**返回示例**
+**Response Example**
 
 ```json
 {
@@ -267,9 +372,9 @@ jdc --output json monitor create-alarm \
 }
 ```
 
-### 6. describe-alarms - 查询告警规则列表
+### 6. describe-alarms — Query Alarm Rule List
 
-查询告警规则列表。
+Query the list of alarm rules.
 
 ```bash
 jdc --output json monitor describe-alarms \
@@ -279,19 +384,19 @@ jdc --output json monitor describe-alarms \
   --page-size 20
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --service-code | string | 否 | 服务代码过滤 |
-| --resource-id | string | 否 | 资源 ID 过滤 |
-| --alarm-name | string | 否 | 告警名称过滤 |
-| --alarm-status | string | 否 | 告警状态过滤 |
-| --page-number | integer | 否 | 页码 |
-| --page-size | integer | 否 | 每页数量 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --service-code | string | No | Filter by service code |
+| --resource-id | string | No | Filter by resource ID |
+| --alarm-name | string | No | Filter by alarm name |
+| --alarm-status | string | No | Filter by alarm status |
+| --page-number | integer | No | Page number |
+| --page-size | integer | No | Items per page |
 
-**返回示例**
+**Response Example**
 
 ```json
 {
@@ -310,9 +415,9 @@ jdc --output json monitor describe-alarms \
 }
 ```
 
-### 7. describe-alarm - 查询告警规则详情
+### 7. describe-alarm — Query Alarm Rule Details
 
-查询单个告警规则的详细信息。
+Query detailed information for a single alarm rule.
 
 ```bash
 jdc --output json monitor describe-alarm \
@@ -320,16 +425,16 @@ jdc --output json monitor describe-alarm \
   --alarm-id alarm-xxx
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --alarm-id | string | 是 | 告警规则 ID |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --alarm-id | string | Yes | Alarm rule ID |
 
-### 8. update-alarm - 修改告警规则
+### 8. update-alarm — Modify Alarm Rule
 
-修改告警规则配置。
+Modify alarm rule configuration.
 
 ```bash
 jdc --output json monitor update-alarm \
@@ -339,48 +444,48 @@ jdc --output json monitor update-alarm \
   --threshold 90
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --alarm-id | string | 是 | 告警规则 ID |
-| --alarm-name | string | 否 | 新告警名称 |
-| --threshold | number | 否 | 新阈值 |
-| --period | integer | 否 | 新统计周期 |
-| --evaluation-periods | integer | 否 | 新连续周期数 |
-| --contact-group-id | integer | 否 | 新联系组 ID |
-| --notice-type | string | 否 | 新通知类型 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --alarm-id | string | Yes | Alarm rule ID |
+| --alarm-name | string | No | New alarm name |
+| --threshold | number | No | New threshold |
+| --period | integer | No | New statistical period |
+| --evaluation-periods | integer | No | New consecutive period count |
+| --contact-group-id | integer | No | New contact group ID |
+| --notice-type | string | No | New notification type |
 
-### 9. enable-alarm - 启用/禁用告警规则
+### 9. enable-alarm — Enable/Disable Alarm Rule
 
-启用或禁用告警规则。
+Enable or disable an alarm rule.
 
 ```bash
-# 启用告警
+# Enable alarm
 jdc --output json monitor enable-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
   --enabled true
 
-# 禁用告警
+# Disable alarm
 jdc --output json monitor enable-alarm \
   --region-id cn-north-1 \
   --alarm-id alarm-xxx \
   --enabled false
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --alarm-id | string | 是 | 告警规则 ID |
-| --enabled | boolean | 是 | 是否启用(true/false) |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --alarm-id | string | Yes | Alarm rule ID |
+| --enabled | boolean | Yes | Whether enabled (true/false) |
 
-### 10. delete-alarms - 删除告警规则
+### 10. delete-alarms — Delete Alarm Rules
 
-删除告警规则。
+Delete alarm rules.
 
 ```bash
 jdc --output json monitor delete-alarms \
@@ -388,16 +493,16 @@ jdc --output json monitor delete-alarms \
   --alarm-id alarm-xxx
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --alarm-id | string | 是 | 告警规则 ID |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --alarm-id | string | Yes | Alarm rule ID |
 
-### 11. describe-alarm-history - 查询告警历史
+### 11. describe-alarm-history — Query Alarm History
 
-查询告警触发历史。
+Query alarm trigger history.
 
 ```bash
 jdc --output json monitor describe-alarm-history \
@@ -407,20 +512,20 @@ jdc --output json monitor describe-alarm-history \
   --end-time "2024-01-31T23:59:59Z"
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --alarm-id | string | 否 | 告警规则 ID 过滤 |
-| --service-code | string | 否 | 服务代码过滤 |
-| --resource-id | string | 否 | 资源 ID 过滤 |
-| --start-time | string | 否 | 开始时间 |
-| --end-time | string | 否 | 结束时间 |
-| --page-number | integer | 否 | 页码 |
-| --page-size | integer | 否 | 每页数量 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --alarm-id | string | No | Filter by alarm rule ID |
+| --service-code | string | No | Filter by service code |
+| --resource-id | string | No | Filter by resource ID |
+| --start-time | string | No | Start time |
+| --end-time | string | No | End time |
+| --page-number | integer | No | Page number |
+| --page-size | integer | No | Items per page |
 
-**返回示例**
+**Response Example**
 
 ```json
 {
@@ -438,9 +543,9 @@ jdc --output json monitor describe-alarm-history \
 }
 ```
 
-### 12. describe-alarm-contacts - 查询告警联系人
+### 12. describe-alarm-contacts — Query Alarm Contacts
 
-查询告警联系人信息。
+Query alarm contact information.
 
 ```bash
 jdc --output json monitor describe-alarm-contacts \
@@ -449,18 +554,18 @@ jdc --output json monitor describe-alarm-contacts \
   --page-size 20
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --contact-group-id | integer | 否 | 联系组 ID 过滤 |
-| --page-number | integer | 否 | 页码 |
-| --page-size | integer | 否 | 每页数量 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --contact-group-id | integer | No | Filter by contact group ID |
+| --page-number | integer | No | Page number |
+| --page-size | integer | No | Items per page |
 
-### 13. put-metric-data - 上报自定义监控数据
+### 13. put-metric-data — Report Custom Monitoring Data
 
-上报自定义监控数据点。
+Report custom monitoring data points.
 
 ```bash
 jdc --output json monitor put-metric-data \
@@ -472,21 +577,21 @@ jdc --output json monitor put-metric-data \
   --timestamp "2024-01-01T00:00:00Z"
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --namespace | string | 是 | 命名空间 |
-| --metric-name | string | 是 | 指标名称 |
-| --value | number | 是 | 指标值 |
-| --dimensions | string | 否 | 维度(JSON) |
-| --timestamp | string | 否 | 时间戳(默认当前时间) |
-| --unit | string | 否 | 单位 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --namespace | string | Yes | Namespace |
+| --metric-name | string | Yes | Metric name |
+| --value | number | Yes | Metric value |
+| --dimensions | string | No | Dimensions (JSON) |
+| --timestamp | string | No | Timestamp (default: current time) |
+| --unit | string | No | Unit |
 
-### 14. describe-custom-metric-data - 查询自定义监控数据
+### 14. describe-custom-metric-data — Query Custom Monitoring Data
 
-查询自定义监控数据。
+Query custom monitoring data.
 
 ```bash
 jdc --output json monitor describe-custom-metric-data \
@@ -497,22 +602,22 @@ jdc --output json monitor describe-custom-metric-data \
   --end-time "2024-01-01T23:59:59Z"
 ```
 
-**参数说明**
+**Parameter Reference**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| --region-id | string | 是 | 区域 ID |
-| --namespace | string | 是 | 命名空间 |
-| --metric-name | string | 是 | 指标名称 |
-| --start-time | string | 是 | 开始时间 |
-| --end-time | string | 是 | 结束时间 |
-| --dimensions | string | 否 | 维度过滤 |
-| --period | integer | 否 | 时间粒度 |
-| --aggr-type | string | 否 | 聚合类型 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| --region-id | string | Yes | Region ID |
+| --namespace | string | Yes | Namespace |
+| --metric-name | string | Yes | Metric name |
+| --start-time | string | Yes | Start time |
+| --end-time | string | Yes | End time |
+| --dimensions | string | No | Dimension filter |
+| --period | integer | No | Time granularity |
+| --aggr-type | string | No | Aggregation type |
 
-## 常用场景示例
+## Common Scenario Examples
 
-### 场景1：批量查询多台云主机的 CPU 使用率
+### Scenario 1: Batch Query CPU Usage for Multiple VMs
 
 ```bash
 for vm_id in i-xxx1 i-xxx2 i-xxx3; do
@@ -525,7 +630,7 @@ for vm_id in i-xxx1 i-xxx2 i-xxx3; do
 done
 ```
 
-### 场景2：创建磁盘使用率告警
+### Scenario 2: Create Disk Usage Alarm
 
 ```bash
 jdc --output json monitor create-alarm \
@@ -542,10 +647,10 @@ jdc --output json monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-### 场景3：查询过去7天的告警历史
+### Scenario 3: Query Alarm History for the Past 7 Days
 
 ```bash
-# 计算时间
+# Calculate time range
 start_time=$(date -u -v-7d +"%Y-%m-%dT%H:%M:%SZ")
 end_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -556,10 +661,10 @@ jdc --output json monitor describe-alarm-history \
   --page-size 100
 ```
 
-### 场景4：上报业务自定义指标
+### Scenario 4: Report Business Custom Metrics
 
 ```bash
-# 上报订单量指标
+# Report order count metric
 jdc --output json monitor put-metric-data \
   --region-id cn-north-1 \
   --namespace "ecommerce-metrics" \
@@ -569,28 +674,28 @@ jdc --output json monitor put-metric-data \
   --unit "Count"
 ```
 
-## 输出格式
+## Output Formats
 
-CLI 支持多种输出格式，可通过 `--output` 顶层参数指定。注意：`--output` 必须放在**子命令之前**。
+The CLI supports multiple output formats, specified via the `--output` top-level parameter. Note: `--output` must be placed **before the subcommand**.
 
-| 格式 | 说明 |
-|------|------|
-| json | JSON 格式（推荐用于自动化） |
-| table | 表格格式 |
-| text | 纯文本格式 |
+| Format | Description |
+|--------|-------------|
+| json | JSON format (recommended for automation) |
+| table | Table format |
+| text | Plain text format |
 
-示例：
+Example:
 ```bash
 jdc --output table monitor describe-alarms --region-id cn-north-1
 ```
 
-## 全局参数
+## Global Parameters
 
-所有命令都支持以下全局参数：
+All commands support the following global parameters:
 
-| 参数 | 说明 |
-|------|------|
-| --debug | 显示调试信息 |
-| --output | 输出格式(json/table/text) — 必须放在子命令之前 |
-| --profile | 使用指定的配置文件 |
-| --region-id | 区域 ID |
+| Parameter | Description |
+|-----------|-------------|
+| --debug | Show debug information |
+| --output | Output format (json/table/text) — must be placed before the subcommand |
+| --profile | Use the specified profile |
+| --region-id | Region ID |

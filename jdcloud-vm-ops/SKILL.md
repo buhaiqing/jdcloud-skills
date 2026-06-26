@@ -79,11 +79,13 @@ This Skill uses structured placeholders to avoid prompt injection and parsing am
 ## Output Parsing Rules (Agent-Readable)
 
 ### Mandatory CLI Conventions
-- All CLI commands MUST place `--output json` BEFORE the subcommand: `jdc --output json vm <command> ...`
-- `--no-interactive` does NOT exist in `jdc` CLI — all commands are non-interactive by default; omit this flag.
-- Credentials: CLI reads from `~/.jdc/config` INI only (NOT from env vars). SDK uses env vars.
-- Timestamps are in ISO 8601 format with timezone: `2026-04-28T10:00:00+08:00`
-- Resource IDs follow pattern: `i-[hash]` for instances, `img-[hash]` for images, `vol-[hash]` for disks
+
+> **ponytail: full details in `references/cli-usage.md` and AGENTS.md.**
+
+- `--output json` MUST be BEFORE the subcommand: `jdc --output json vm <command>`
+- `--no-interactive` does NOT exist — omit it
+- CLI reads from `~/.jdc/config` INI only (NOT env vars). SDK uses env vars
+- Resource IDs: `i-[hash]` (instance), `img-[hash]` (image), `vol-[hash]` (disk)
 
 ### Key JSON Paths for Common Operations
 | Operation | JSON Path | Type | Description |
@@ -148,39 +150,7 @@ jdc --output json vm create-instances \
 
 #### Execution (SDK Fallback — after 3 jdc failures)
 
-```python
-import os
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.vm.client import VmClient
-from jdcloud_sdk.services.vm.apis.CreateInstancesRequest import CreateInstancesRequest
-
-credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
-client = VmClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
-
-request = CreateInstancesRequest({
-    "regionId": "{{user.region}}",
-    "az": "{{user.az}}",
-    "instanceType": "{{user.instance_type}}",
-    "imageId": "{{user.image_id}}",
-    "name": "{{user.instance_name}}",
-    "primaryNetworkInterface": {
-        "subnetId": "{{user.subnet_id}}",
-        "securityGroupIds": ["{{user.sg_id}}"]
-    },
-    "systemDisk": {
-        "diskCategory": "cloud_ssd",
-        "diskSizeGB": {{user.disk_size}}
-    },
-    "chargeMode": "postpaid_by_duration"
-})
-
-response = client.create_instances(request)
-if response.error is None:
-    instance_id = response.result.instanceIds[0]
-    print(f"Created instance: {instance_id}")
-else:
-    print(f"Error: {response.error.code} - {response.error.message}")
-```
+> SDK fallback: use `VmClient.create_instances()` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
 
 #### Post-execution Validation
 1. Capture `{{output.instance_id}}` from `$.result.instanceIds[0]`
@@ -219,24 +189,7 @@ jdc --output json vm describe-instances \
 
 #### Execution (SDK Fallback — after 3 jdc failures)
 
-```python
-from jdcloud_sdk.services.vm.apis.DescribeInstancesRequest import DescribeInstancesRequest
-
-request = DescribeInstancesRequest({
-    "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
-    "instanceIds": ["{{user.instance_id}}"]
-})
-
-response = client.describe_instances(request)
-if response.error is None:
-    instance = response.result.instances[0]
-    print(f"ID: {instance.instanceId}")
-    print(f"Name: {instance.name}")
-    print(f"Status: {instance.status}")
-    print(f"Private IP: {instance.primaryNetworkInterface.privateIpAddress}")
-else:
-    print(f"Error: {response.error.message}")
-```
+> SDK fallback: use `VmClient.describe_instances()` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
 
 #### Output to Present to User
 | Field | JSON Path | Display Format |
@@ -264,20 +217,7 @@ jdc --output json vm stop-instance \
 
 #### Execution (SDK Fallback — after 3 jdc failures)
 
-```python
-from jdcloud_sdk.services.vm.apis.StopInstanceRequest import StopInstanceRequest
-
-request = StopInstanceRequest({
-    "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
-    "instanceId": "{{user.instance_id}}"
-})
-
-response = client.stop_instance(request)
-if response.error is None:
-    print(f"Stop request accepted: {response.requestId}")
-else:
-    print(f"Error: {response.error.message}")
-```
+> SDK fallback: use `VmClient.stop_instance()` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
 
 #### Post-execution Validation
 1. Poll until status == `stopped` (max 120s)
@@ -298,20 +238,7 @@ jdc --output json vm delete-instance \
 
 #### Execution (SDK Fallback — after 3 jdc failures)
 
-```python
-from jdcloud_sdk.services.vm.apis.DeleteInstanceRequest import DeleteInstanceRequest
-
-request = DeleteInstanceRequest({
-    "regionId": os.environ.get('JDC_REGION', 'cn-north-1'),
-    "instanceId": "{{user.instance_id}}"
-})
-
-response = client.delete_instance(request)
-if response.error is None:
-    print(f"Delete request accepted: {response.requestId}")
-else:
-    print(f"Error: {response.error.message}")
-```
+> SDK fallback: use `VmClient.delete_instance()` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
 
 #### Post-execution Validation
 1. Poll `describe-instances` until HTTP 404 (max 300s)
@@ -527,49 +454,18 @@ The Hallucination Detector (H) is a mandatory pre-execution structural check.
 
 #### Execution — SDK
 
-```python
-import os
-import base64
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.assistant.client import AssistantClient
-from jdcloud_sdk.services.assistant.apis.CreateCommandRequest import CreateCommandRequest
-
-credential = Credential(os.environ['JDC_ACCESS_KEY'], os.environ['JDC_SECRET_KEY'])
-client = AssistantClient(credential, os.environ.get('JDC_REGION', 'cn-north-1'))
-
-command_content = base64.b64encode("{{user.command_content}}".encode()).decode()
-
-request = CreateCommandRequest({
-    "regionId": "{{env.JDC_REGION}}",
-    "commandName": "{{user.command_name}}",
-    "commandType": "{{user.command_type}}",
-    "commandContent": command_content,
-    "timeout": {{user.timeout}},
-    "username": "{{user.username}}",
-    "workdir": "{{user.workdir}}",
-    "commandDescription": "{{user.command_description}}",
-    "enableParameter": {{user.enable_parameter}}
-})
-
-response = client.create_command(request)
-if response.error is None:
-    command_id = response.result.commandId
-    print(f"Command created: {command_id}")
-else:
-    print(f"Error: {response.error.code} - {response.error.message}")
-```
+> SDK-only (CLI not supported). Use `AssistantClient.create_command()` — see [references/cloud-assistant.md](references/cloud-assistant.md).
 
 #### Post-execution Validation
 1. Capture `{{output.command_id}}` from `response.result.commandId`
-2. Verify by calling `describeCommands` with the command ID
+2. Verify via `describeCommands`
 
 #### Failure Recovery
-| Error Pattern (regex) | Max Retries | Backoff | Agent Action |
-|-----------------------|-------------|---------|--------------|
-| `QUOTA_EXCEEDED` | 0 | - | HALT. Inform user to delete unused commands |
-| `INVALID_ARGUMENT` | 1 | - | Re-check field values, retry with corrected params |
-| `OUT_OF_RANGE` | 1 | - | Adjust parameter values to valid range |
-| `INTERNAL\|UNKNOWN` | 3 | 2s, 4s, 8s | Retry with exponential backoff |
+| Code | Max Retries | Agent Action |
+|------|-------------|--------------|
+| `QUOTA_EXCEEDED` | 0 | HALT; delete unused commands |
+| `INVALID_ARGUMENT` | 1 | Re-check params, retry |
+| `INTERNAL\|UNKNOWN` | 3 (2s/4s/8s) | Retry, then HALT |
 
 ### Operation: Invoke Cloud Assistant Command
 
@@ -586,142 +482,38 @@ else:
 
 #### Execution — SDK
 
-```python
-from jdcloud_sdk.services.assistant.apis.InvokeCommandRequest import InvokeCommandRequest
-
-request = InvokeCommandRequest({
-    "regionId": "{{env.JDC_REGION}}",
-    "commandId": "{{user.command_id}}",
-    "instances": {{user.instance_ids}},
-    "timeout": {{user.timeout}},
-    "username": "{{user.username}}",
-    "workdir": "{{user.workdir}}",
-    "enableParameter": {{user.enable_parameter}},
-    "parameters": {{user.parameters}}
-})
-
-response = client.invoke_command(request)
-if response.error is None:
-    invoke_id = response.result.invokeId
-    print(f"Command invoked: {invoke_id}")
-else:
-    print(f"Error: {response.error.code} - {response.error.message}")
-```
+> SDK-only (CLI not supported). Use `AssistantClient.invoke_command()` — see [references/cloud-assistant.md](references/cloud-assistant.md).
 
 #### Post-execution Validation
 1. Capture `{{output.invoke_id}}` from `response.result.invokeId`
-2. Poll for results:
-```python
-import time
-from jdcloud_sdk.services.assistant.apis.DescribeInvocationsRequest import DescribeInvocationsRequest
+2. Poll via `DescribeInvocationsRequest` until status in (`finished`, `failed`, `partial_failed`) — max 300s, 5s interval
+3. Report table:
 
-invoke_id = "{{output.invoke_id}}"
-max_wait = 300
-interval = 5
-
-for _ in range(max_wait // interval):
-    time.sleep(interval)
-    check_req = DescribeInvocationsRequest({
-        "regionId": "{{env.JDC_REGION}}",
-        "invokeIds": [invoke_id]
-    })
-    check_resp = client.describe_invocations(check_req)
-    if check_resp.error is not None:
-        break
-    inv = check_resp.result.invocations[0]
-    if inv.status in ("finished", "failed", "partial_failed"):
-        break
-```
-3. Report results to user in a table:
-
-| Field | Source | Display |
-|-------|--------|---------|
-| Aggregate Status | `inv.status` | ✅ finished / ❌ failed / ⚠️ partial_failed |
-| Instance ID | `inst.instanceId` | Plain text |
-| Per-Instance Status | `inst.status` | Status badge |
-| Exit Code | `inst.exitCode` | Plain text (0 = success) |
-| Output | `inst.output` | Truncated (max 6000B) |
-| Error | `inst.errorInfo` | Red text if non-empty |
-| Duration | `inst.duration` | e.g., `3s` |
+| Field | Display |
+|-------|---------|
+| Aggregate Status | ✅ finished / ❌ failed / ⚠️ partial_failed |
+| Instance ID | Plain text |
+| Exit Code | 0 = success |
+| Output | Truncated (max 6000B) |
+| Error | Red if non-empty |
+| Duration | e.g., `3s` |
 
 ## Prerequisites
 
-> **Python 3.10 is REQUIRED, NOT 3.12.** `jdcloud_cli==1.2.12` uses `SafeConfigParser` which was removed in Python 3.12. Always use `uv venv --python 3.10`. If Python 3.10 is unavailable, install it via `brew install python@3.10` (macOS) or `uv python install 3.10`.
+> **Python 3.10 is REQUIRED** — `jdcloud_cli==1.2.12` uses `SafeConfigParser` removed in Python 3.12.
+> Full setup is in `AGENTS.md` MANDATORY Pre-flight Checks.
 
-Environment setup follows a **jdc-first with fallback** strategy:
-
-1. **Attempt `jdc` CLI setup** via `uv` (primary path)
-2. On failure, **retry up to 3 times** with exponential backoff (0s → 2s → 4s)
-3. After **3 consecutive failures**, fall back to **SDK-only** setup
-
-### Python Runtime (uv)
-
-Both `jdc` CLI and the JD Cloud Python SDK require a Python runtime. Use **`uv`** for local, isolated, and **idempotent** environment management.
-
-**Install uv (system-wide, one-time per machine):**
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# Or via Homebrew: brew install uv
-# Windows (PowerShell)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-### Phase 1: jdc CLI Setup (Primary Path)
+### Quick Setup
 
 ```bash
 uv venv --python 3.10
 source .venv/bin/activate
-uv pip install jdcloud_cli jdcloud_sdk
-jdc --version
-python -c "import jdcloud_sdk; print('SDK OK')"
+uv pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
 ```
 
-#### Retry Logic (Up to 3 Attempts)
-
-If `jdc --version` or any `jdc` command fails:
+### Credentials (CLI)
 
 ```bash
-# Retry 1
-uv pip install jdcloud_cli jdcloud_sdk
-jdc --version && echo "OK" || echo "FAIL"
-
-# Retry 2 (wait 2s)
-sleep 2
-uv pip install --force-reinstall jdcloud_cli
-jdc --version && echo "OK" || echo "FAIL"
-
-# Retry 3 (wait 4s)
-sleep 4
-uv pip install --force-reinstall jdcloud_cli jdcloud_sdk
-jdc --version && echo "OK" || echo "FAIL"
-```
-
-If all **3 retries** fail, proceed to **Phase 2: SDK Fallback**.
-
-### Phase 2: SDK Fallback (After 3 jdc Failures)
-
-```bash
-uv venv --python 3.10
-source .venv/bin/activate
-uv pip install jdcloud_sdk
-python -c "import jdcloud_sdk; print('SDK OK')"
-```
-
-### Configure Credentials
-
-> **CRITICAL:** The `jdc` CLI reads credentials **only** from `~/.jdc/config` INI file. Environment variables (`JDC_ACCESS_KEY`, `JDC_SECRET_KEY`) are **ignored** by the CLI. The SDK mode reads from environment variables. Use the appropriate method below.
-
-**Method A: Configure Credentials for SDK (env vars)**
-```bash
-export JDC_ACCESS_KEY="{{env.JDC_ACCESS_KEY}}"
-export JDC_SECRET_KEY="{{env.JDC_SECRET_KEY}}"
-export JDC_REGION="cn-north-1"
-```
-
-**Method B: Configure Credentials for CLI (`~/.jdc/config` INI)**
-```bash
-# For sandbox environments, redirect HOME to a writable location
 export HOME=/tmp/jdc-home
 mkdir -p /tmp/jdc-home/.jdc
 cat > /tmp/jdc-home/.jdc/config << 'CONFIGEOF'
@@ -733,9 +525,10 @@ endpoint = vm.jdcloud-api.com
 scheme = https
 timeout = 20
 CONFIGEOF
-# CRITICAL: ~/.jdc/current must contain exactly "default" with NO trailing newline
 printf "%s" "default" > /tmp/jdc-home/.jdc/current
 ```
+
+**CRITICAL**: CLI reads credentials **only** from `~/.jdc/config` INI, NOT env vars. SDK reads from env vars. Both paths require configuration.
 
 ## Reference Directory
 - [Core Concepts](references/core-concepts.md)
@@ -745,10 +538,3 @@ printf "%s" "default" > /tmp/jdc-home/.jdc/current
 - [Troubleshooting Guide](references/troubleshooting.md)
 - [Monitoring & Alerts](references/monitoring.md)
 - [Integration (MCP/SDK)](references/integration.md)
-
-## Operational Best Practices
-- **High Availability**: Always deploy across multiple availability zones.
-- **Security**: Apply least-privilege IAM policies and regularly update security groups.
-- **Cost Optimization**: Utilize auto-scaling and reserved instances where applicable.
-- **Backup Strategy**: Regularly create snapshots of critical VM instances.
-- **Resource Tagging**: Tag VM resources for better organization and cost tracking.

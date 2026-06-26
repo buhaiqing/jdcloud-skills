@@ -10,19 +10,19 @@
 
 ## 1. CLI Parameter Errors
 
-> 从 GCL trace 中提取的 CLI 参数错误模式。高频模式优先。
+> CLI parameter error patterns extracted from GCL traces. High-frequency patterns prioritized.
 
 | Skill | Command | Error Pattern | Root Cause | Fix | Count |
 |-------|---------|---------------|------------|-----|-------|
-| `audit-ops` | `describe-events` | `InvalidParameter: InvalidTimeRange` | 时间范围超过 90 天保留期 | 限制 `startTime`/`endTime` ≤ 90 天 | 3 |
-| `audit-ops` | `describe-events` | `InvalidParameter: InvalidRegion` | 使用无效区域 ID | 验证区域为 `cn-north-1` 等有效 JD Cloud 区域 | 2 |
-| `audit-ops` | `describe-event-detail` | `InvalidParameter: EventIdNotFound` | 事件 ID 不存在或已过期 | 确认 eventId 在保留期内且拼写正确 | 2 |
+| `audit-ops` | `describe-events` | `InvalidParameter: InvalidTimeRange` | Time range exceeds 90-day retention limit | Limit `startTime`/`endTime` ≤ 90 days | 3 |
+| `audit-ops` | `describe-events` | `InvalidParameter: InvalidRegion` | Invalid region ID used | Verify region is a valid JD Cloud region such as `cn-north-1` | 2 |
+| `audit-ops` | `describe-event-detail` | `InvalidParameter: EventIdNotFound` | Event ID does not exist or has expired | Confirm eventId is within retention period and spelled correctly | 2 |
 
 ---
 
 ## 2. Skill Generation Issues
 
-> Skill 生成器（jdcloud-skill-generator）常见的结构错误模式。
+> Common structural error patterns for the skill generator (jdcloud-skill-generator).
 
 | Issue Type | Frequency | Fix Pattern | First Seen |
 |------------|-----------|-------------|------------|
@@ -36,7 +36,7 @@
 
 ## 3. Cross-Skill Composition Failures
 
-> 跨 Skill 调用链中的失败模式。
+> Failure patterns across skill call chains.
 
 | Source Skill | Target Skill | Failure Pattern | Resolution | Count |
 |--------------|--------------|-----------------|------------|-------|
@@ -48,20 +48,20 @@
 
 ## 4. Runtime Execution Patterns
 
-> GCL 执行中发现的运行时失败模式。
+> Runtime failure patterns discovered during GCL execution.
 
-| Skill | Operation | Failure Pattern | Root Cause | Prevention |
-|-------|-----------|-----------------|------------|------------|
-| `audit-ops` | `describe-events` | Large result set causes timeout | 未使用分页参数 | 始终使用 `pageNumber`/`pageSize`（≤100） | 4 |
-| `audit-ops` | `describe-event-detail` | Sensitive data leakage in output | 未对 `requestParameters` 中的密码/密钥脱敏 | 执行前应用 `mask_sensitive()` | 3 |
-| `audit-ops` | `describe-events` | Empty result without explanation | 时间范围无事件但未说明 | 返回空结果时明确告知用户"指定时间范围内无事件" | 2 |
-| `audit-ops` | All operations | Credential exposure in trace | `JDC_SECRET_KEY` 出现在 trace 中 | 写入 trace 前扫描并替换为 `<masked>` | 2 |
+| Skill | Operation | Failure Pattern | Root Cause | Prevention | Count |
+|-------|-----------|-----------------|------------|------------|-------|
+| `audit-ops` | `describe-events` | Large result set causes timeout | Pagination parameters not used | Always use `pageNumber`/`pageSize` (≤100) | 4 |
+| `audit-ops` | `describe-event-detail` | Sensitive data leakage in output | Passwords/keys in `requestParameters` not masked | Apply `mask_sensitive()` before output | 3 |
+| `audit-ops` | `describe-events` | Empty result without explanation | No events in time range but no explanation given | Inform user explicitly "no events in the specified time range" when returning empty results | 2 |
+| `audit-ops` | All operations | Credential exposure in trace | `JDC_SECRET_KEY` appears in trace | Scan and replace with `<masked>` before writing trace | 2 |
 
 ---
 
 ## 5. Token Efficiency Violations
 
-> Token Efficiency 规则的常见违反模式。
+> Common violation patterns of Token Efficiency rules.
 
 | TE Rule | Common Violation | Fix | Frequency |
 |---------|------------------|-----|-----------|

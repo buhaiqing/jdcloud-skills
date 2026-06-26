@@ -179,10 +179,9 @@ jdc --output json lb create-load-balancer \
 #### Post-execution Validation
 
 1. Capture `{{output.lb_id}}` from `$.result.loadBalancerId`.
-2. Poll `describeLoadBalancer` until `status` == `active` or timeout.
+2. Poll `describeLoadBalancer` until `status` == `active` or timeout (30×10s).
 
 ```bash
-# CLI poll loop (primary path) — --output json at TOP level
 for i in $(seq 1 30); do
   STATUS=$(jdc --output json lb describe-load-balancer \
     --region-id "{{user.region}}" \
@@ -192,21 +191,7 @@ for i in $(seq 1 30); do
 done
 ```
 
-```python
-# SDK poll loop (fallback, after 3 jdc failures)
-from jdcloud_sdk.services.lb.apis.DescribeLoadBalancerRequest import DescribeLoadBalancerRequest, DescribeLoadBalancerParameters
-
-for _ in range(30):
-    dparams = DescribeLoadBalancerParameters(regionId="{{user.region}}", loadBalancerId="{{output.lb_id}}")
-    dreq = DescribeLoadBalancerRequest(parameters=dparams)
-    dresp = client.send(dreq)
-    status = dresp.result["loadBalancer"]["status"]
-    if status == "active":
-        break
-    if status in ["error", "deleted"]:
-        raise RuntimeError(f"LB creation failed: {status}")
-    sleep(10)
-```
+> SDK poll fallback: `DescribeLoadBalancerRequest` — same logic, 30 iterations × 10s.
 
 1. On success, report LB ID, VIP address, and DNS name to user.
 2. On terminal failure, go to **Failure Recovery**.
@@ -261,9 +246,7 @@ jdc --output json lb create-listener \
   --backend-port {{user.backend_port}}
 ```
 
-#### Post-execution Validation
-
-Poll `describe-listeners` until listener is `active`.
+> SDK fallback: `CreateListenerRequest` with same params — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
 
 ### Operation: Describe Listener(s)
 
@@ -311,6 +294,8 @@ jdc --output json lb delete-listener \
   --listener-id "{{user.listener_id}}"
 ```
 
+> SDK fallback: `DeleteListenerRequest` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
+
 #### Post-execution Validation
 
 Poll `describe-listeners` until listener absent (max 120s).
@@ -333,6 +318,8 @@ jdc --output json lb register-targets \
   --target-group-id "{{user.target_group_id}}" \
   --target-specs '[{"instanceId":"{{user.vm_id}}","port":{{user.target_port}},"weight":{{user.weight|default:100}}}]'
 ```
+
+> SDK fallback: `RegisterTargetsRequest` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
 
 #### Post-execution Validation
 
@@ -372,6 +359,8 @@ jdc --output json lb deregister-targets \
   --target-ids '["{{user.target_ids}}"]'
 ```
 
+> SDK fallback: `DeregisterTargetsRequest` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
+
 #### Post-execution Validation
 
 Poll `describe-targets` until target IDs absent or health status updated (max 120s).
@@ -410,6 +399,8 @@ jdc --output json lb delete-load-balancer \
   --load-balancer-id "{{user.lb_id}}"
 ```
 
+> SDK fallback: `DeleteLoadBalancerRequest` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
+
 #### Post-execution Validation
 
 Poll `describe-load-balancer` until 404 or max wait (300s).
@@ -445,6 +436,8 @@ jdc --output json lb update-health-check \
   --listener-id "{{user.listener_id}}" \
   --health-check-spec '{"protocol":"{{user.hc_protocol}}","port":{{user.hc_port}},"interval":{{user.hc_interval|default:5}},"healthyThreshold":{{user.hc_healthy|default:2}},"unhealthyThreshold":{{user.hc_unhealthy|default:3}}}'
 ```
+
+> SDK fallback: `UpdateHealthCheckRequest` — see [references/api-sdk-usage.md](references/api-sdk-usage.md).
 
 ## Quality Gate (GCL)
 

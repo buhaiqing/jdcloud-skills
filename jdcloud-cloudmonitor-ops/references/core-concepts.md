@@ -1,200 +1,200 @@
-# 云监控核心概念
+# Cloud Monitor Core Concepts
 
-## 1. 监控服务(Service)
+## 1. Monitoring Service
 
-监控服务是指京东云提供的可被监控的云产品，如云主机(VM)、云数据库(RDS)、负载均衡(LB)等。每个服务有唯一的服务代码(serviceCode)。
+A monitoring service refers to a JD Cloud product that can be monitored, such as Virtual Machine (VM), Relational Database Service (RDS), Load Balancer (LB), etc. Each service has a unique service code.
 
-### 主要监控服务
+### Major Monitoring Services
 
-| 服务代码 | 服务名称 | 说明 |
-|---------|---------|------|
-| vm | 云主机 | 云服务器实例监控 |
-| nativecontainer | 原生容器 | 容器实例监控 |
-| lb | 负载均衡 | 传统负载均衡监控 |
-| nlb | 网络负载均衡 | 四层负载均衡监控 |
-| alb | 应用负载均衡 | 七层负载均衡监控 |
-| eip | 弹性公网IP | 公网 IP 监控 |
-| natgateway | NAT 网关 | NAT 网关监控 |
-| disk | 云硬盘 | 云磁盘监控 |
-| rds | 云数据库 MySQL | RDS MySQL 监控 |
-| mongodb | 云数据库 MongoDB | MongoDB 监控 |
-| redis | 分布式缓存 Redis | Redis 监控 |
-| memcached | 云缓存 Memcached | Memcached 监控 |
-| jcq | 消息队列 JCQ | JCQ 监控 |
-| kafka | 消息队列 Kafka | Kafka 监控 |
-| elasticsearch | 云搜索 ES | Elasticsearch 监控 |
+| Service Code | Service Name | Description |
+|-------------|-------------|-------------|
+| vm | Virtual Machine | VM instance monitoring |
+| nativecontainer | Native Container | Container instance monitoring |
+| lb | Load Balancer | Classic load balancer monitoring |
+| nlb | Network Load Balancer | Layer 4 load balancer monitoring |
+| alb | Application Load Balancer | Layer 7 load balancer monitoring |
+| eip | Elastic IP | Public IP monitoring |
+| natgateway | NAT Gateway | NAT gateway monitoring |
+| disk | Cloud Disk | Cloud disk monitoring |
+| rds | RDS MySQL | RDS MySQL monitoring |
+| mongodb | MongoDB | MongoDB monitoring |
+| redis | Redis | Redis monitoring |
+| memcached | Memcached | Memcached monitoring |
+| jcq | JCQ | JCQ monitoring |
+| kafka | Kafka | Kafka monitoring |
+| elasticsearch | Elasticsearch | Elasticsearch monitoring |
 
-## 2. 监控项(Metric)
+## 2. Metric
 
-监控项是描述云资源某个特定性能或状态的指标，如 CPU 使用率、内存使用率、磁盘读写速率等。
+A metric is an indicator that describes a specific performance or state of a cloud resource, such as CPU utilization, memory usage, disk read/write rate, etc.
 
-### 监控项属性
+### Metric Attributes
 
-| 属性 | 说明 | 示例 |
-|------|------|------|
-| metric | 指标名称 | vm.cpu.util |
-| metricName | 指标显示名称 | CPU使用率 |
-| unit | 单位 | %、Bps、bps、count |
-| period | 采集周期 | 60s、300s |
+| Attribute | Description | Example |
+|-----------|-------------|---------|
+| metric | Metric name | vm.cpu.util |
+| metricName | Metric display name | CPUUtilization |
+| unit | Unit | %, Bps, bps, count |
+| period | Collection interval | 60s, 300s |
 
-### 监控项命名规范
+### Metric Naming Convention
 
-监控项名称通常采用以下格式：
+Metric names typically follow this format:
 ```
-<服务代码>.<资源类型>.<指标名称>
+<serviceCode>.<resourceType>.<metricName>
 ```
 
-例如：
-- `vm.cpu.util` - 云主机 CPU 使用率
-- `rds.memory.util` - RDS 内存使用率
-- `lb.activeconnection` - 负载均衡活跃连接数
+For example:
+- `vm.cpu.util` — VM CPU utilization
+- `rds.memory.util` — RDS memory usage
+- `lb.activeconnection` — LB active connection count
 
-## 3. 监控数据(MetricData)
+## 3. Metric Data
 
-监控数据是在特定时间点采集的监控项数值。
+Metric data refers to the metric values collected at specific timestamps.
 
-### 数据类型
+### Data Types
 
-| 类型 | 说明 |
-|------|------|
-| 原始数据 | 按固定周期采集的原始指标值 |
-| 聚合数据 | 对原始数据进行统计聚合后的数据 |
+| Type | Description |
+|------|-------------|
+| Raw data | Raw metric values collected at a fixed interval |
+| Aggregated data | Data statistically aggregated from raw data |
 
-### 统计方式
+### Aggregation Methods
 
-| 统计方式 | 说明 |
-|---------|------|
-| avg | 平均值 |
-| max | 最大值 |
-| min | 最小值 |
-| sum | 求和值 |
-| count | 计数 |
+| Method | Description |
+|--------|-------------|
+| avg | Average |
+| max | Maximum |
+| min | Minimum |
+| sum | Sum |
+| count | Count |
 
-## 4. 告警规则(Alarm)
+## 4. Alarm
 
-告警规则定义了当监控项满足特定条件时触发的告警通知。
+An alarm defines a notification triggered when a metric meets specific conditions.
 
-### 告警规则组成
+### Alarm Rule Components
 
-| 组件 | 说明 |
-|------|------|
-| 监控项 | 需要监控的指标 |
-| 统计周期 | 数据聚合的时间窗口（如 5 分钟） |
-| 统计方式 | 周期内数据的统计方法 |
-| 比较运算符 | >、<、>=、<=、=、!= |
-| 阈值 | 触发告警的临界值 |
-| 连续周期数 | 连续多少个周期满足条件才触发告警 |
-| 通知对象 | 接收告警通知的联系人或联系组 |
+| Component | Description |
+|-----------|-------------|
+| Metric | The metric to monitor |
+| Statistics period | The time window for data aggregation (e.g., 5 minutes) |
+| Statistics method | The aggregation method within the period |
+| Comparison operator | >, <, >=, <=, =, != |
+| Threshold | The critical value that triggers the alarm |
+| Consecutive periods | How many consecutive periods must meet the condition to trigger |
+| Notification target | Contacts or contact groups to receive alarm notifications |
 
-### 告警状态
+### Alarm States
 
-| 状态 | 说明 |
-|------|------|
-| ALARM | 告警中，监控项触发告警条件 |
-| OK | 正常，监控项未触发告警条件 |
-| INSUFFICIENT_DATA | 数据不足，无法判断状态 |
+| State | Description |
+|-------|-------------|
+| ALARM | Alarming — the metric has triggered the alarm condition |
+| OK | Normal — the metric has not triggered the alarm condition |
+| INSUFFICIENT_DATA | Insufficient data — cannot determine the state |
 
-### 告警级别
+### Alarm Severity
 
-| 级别 | 说明 | 响应时间要求 |
-|------|------|-------------|
-| critical | 严重 | 立即响应 |
-| warning | 警告 | 30分钟内响应 |
-| notice | 通知 | 2小时内响应 |
+| Severity | Description | Response Time |
+|----------|-------------|---------------|
+| critical | Critical | Respond immediately |
+| warning | Warning | Respond within 30 minutes |
+| notice | Notice | Respond within 2 hours |
 
-## 5. 告警模板(AlarmTemplate)
+## 5. Alarm Template
 
-告警模板是预定义的告警规则集合，可以快速应用到多个资源。
+An alarm template is a predefined set of alarm rules that can be quickly applied to multiple resources.
 
-### 模板类型
+### Template Types
 
-| 类型 | 说明 |
-|------|------|
-| 系统默认模板 | 京东云提供的各产品默认告警模板 |
-| 自定义模板 | 用户根据业务需求创建的模板 |
+| Type | Description |
+|------|-------------|
+| System default template | Default alarm templates provided by JD Cloud for each product |
+| Custom template | Templates created by users based on business needs |
 
-## 6. 自定义监控(CustomMetric)
+## 6. Custom Metric
 
-自定义监控允许用户上报自己的业务指标到云监控平台。
+Custom metric allows users to report their own business metrics to the cloud monitoring platform.
 
-### 使用场景
+### Use Cases
 
-- 应用程序自定义指标（如订单量、用户在线数）
-- 业务 KPI 监控
-- 第三方系统数据接入
+- Application custom metrics (e.g., order volume, online user count)
+- Business KPI monitoring
+- Third-party system data integration
 
-### 核心概念
+### Core Concepts
 
-| 概念 | 说明 |
-|------|------|
-| Namespace | 命名空间，用于隔离不同业务的指标 |
-| MetricName | 指标名称 |
-| Dimensions | 维度，用于标识指标的来源（如实例 ID） |
-| Value | 指标值 |
-| Timestamp | 数据采集时间戳 |
+| Concept | Description |
+|---------|-------------|
+| Namespace | Namespace for isolating metrics from different businesses |
+| MetricName | Metric name |
+| Dimensions | Dimensions used to identify the source of the metric (e.g., instance ID) |
+| Value | Metric value |
+| Timestamp | Data collection timestamp |
 
 ## 7. Dashboard
 
-Dashboard 是可视化展示监控数据的自定义面板。
+A dashboard is a customizable panel for visualizing monitoring data.
 
-### 组件
+### Components
 
-| 组件 | 说明 |
-|------|------|
-| 面板(Panel) | 一个 Dashboard 包含多个图表 |
-| 图表(Widget) | 展示一个或多个监控项的可视化组件 |
-| 模板变量 | 用于动态切换资源的变量 |
+| Component | Description |
+|-----------|-------------|
+| Panel | A dashboard contains multiple charts |
+| Widget | A visualization component that displays one or more metrics |
+| Template variable | Variables used to dynamically switch resources |
 
-### 图表类型
+### Chart Types
 
-| 类型 | 适用场景 |
-|------|---------|
-| 折线图 | 趋势展示 |
-| 柱状图 | 数值对比 |
-| 饼图 | 占比展示 |
-| 数字 | 最新值展示 |
-| 表格 | 多维度数据展示 |
+| Type | Use Case |
+|------|----------|
+| Line chart | Trend display |
+| Bar chart | Value comparison |
+| Pie chart | Proportion display |
+| Number | Latest value display |
+| Table | Multi-dimensional data display |
 
-## 8. 维度(Dimension)
+## 8. Dimension
 
-维度是用于标识监控数据来源的属性，如云主机 ID、磁盘 ID 等。
+A dimension is an attribute used to identify the source of monitoring data, such as VM ID or disk ID.
 
-### 常见维度
+### Common Dimensions
 
-| 维度 | 说明 | 示例 |
-|------|------|------|
-| resourceId | 资源 ID | i-xxx、disk-xxx |
-| instanceId | 实例 ID | rds-xxx |
-| clusterId | 集群 ID | k8s-xxx |
-| device | 设备名称 | vda、eth0 |
+| Dimension | Description | Example |
+|-----------|-------------|---------|
+| resourceId | Resource ID | i-xxx, disk-xxx |
+| instanceId | Instance ID | rds-xxx |
+| clusterId | Cluster ID | k8s-xxx |
+| device | Device name | vda, eth0 |
 
-## 9. 标签(Tag)
+## 9. Tag
 
-标签是用户自定义的资源标识，可用于告警规则的批量资源选择。
+A tag is a user-defined resource identifier that can be used for batch resource selection in alarm rules.
 
-### 标签应用
+### Tag Applications
 
-- 按环境标记（如 env:prod、env:test）
-- 按业务标记（如 business:order、business:user）
-- 按负责人标记（如 owner:zhangsan）
+- Mark by environment (e.g., env:prod, env:test)
+- Mark by business (e.g., business:order, business:user)
+- Mark by owner (e.g., owner:zhangsan)
 
-## 10. 通知方式
+## 10. Notification Methods
 
-云监控支持多种告警通知方式。
+Cloud Monitor supports multiple alarm notification methods.
 
-### 通知类型
+### Notification Types
 
-| 类型 | 说明 |
-|------|------|
-| 短信 | 发送短信到联系人手机 |
-| 邮件 | 发送邮件到联系人邮箱 |
-| 回调 | 通过 HTTP/HTTPS 回调用户接口 |
-| 钉钉 | 发送消息到钉钉群组 |
+| Type | Description |
+|------|-------------|
+| SMS | Send SMS to contact's phone |
+| Email | Send email to contact's email address |
+| Callback | Call back user's HTTP/HTTPS endpoint |
+| DingTalk | Send message to DingTalk group |
 
-### 通知策略
+### Notification Policies
 
-| 策略 | 说明 |
-|------|------|
-| 通知周期 | 告警持续时多久重复通知 |
-| 通知时段 | 只在指定时间段发送通知 |
-| 通知条件 | 状态变化时才通知或每次都通知 |
+| Policy | Description |
+|--------|-------------|
+| Notification interval | How often to repeat notification while alarm persists |
+| Notification time window | Only send notifications during specified time periods |
+| Notification condition | Notify only on state change or notify every time |

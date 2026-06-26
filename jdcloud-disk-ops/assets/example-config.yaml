@@ -1,4 +1,3 @@
-# 云硬盘配置示例
 # Cloud Disk Configuration Example
 
 disk:
@@ -11,12 +10,12 @@ disk:
   charge_spec:
     charge_mode: postpaid_by_usage  # or prepaid_by_duration
 
-# 挂载配置
+# Attachment configuration
 attachment:
   instance_id: i-xxxxxxxx
   device: vdb  # vdb, vdc, vdd, etc.
 
-# 快照配置
+# Snapshot configuration
 snapshot:
   name: daily-backup
   description: Automated daily backup

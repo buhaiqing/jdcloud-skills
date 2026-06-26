@@ -1,55 +1,56 @@
-# 云监控数据采集常见陷阱 (Monitor Pitfalls)
+# Cloud Monitor Data Collection Pitfalls (Monitor Pitfalls)
 
-> 本文档记录使用 `jdc monitor` CLI 和 `jdcloud_sdk` SDK 采集监控数据时
-> 遇到的真实错误模式，作为后续开发和代码审查的参考。
+> This document records real error patterns encountered when collecting monitoring data
+> using the `jdc monitor` CLI and `jdcloud_sdk` SDK,
+> serving as a reference for future development and code review.
 >
-> 每新增一个错误模式，请按下方模板追加。
+> When adding a new error pattern, please append it using the template below.
 
 ---
 
-## 陷阱索引
+## Pitfall Index
 
-| # | 症状关键词 | 根因类别 | 首次发现 |
-|:-:|-----------|----------|----------|
-| 1 | `jdc monitor --help` 崩溃 | CLI 参数解析 bug | 2026-06-09 |
-| 2 | `--down-sample-type` 不识别 | CLI 参数名不一致 | 2026-06-09 |
-| 3 | `MonitorClient` not callable | SDK 模块/类混淆 | 2026-06-09 |
-| 4 | `Config` no attribute 'log' | SDK 构造函数签名 | 2026-06-09 |
-| 5 | `serviceCode and metric not match` | 指标名前缀规则 | 2026-06-09 |
-| 6 | 所有指标返回 `data: null` | 监控 agent 未安装 | 2026-06-09 |
-| 7 | 重试 3 次仍失败 | CLI bug 是确定性的 | 2026-06-09 |
+| # | Symptom Keyword | Root Cause Category | First Discovered |
+|:-:|-----------------|---------------------|------------------|
+| 1 | `jdc monitor --help` crash | CLI parameter parsing bug | 2026-06-09 |
+| 2 | `--down-sample-type` unrecognized | CLI parameter name inconsistency | 2026-06-09 |
+| 3 | `MonitorClient` not callable | SDK module/class confusion | 2026-06-09 |
+| 4 | `Config` no attribute 'log' | SDK constructor signature | 2026-06-09 |
+| 5 | `serviceCode and metric not match` | Metric name prefix rules | 2026-06-09 |
+| 6 | All metrics return `data: null` | Monitor agent not installed | 2026-06-09 |
+| 7 | Retry 3 times still fails | CLI bug is deterministic | 2026-06-09 |
 
 ---
 
-## 陷阱 1: `jdc monitor` CLI 参数解析崩溃
+## Pitfall 1: `jdc monitor` CLI Parameter Parsing Crash
 
-### 症状
+### Symptom
 
 ```bash
 $ jdc monitor --help
 ValueError: unsupported format character 'B' (0x42) at index 87
 ```
 
-### 根因
+### Root Cause
 
-`jdc_cli==1.2.12` 的 `monitor` 子命令帮助文本中包含 `%B` 格式字符串，
-Python `argparse` 的 `%` 替换逻辑将其误解析为格式化占位符。
+The help text of the `monitor` subcommand in `jdc_cli==1.2.12` contains a `%B` format string,
+which Python's `argparse` `%` substitution logic misinterprets as a formatting placeholder.
 
-### 影响范围
+### Impact
 
-所有 `jdc monitor` 子命令的 `--help` 均受影响。但 `--input-json` 方式
-执行实际命令不受影响（不触发帮助文本渲染）。
+All `jdc monitor` subcommand `--help` output is affected. However, executing actual commands
+via `--input-json` is not affected (does not trigger help text rendering).
 
-### 修复
+### Fix
 
-**绕过方式**: 使用 `--input-json` 传参，避免触发 CLI 参数解析：
+**Workaround**: Use `--input-json` to pass parameters, avoiding CLI parameter parsing:
 
 ```bash
-# ❌ 直接传参（可能触发 bug）
+# ❌ Direct parameter passing (may trigger the bug)
 jdc --output json monitor describe-metric-data \
   --service-code vm --resource-id i-xxx --metric cpu_util ...
 
-# ✅ 使用 --input-json 绕过
+# ✅ Use --input-json to bypass
 jdc --output json monitor describe-metric-data --input-json '{
   "serviceCode": "vm",
   "resourceId": "i-xxx",
@@ -60,50 +61,51 @@ jdc --output json monitor describe-metric-data --input-json '{
 }'
 ```
 
-### 相关
+### Related
 
-- 本 bug 在 `jdc_cli==1.2.12` 中确认存在
-- 升级到更高版本可能修复（待验证）
+- This bug is confirmed in `jdc_cli==1.2.12`
+- Upgrading to a newer version may fix it (pending verification)
 
 ---
 
-## 陷阱 2: `last-downsample` 参数名不一致
+## Pitfall 2: `last-downsample` Parameter Name Inconsistency
 
-### 症状
+### Symptom
 
 ```bash
 $ jdc monitor last-downsample --down-sample-type last ...
 jdc: error: unrecognized arguments: --down-sample-type last
 ```
 
-### 根因
+### Root Cause
 
-`jdc monitor last-downsample` 的实际参数名与 SKILL.md 文档中的名称不一致。
-CLI 的 `--help` 又因为陷阱 1 无法查看，导致只能试错。
+The actual parameter name for `jdc monitor last-downsample` is inconsistent with the name
+documented in SKILL.md. And since `--help` cannot be viewed due to Pitfall 1,
+this must be resolved through trial and error.
 
-### 修复
+### Fix
 
-**方案 A**: 使用 `describe-metric-data` 替代（推荐）
+**Option A**: Use `describe-metric-data` instead (recommended)
 ```bash
 jdc --output json monitor describe-metric-data --input-json '{...}'
 ```
 
-**方案 B**: 降级到 SDK
+**Option B**: Fall back to SDK
 ```python
 from jdcloud_sdk.services.monitor.client import MonitorClient
 client = MonitorClient.MonitorClient(cred, region, config)
-# 使用 DescribeMetricDataRequest
+# Use DescribeMetricDataRequest
 ```
 
-### 相关
+### Related
 
-- `jdcloud-cloudmonitor-ops/SKILL.md` → 操作：查询监控数据
+- `jdcloud-cloudmonitor-ops/SKILL.md` → Operation: Query Monitoring Data
 
 ---
 
-## 陷阱 3: SDK `MonitorClient` 是模块不是类
+## Pitfall 3: SDK `MonitorClient` is a Module, Not a Class
 
-### 症状
+### Symptom
 
 ```python
 from jdcloud_sdk.services.monitor.client import MonitorClient
@@ -111,36 +113,36 @@ client = MonitorClient(cred, region)
 # TypeError: 'module' object is not callable
 ```
 
-### 根因
+### Root Cause
 
-`jdcloud_sdk` 的 `monitor/client.py` 导出了一个 **module**，其中包含
-`MonitorClient` 类。正确的引用路径是 `MonitorClient.MonitorClient`。
+`jdcloud_sdk`'s `monitor/client.py` exports a **module** that contains
+the `MonitorClient` class. The correct reference path is `MonitorClient.MonitorClient`.
 
-### 修复
+### Fix
 
 ```python
-# ❌ 错误
+# ❌ Wrong
 from jdcloud_sdk.services.monitor.client import MonitorClient
 client = MonitorClient(cred, region)
 
-# ✅ 正确
+# ✅ Correct
 from jdcloud_sdk.services.monitor.client import MonitorClient
 client = MonitorClient.MonitorClient(cred, region, config)
 ```
 
-### 通用 SDK 引用模式
+### General SDK Reference Pattern
 
-| SDK 模块 | 正确引用 |
-|----------|----------|
+| SDK Module | Correct Reference |
+|------------|-------------------|
 | `monitor.client` | `MonitorClient.MonitorClient(cred, region, config)` |
 | `vm.client` | `VmClient.VmClient(cred, region, config)` |
 | `vpc.client` | `VpcClient.VpcClient(cred, region, config)` |
 
 ---
 
-## 陷阱 4: SDK `Config` 构造函数签名
+## Pitfall 4: SDK `Config` Constructor Signature
 
-### 症状
+### Symptom
 
 ```python
 from jdcloud_sdk.core.config import Config
@@ -148,25 +150,25 @@ cfg = Config(scheme='https', endpoint='monitor.jdcloud-api.com', timeout=30)
 # AttributeError: 'Config' object has no attribute 'log'
 ```
 
-### 根因
+### Root Cause
 
-`Config.__init__` 的实际签名是 `(self, endpoint, scheme, timeout)`，
-参数顺序与直觉相反（endpoint 在前）。
+The actual signature of `Config.__init__` is `(self, endpoint, scheme, timeout)`,
+with the parameter order opposite to intuition (endpoint comes first).
 
-### 修复
+### Fix
 
 ```python
-# ❌ 错误顺序
+# ❌ Wrong order
 cfg = Config(scheme='https', endpoint='monitor.jdcloud-api.com', timeout=30)
 
-# ✅ 正确顺序
+# ✅ Correct order
 cfg = Config(endpoint='monitor.jdcloud-api.com', scheme='https', timeout=30)
 ```
 
-### 各产品 endpoint
+### Product Endpoints
 
-| 产品 | endpoint |
-|------|----------|
+| Product | endpoint |
+|---------|----------|
 | monitor | `monitor.jdcloud-api.com` |
 | vm | `vm.jdcloud-api.com` |
 | vpc | `vpc.jdcloud-api.com` |
@@ -176,114 +178,114 @@ cfg = Config(endpoint='monitor.jdcloud-api.com', scheme='https', timeout=30)
 
 ---
 
-## 陷阱 5: 指标名前缀规则
+## Pitfall 5: Metric Name Prefix Rules
 
-### 症状
+### Symptom
 
 ```bash
 $ jdc monitor describe-metric-data --input-json '{"metric":"cpu_util",...}'
 # error: "serviceCode and metric not match"
 ```
 
-### 根因
+### Root Cause
 
-不同产品的指标名有不同的前缀规则：
+Different products have different prefix rules for metric names:
 
-| 产品 | serviceCode | 指标前缀 | 示例 |
-|------|:----------:|:--------:|------|
+| Product | serviceCode | Metric Prefix | Example |
+|---------|:----------:|:------------:|---------|
 | VM | `vm` | `vm.` | `vm.cpu_util`, `vm.disk.bytes.read` |
-| VM (旧) | `vm` | 无前缀 | `cpu_util`, `memory.usage` |
+| VM (old) | `vm` | No prefix | `cpu_util`, `memory.usage` |
 | CLB | `lb` | `network.services.lb.` | `network.services.lb.active.connections` |
-| Redis | `redis` | `jmiss.redis.cluster.` 或 `redis_` | `jmiss.redis.cluster.memory_usage` |
+| Redis | `redis` | `jmiss.redis.cluster.` or `redis_` | `jmiss.redis.cluster.memory_usage` |
 
-### 修复
+### Fix
 
-**始终先用 `describe-metrics` 查询可用指标列表**，确认正确的 metric 名称：
+**Always use `describe-metrics` first to query the available metric list**, confirming the correct metric name:
 
 ```bash
 jdc --output json monitor describe-metrics --service-code vm 2>&1 | \
   python3 -c "import sys,json; [print(m['metric']) for m in json.load(sys.stdin)['result']['metrics']]"
 ```
 
-### 相关
+### Related
 
-- `jdcloud-cloudmonitor-ops/SKILL.md` → 操作：查询监控数据
+- `jdcloud-cloudmonitor-ops/SKILL.md` → Operation: Query Monitoring Data
 
 ---
 
-## 陷阱 6: 监控数据静默返回 null
+## Pitfall 6: Monitoring Data Silently Returns null
 
-### 症状
+### Symptom
 
 ```json
 {
   "result": {
     "metricDatas": [{
       "data": null,
-      "metric": {"metric": "vm.cpu_util", "metricName": "CPU使用率"}
+      "metric": {"metric": "vm.cpu_util", "metricName": "CPU Usage"}
     }]
   }
 }
 ```
 
-### 根因
+### Root Cause
 
-API 调用成功（`error: null`），但 `data` 字段为 `null`。原因：
-- VM 未安装云监控 agent
-- 时间范围内确实无数据
-- 资源刚创建，数据尚未上报
+The API call succeeds (`error: null`), but the `data` field is `null`. Reasons:
+- Cloud monitor agent not installed on the VM
+- No data exists within the time range
+- Resource was just created, data hasn't been reported yet
 
-**API 不报错 ≠ 有数据**。这是最常见的静默失败模式。
+**API returning no error ≠ data exists**. This is the most common silent failure pattern.
 
-### 修复
+### Fix
 
-**每次查询后必须检查 `data` 是否非空**：
+**Always check whether `data` is non-null after every query**:
 
 ```python
 items = resp.result.get('metricDatas', [])
 for item in items:
     data = item.get('data')
     if data is None:
-        print(f"[WARN] {item['metric']['metric']}: 无监控数据（可能未安装 agent）")
+        print(f"[WARN] {item['metric']['metric']}: No monitoring data (agent may not be installed)")
         continue
-    # 处理数据...
+    # Process data...
 ```
 
-### 相关
+### Related
 
-- 建议在查询前先检查告警规则列表，有告警规则 = 大概率有监控数据
+- It is recommended to check the alarm rule list before querying; having alarm rules = higher probability of monitoring data
 
 ---
 
-## 陷阱 7: 确定性 CLI bug 不应重试
+## Pitfall 7: Deterministic CLI Bugs Should Not Be Retried
 
-### 症状
+### Symptom
 
 ```
-jdc monitor --help → ValueError (重试 3 次，仍然失败)
-jdc monitor last-downsample --down-sample-type last → unrecognized arguments (重试 3 次，仍然失败)
+jdc monitor --help → ValueError (retried 3 times, still fails)
+jdc monitor last-downsample --down-sample-type last → unrecognized arguments (retried 3 times, still fails)
 ```
 
-### 根因
+### Root Cause
 
-SKILL.md 中的 jdc-first-with-fallback 策略规定"重试 3 次后降级到 SDK"。
-但 CLI 参数解析 bug 是**确定性的**（同样的输入永远产生同样的错误），
-重试不会修复问题，只会浪费时间。
+The jdc-first-with-fallback strategy in SKILL.md specifies "retry 3 times then fall back to SDK".
+But CLI parameter parsing bugs are **deterministic** (same input always produces the same error),
+so retrying will not fix the issue — it only wastes time.
 
-### 修复
+### Fix
 
-**区分可重试错误和不可重试错误**：
+**Distinguish between retryable and non-retryable errors**:
 
-| 错误类型 | 可重试？ | 示例 |
-|----------|:------:|------|
-| 网络超时 | ✅ 是 | `ConnectionError`, `Timeout` |
-| API 限流 | ✅ 是 | `Throttling`, `429` |
-| 服务端错误 | ✅ 是 | `InternalError`, `5xx` |
-| 参数解析错误 | ❌ 否 | `unrecognized arguments`, `ValueError` |
-| 认证失败 | ❌ 否 | `InvalidAccessKeyId`, `SignatureDoesNotMatch` |
-| 权限不足 | ❌ 否 | `Forbidden.RAM` |
+| Error Type | Retryable? | Example |
+|------------|:--------:|---------|
+| Network timeout | ✅ Yes | `ConnectionError`, `Timeout` |
+| API throttling | ✅ Yes | `Throttling`, `429` |
+| Server error | ✅ Yes | `InternalError`, `5xx` |
+| Parameter parsing error | ❌ No | `unrecognized arguments`, `ValueError` |
+| Authentication failure | ❌ No | `InvalidAccessKeyId`, `SignatureDoesNotMatch` |
+| Insufficient permissions | ❌ No | `Forbidden.RAM` |
 
-**建议的快速降级策略**：
+**Recommended fast-fallback strategy**:
 
 ```python
 def call_jdc_or_sdk(command, sdk_fn):
@@ -292,55 +294,55 @@ def call_jdc_or_sdk(command, sdk_fn):
     if result.success:
         return result
     
-    # 确定性错误 → 立即降级，不重试
+    # Deterministic error → fall back immediately, no retry
     if is_deterministic_error(result.stderr):
         print(f"[INFO] CLI deterministic error, falling back to SDK")
         return sdk_fn()
     
-    # 可重试错误 → 重试 3 次
+    # Retryable error → retry 3 times
     for i in range(3):
         time.sleep(2 ** i)
         result = run_jdc(command)
         if result.success:
             return result
     
-    # 最终降级
+    # Final fallback
     print(f"[INFO] CLI failed after 3 retries, falling back to SDK")
     return sdk_fn()
 ```
 
 ---
 
-## 通用修复模式
+## General Fix Patterns
 
-### 监控数据采集安全流程
+### Secure Monitoring Data Collection Flow
 
 ```
-1. describe-metrics → 确认指标名
-        │
-2. describe-alarms → 确认是否有告警规则（间接判断 agent 是否安装）
-        │
+1. describe-metrics → confirm metric name
+        |
+2. describe-alarms → confirm whether alarm rules exist (indirect check if agent is installed)
+        |
         ▼
-3. describe-metric-data → 拉取数据
-        │
+3. describe-metric-data → fetch data
+        |
         ▼
-4. 检查 data != null → 是 → 处理数据
-                      → 否 → WARNING + 标记为"无监控"
+4. Check data != null → yes → process data
+                      → no  → WARNING + mark as "no monitoring"
 ```
 
-### 代码审查检查点
+### Code Review Checklist
 
-- [ ] 是否先用 `describe-metrics` 确认了指标名？
-- [ ] 是否检查了 `data` 字段非 null？
-- [ ] 是否区分了可重试和不可重试的 CLI 错误？
-- [ ] SDK 引用是否使用了正确的 `Module.Class` 模式？
-- [ ] `Config` 参数顺序是否正确（`endpoint, scheme, timeout`）？
-- [ ] 是否处理了"无监控数据"的静默失败？
+- [ ] Was `describe-metrics` used to confirm the metric name first?
+- [ ] Was the `data` field checked for non-null?
+- [ ] Were retryable and non-retryable CLI errors distinguished?
+- [ ] Does the SDK reference use the correct `Module.Class` pattern?
+- [ ] Is the `Config` parameter order correct (`endpoint, scheme, timeout`)?
+- [ ] Was the "no monitoring data" silent failure handled?
 
 ---
 
-## 变更记录
+## Changelog
 
-| 日期 | 版本 | 变更 |
-|------|------|------|
-| 2026-06-09 | 1.0.0 | 初始版本，收录 7 个已知陷阱 |
+| Date | Version | Change |
+|------|---------|--------|
+| 2026-06-09 | 1.0.0 | Initial version, covering 7 known pitfalls |

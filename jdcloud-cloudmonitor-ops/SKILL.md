@@ -15,8 +15,8 @@ compatibility: >-
   to JD Cloud endpoints, and official JD Cloud CLI (jdc) for this product.
 metadata:
   author: buhaiqing
-  version: "1.7.0"
-  last_updated: "2026-06-18"
+  version: "1.8.0"
+  last_updated: "2026-06-26"
   runtime: Harness AI Agent
   api_profile: "monitor v1 - https://docs.jdcloud.com/cn/monitoring/api/overview"
   cli_applicability: jdc-first-with-fallback
@@ -42,114 +42,114 @@ metadata:
 
 > This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
 
-# 京东云云监控(CloudMonitor)运维 Skill
+# JD Cloud CloudMonitor Ops Skill
 
 ## Overview
 
-京东云云监控(CloudMonitor)是对用户名下云资源进行监控和报警的服务，支持40余种云产品的监控。本 Skill 是 **运维 Runbook**：明确的触发范围、凭证规则、前置检查、**jdc-first 执行（SDK/API 降级）**、响应验证和失败恢复。
+JD Cloud CloudMonitor is a monitoring and alerting service for cloud resources under your account, supporting monitoring of over 40 cloud products. This skill is an **Ops Runbook**: explicit trigger scope, credential rules, pre-flight checks, **jdc-first execution (SDK/API fallback)**, response validation, and failure recovery.
 
 ### CLI applicability (repository policy)
 
-- **`cli_applicability: jdc-first-with-fallback`:** 官方 `jdc` 支持云监控产品。Agent **必须**优先使用 `jdc` 作为主执行路径。若 `jdc` 安装或命令执行失败，Agent **必须**最多重试 **3 次**（指数退避：0s → 2s → 4s）。仅当 **3 次连续失败** 后，才降级到 **SDK/API**。两条路径均需记录。
-- **路径偏好**: 遵循 **jdc-first with SDK fallback** 策略。`jdc` 优先用于 CLI 操作；SDK 用于批量操作/集成测试（jdc 不可用时的降级路径）。
+- **`cli_applicability: jdc-first-with-fallback`:** The official `jdc` supports the CloudMonitor product. The Agent **must** prioritize `jdc` as the primary execution path. If `jdc` installation or command execution fails, the Agent **must** retry up to **3 times** (exponential backoff: 0s → 2s → 4s). Only after **3 consecutive failures** should it fall back to **SDK/API**. Both paths must be logged.
+- **Path preference**: Follow the **jdc-first with SDK fallback** strategy. `jdc` is preferred for CLI operations; SDK is used for batch operations/integration tests (fallback path when jdc is unavailable).
 
 ## Changelog
 
-| 版本 | 日期 | 变更内容 |
-|------|------|---------|
-| 1.7.0 | 2026-06-18 | **GCL v2 rollout**: Enhanced Quality Gate with Phase 6 Hallucination Detection Layer (H, recommended) and Phase 7 Reflexion Integration. Added pre-execution structural validity check for CLI parameters and JSON payloads. Integrated `docs/failure-patterns.md` for cross-session failure memory. Aligned with AGENTS.md GCL v2 specification (§10-11). |
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.8.0 | 2026-06-26 | **Full English translation**: All SKILL.md and reference files translated from Chinese to English. Consolidated cli-commands.md into cli-usage.md, best-practices.md into monitoring.md, removed orphan eval_queries.md. Chinese trigger keywords preserved in frontmatter description for agent matching. |
 | 1.6.0 | 2026-06-18 | Initial GCL v2 content: Added Phase 6 H layer and Phase 7 Reflexion sections to Quality Gate. |
-| 1.5.0 | 2026-06-10 | **双向路由与 GCL 章节重构**：① frontmatter 增加 `parent_skill: null` + `ecosystem_skills`（包含 `jdcloud-alert-intelligence`）;② "不应使用本 Skill 的场景"表新增两条指向 `jdcloud-alert-intelligence` 的委派规则（告警后处理 / 告警历史趋势分析）；③ `## Quality Gate (GCL)` 章节原本被 `## Smart Fallback Strategy` 拆断（出现"continued"续接），本次将 loop diagram / Artifacts / Integration / Operation-specific behavior 完整整合进 GCL 章节，删除续接；④ Reference 目录补充 `rubric.md` 与 `prompt-templates.md` 链接（达成 8/8 ref 校验）。 |
-| 1.4.0 | 2026-06-04 | **GCL 推广（recommended）**：新增 `## Quality Gate (GCL)` 章节，将本 skill 接入仓库级 Generator-Critic-Loop。新增 `references/rubric.md`（5 维 rubric，云监控特有的静默故障保护：删/禁告警规则的 `confirm=DELETE` / `confirm=DISABLE` 门、规则 7 天内曾触发需 `confirm=DELETE_AFTER_FIRING`、prod 标签双重确认、告警通道不能为空）和 `references/prompt-templates.md`（G/C/O prompt 模板）。`max_iterations=3`（按 `AGENTS.md` §8 recommended）。`safety_confirm_required=true` for `delete-alarm-rule`, `disable-alarm-rule`。 |
-| 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: 修复 `--output json` 定位（必须放在子命令之前）、删除不存在的 `--no-interactive` 标志、修正凭证文档说明（CLI 仅从 `~/.jdc/config` INI 读取，不支持环境变量）、增加了沙箱配置工作区 |
-| 1.2.0 | 2026-05-06 | **jdc-first 降级策略**：执行流程改为 `jdc` CLI 优先（主路径）+ SDK/API 降级（3次重试后）；前提条件更新为 `uv` 引导的 Phase 1 (jdc) / Phase 2 (SDK 降级)；路径偏好翻转；前置检查顺序调整 |
-| 1.1.0 | 2026-05-03 | 添加 SDK/API 双路径执行流程、完善 frontmatter、新增 api-sdk-usage.md |
-| 1.0.0 | 2026-04-28 | 初始版本，包含云监控核心功能、告警配置和运维最佳实践 |
+| 1.5.0 | 2026-06-10 | **Bidirectional routing & GCL chapter restructure**: ① Added `parent_skill: null` + `ecosystem_skills` (includes `jdcloud-alert-intelligence`) to frontmatter; ② Added two delegation rules pointing to `jdcloud-alert-intelligence` in the "Scenarios where this skill should NOT be used" table (alert post-processing / alarm history trend analysis); ③ The `## Quality Gate (GCL)` section was previously broken by `## Smart Fallback Strategy` (appeared as "continued"), now fully integrated loop diagram / Artifacts / Integration / Operation-specific behavior into the GCL chapter, removing the continuation; ④ Added `rubric.md` and `prompt-templates.md` links to Reference directory (achieving 8/8 ref validation). |
+| 1.4.0 | 2026-06-04 | **GCL rollout (recommended)**: Added `## Quality Gate (GCL)` section, connecting this skill to the repository-wide Generator-Critic-Loop. Added `references/rubric.md` (5-dimension rubric, CloudMonitor-specific silent failure protection: `confirm=DELETE` / `confirm=DISABLE` gate for delete/disable alarm rules, `confirm=DELETE_AFTER_FIRING` for rules fired in the last 7 days, prod tag double-confirm, notification channel cannot be empty) and `references/prompt-templates.md` (G/C/O prompt templates). `max_iterations=3` (per `AGENTS.md` §8 recommended). `safety_confirm_required=true` for `delete-alarm-rule`, `disable-alarm-rule`. |
+| 1.3.0 | 2026-05-06 | **Critical CLI behavioral fixes**: Fixed `--output json` placement (must be before subcommand), removed non-existent `--no-interactive` flag, corrected credential documentation (CLI only reads from `~/.jdc/config` INI, does not support environment variables), added sandbox config workspace |
+| 1.2.0 | 2026-05-06 | **jdc-first fallback strategy**: Execution flow changed to `jdc` CLI first (primary path) + SDK/API fallback (after 3 retries); prerequisites updated to `uv`-guided Phase 1 (jdc) / Phase 2 (SDK fallback); path preference flipped; pre-flight check order adjusted |
+| 1.1.0 | 2026-05-03 | Added SDK/API dual-path execution flow, improved frontmatter, added api-sdk-usage.md |
+| 1.0.0 | 2026-04-28 | Initial version, includes CloudMonitor core functionality, alarm configuration, and operations best practices |
 
-## 触发范围（Agent 可读）
+## Trigger Scope (Agent-readable)
 
-### 应使用本 Skill 的场景
-- 用户提及"云监控"、"CloudMonitor"、"监控"、"告警"等关键词
-- 任务涉及监控数据查询、告警规则 CRUD、告警历史查看、自定义监控上报
-- 任务关键词：describe-metric-data、create-alarm、alarm、metric、dashboard、put-metric-data
-- 用户要求对云资源监控指标进行查询、配置告警、或分析告警历史
+### Scenarios where this skill SHOULD be used
+- User mentions keywords such as "CloudMonitor", "云监控", "monitoring", "告警"
+- Task involves monitoring data queries, alarm rule CRUD, alarm history viewing, custom monitoring reporting
+- Task keywords: describe-metric-data, create-alarm, alarm, metric, dashboard, put-metric-data
+- User requests cloud resource monitoring metric querying, alarm configuration, or alarm history analysis
 
-### 不应使用本 Skill 的场景
-- 任务纯粹是云主机(VM)的创建/删除/启停 → 委派给 `jdcloud-vm-ops`
-- 任务纯粹是云数据库(RDS)的管理 → 委派给 `jdcloud-rds-ops`
-- 任务纯粹是负载均衡(LB)的配置 → 委派给 `jdcloud-lb-ops`
-- 任务涉及账单/账户管理 → 委派给 `jdcloud-billing-ops`
-- 任务纯粹是**告警后处理**（聚合 / 分级 / 抑制 / 报告 / 告警疲劳统计 / 周报生成） → 委派给 `jdcloud-alert-intelligence`（只读分析 skill；本 skill 不做告警降噪或值班疲劳分析）
-- 任务需要分析**告警历史趋势**、**告警簇模式挖掘**、**P0/P1 自动分级建议** → 委派给 `jdcloud-alert-intelligence`（基于 `monitor describe-alarm-history` 的聚合报告）
+### Scenarios where this skill SHOULD NOT be used
+- Task is purely VM creation/deletion/start-stop → Delegate to `jdcloud-vm-ops`
+- Task is purely RDS database management → Delegate to `jdcloud-rds-ops`
+- Task is purely Load Balancer (LB) configuration → Delegate to `jdcloud-lb-ops`
+- Task involves billing/account management → Delegate to `jdcloud-billing-ops`
+- Task is purely **alert post-processing** (aggregation / classification / suppression / reporting / alert fatigue statistics / weekly report generation) → Delegate to `jdcloud-alert-intelligence` (read-only analysis skill; this skill does not handle alert noise reduction or on-call fatigue analysis)
+- Task requires analyzing **alarm history trends**, **alarm cluster pattern mining**, **P0/P1 auto-classification suggestions** → Delegate to `jdcloud-alert-intelligence` (aggregated reports based on `monitor describe-alarm-history`)
 
-### 委派规则
-- 若用户需要先确认某资源（如 VM）的监控数据，先用本 Skill 查询，再根据结果建议使用对应的资源管理 Skill
-- 若请求涉及多个独立云产品的监控，分别用本 Skill 对每个产品独立查询
+### Delegation Rules
+- If the user needs to first confirm monitoring data for a resource (e.g., VM), use this skill to query first, then recommend the appropriate resource management skill based on the results
+- If the request involves monitoring across multiple independent cloud products, use this skill to query each product independently
 
-## 变量约定（Agent 可读）
+## Variable Convention (Agent-readable)
 
-本 Skill 使用结构化占位符，防止 prompt 注入和解析歧义：
+This skill uses structured placeholders to prevent prompt injection and parsing ambiguity:
 
-| 占位符 | 含义 | Agent 行为 |
-|--------|------|-----------|
-| `{{env.JDC_ACCESS_KEY}}` | Agent 运行时环境变量 | 绝不向用户索取；未设置则失败 |
-| `{{env.JDC_SECRET_KEY}}` | Agent 运行时环境变量 | 绝不向用户索取；未设置则失败 |
-| `{{env.JDC_REGION}}` | Agent 运行时环境变量 | 默认 `cn-north-1`，可被用户覆盖 |
-| `{{user.region}}` | 须向用户收集 | 询问一次，缓存复用 |
-| `{{user.resource_id}}` | 须向用户收集 | 询问一次，缓存复用 |
-| `{{user.alarm_id}}` | 须向用户收集 | 询问一次，缓存复用 |
-| `{{output.alarm_id}}` | 从 CLI JSON 输出捕获 | 从 `$.result.alarmId` 解析 |
+| Placeholder | Meaning | Agent Behavior |
+|-------------|---------|----------------|
+| `{{env.JDC_ACCESS_KEY}}` | Agent runtime environment variable | Never request from the user; fail if unset |
+| `{{env.JDC_SECRET_KEY}}` | Agent runtime environment variable | Never request from the user; fail if unset |
+| `{{env.JDC_REGION}}` | Agent runtime environment variable | Default `cn-north-1`, can be overridden by user |
+| `{{user.region}}` | Must collect from user | Ask once, cache and reuse |
+| `{{user.resource_id}}` | Must collect from user | Ask once, cache and reuse |
+| `{{user.alarm_id}}` | Must collect from user | Ask once, cache and reuse |
+| `{{output.alarm_id}}` | Captured from CLI JSON output | Parse from `$.result.alarmId` |
 
-> 规则：`{{env.*}}` 占位符不得向用户暴露或索取。`{{user.*}}` 占位符须通过交互收集。
-> **安全警告：** **绝不**在控制台输出、调试信息或日志中记录、打印或暴露 `JDC_SECRET_KEY`（或任何密钥）。验证时仅检查存在性（如 `if os.environ.get('JDC_SECRET_KEY')`），不打印实际值。如需记录凭证状态，使用脱敏占位符如 `JDC_SECRET_KEY=<masked>` 或 `JDC_SECRET_KEY=***`。此规则适用于所有执行路径（SDK、CLI 及调试脚本）。
+> Rule: `{{env.*}}` placeholders must NOT be exposed or requested from the user. `{{user.*}}` placeholders must be collected through interaction.
+> **Security Warning:** **Never** log, print, or expose the `JDC_SECRET_KEY` (or any secret) in console output, debug information, or logs. When verifying, only check existence (e.g., `if os.environ.get('JDC_SECRET_KEY')`), do not print the actual value. If credential status needs to be logged, use masked placeholders such as `JDC_SECRET_KEY=<masked>` or `JDC_SECRET_KEY=***`. This rule applies to all execution paths (SDK, CLI, and debug scripts).
 
-## 输出解析规则（Agent 可读）
+## Output Parsing Rules (Agent-readable)
 
-### CLI 强制约定
-- 所有 CLI 命令必须将 `--output json` **前置**（放在子命令之前）：`jdc --output json monitor <command> ...`
-- 所有 CLI 命令**不得**使用 `--no-interactive`（此标志不存在）
-- 时间戳采用 ISO 8601 格式带时区：`2026-04-28T10:00:00+08:00`
-- 布尔值：`true` / `false`（小写）
+### CLI Mandatory Conventions
+- All CLI commands must place `--output json` **before** the subcommand: `jdc --output json monitor <command> ...`
+- All CLI commands **must NOT** use `--no-interactive` (this flag does not exist)
+- Timestamps use ISO 8601 format with timezone: `2026-04-28T10:00:00+08:00`
+- Boolean values: `true` / `false` (lowercase)
 
-### SDK 响应约定
-- SDK 返回对象属性遵循 OpenAPI 定义
-- 错误通过 `ClientException` / `ServerException` 抛出
-- 时间戳格式同 CLI
+### SDK Response Conventions
+- SDK return object properties follow OpenAPI definitions
+- Errors are thrown via `ClientException` / `ServerException`
+- Timestamp format is the same as CLI
 
-### 关键 JSON 路径
-| 操作 | JSON 路径 | 类型 | 说明 |
-|------|-----------|------|------|
-| 创建告警 | `$.result.alarmId` / `response.result.alarmId` | string | 告警规则 ID |
-| 查询告警列表 | `$.result.alarms[*].alarmId` | array | 所有告警 ID |
-| 查询告警详情 | `$.result.alarm.status` | string | ALARM / OK / INSUFFICIENT_DATA |
-| 查询监控数据 | `$.result.metricDatas[*].value` | array | 监控数值 |
-| 查询服务列表 | `$.result.services[*].serviceCode` | array | 服务代码列表 |
+### Key JSON Paths
+| Operation | JSON Path | Type | Description |
+|-----------|-----------|------|-------------|
+| Create alarm | `$.result.alarmId` / `response.result.alarmId` | string | Alarm rule ID |
+| Query alarm list | `$.result.alarms[*].alarmId` | array | All alarm IDs |
+| Query alarm details | `$.result.alarm.status` | string | ALARM / OK / INSUFFICIENT_DATA |
+| Query metric data | `$.result.metricDatas[*].value` | array | Metric values |
+| Query service list | `$.result.services[*].serviceCode` | array | Service code list |
 
-### 操作超时约定
-| 操作 | 最长等待 | 轮询间隔 |
-|------|---------|---------|
-| 创建告警规则 | 10s（同步操作） | - |
-| 查询监控数据 | 30s（API 限流重试） | 2s |
-| 删除告警规则 | 10s（同步操作） | - |
+### Operation Timeout Conventions
+| Operation | Max Wait | Polling Interval |
+|-----------|----------|------------------|
+| Create alarm rule | 10s (synchronous operation) | - |
+| Query metric data | 30s (API rate limit retry) | 2s |
+| Delete alarm rule | 10s (synchronous operation) | - |
 
-## 核心功能
+## Core Functions
 
-- **监控数据查询**: 查询云资源的实时和历史监控指标数据
-- **告警规则管理**: 创建、修改、启用/禁用、删除告警规则
-- **告警历史查看**: 查询告警触发历史和通知记录
-- **自定义监控**: 上报和查询自定义业务指标
-- **Dashboard管理**: 监控面板和图表管理
+- **Metric data query**: Query real-time and historical monitoring metric data for cloud resources
+- **Alarm rule management**: Create, modify, enable/disable, delete alarm rules
+- **Alarm history viewing**: Query alarm trigger history and notification records
+- **Custom monitoring**: Report and query custom business metrics
+- **Dashboard management**: Monitoring dashboard and chart management
 
-## 执行流程
+## Execution Flow
 
-每个操作遵循：**前置检查 → 执行（jdc 主路径 / SDK 降级） → 后置验证 → 失败恢复**。Agent 不得跳过任何阶段。
+Each operation follows: **Pre-flight check → Execute (jdc primary path / SDK fallback) → Post-execution validation → Failure recovery**. The Agent must not skip any phase.
 
-**jdc-first 策略：** Agent **必须**优先尝试 `jdc` CLI（主路径）。若 `jdc` 失败后（指数退避 **3 次重试**：0s → 2s → 4s），降级到 SDK/API。
+**jdc-first strategy:** The Agent **must** prioritize trying `jdc` CLI (primary path). If `jdc` fails after (exponential backoff **3 retries**: 0s → 2s → 4s), fall back to SDK/API.
 
-> 详细执行流程（创建告警规则 / 查询监控数据 / 删除告警规则）见 [references/operations.md](references/operations.md)。
-> 智能降级策略（错误分类 / CLI Bug 绕过 / SDK 引用陷阱 / 静默失败）见 [references/fallback-strategy.md](references/fallback-strategy.md)。
-> 前提条件与环境配置见 [references/prerequisites.md](references/prerequisites.md)。
-> CLI 命令速查见 [references/cli-commands.md](references/cli-commands.md)。
+> Detailed execution flow (create alarm rule / query metric data / delete alarm rule) see [references/operations.md](references/operations.md).
+> Smart fallback strategy (error classification / CLI Bug workarounds / SDK reference pitfalls / silent failures) see [references/fallback-strategy.md](references/fallback-strategy.md).
+> Prerequisites and environment configuration see [references/prerequisites.md](references/prerequisites.md).
+> CLI command reference see [references/cli-usage.md](references/cli-usage.md).
 
 ## Quality Gate (GCL)
 
@@ -310,7 +310,7 @@ During GCL Pre-flight (step [0]), the Orchestrator MAY:
 ### Integration with existing flows
 
 The GCL **wraps** the jdc-first / SDK-fallback flow defined under
-`## 执行流程` above. The Generator (G) IS the existing
+`## Execution Flow` above. The Generator (G) IS the existing
 jdc-or-SDK executor. The Critic (C) is a new, read-only role with no
 `jdc` / SDK access. The Orchestrator (O) owns the loop and persists the
 GCL trace.
@@ -333,23 +333,21 @@ GCL trace.
   additional `confirm=DELETE_PROD`. Must include pre-delete snapshot of
   rule definition + recent alert history.
 
-## Reference 目录
+## Reference Directory
 
-| 路径 | 用途 |
-|------|------|
-| [references/core-concepts.md](references/core-concepts.md) | 云监控核心概念和术语 |
-| [references/api-sdk-usage.md](references/api-sdk-usage.md) | SDK 操作映射、请求/响应字段、错误处理 |
-| [references/cli-usage.md](references/cli-usage.md) | 详细的 CLI 命令说明、CLI vs API 覆盖对比 |
-| [references/troubleshooting.md](references/troubleshooting.md) | 常见问题及解决方案 |
-| [references/monitoring.md](references/monitoring.md) | 监控指标和告警配置 |
-| [references/integration.md](references/integration.md) | SDK、OpenAPI、Prometheus、Grafana、Webhook 集成 |
-| [references/integration-java.md](references/integration-java.md) | Java SDK 集成 |
-| [references/integration-iac.md](references/integration-iac.md) | Terraform & CI/CD 集成 |
-| [references/rubric.md](references/rubric.md) | GCL Critic 评分规则（5 维 rubric + 静默故障保护） |
-| [references/prompt-templates.md](references/prompt-templates.md) | Generator / Critic / Orchestrator prompt 骨架 |
-| [references/operations.md](references/operations.md) | 核心操作执行流程（创建告警 / 查询监控 / 删除告警） |
-| [references/fallback-strategy.md](references/fallback-strategy.md) | 智能降级策略（错误分类 / CLI Bug 绕过 / SDK 陷阱） |
-| [references/prerequisites.md](references/prerequisites.md) | 前提条件与环境配置（uv / jdc / SDK 安装） |
-| [references/cli-commands.md](references/cli-commands.md) | CLI 命令速查（常用 jdc monitor 命令） |
-| [references/best-practices.md](references/best-practices.md) | 运维最佳实践、监控指标、API 限制 |
-| [references/monitor-pitfalls.md](references/monitor-pitfalls.md) | 监控陷阱库（7 个已知陷阱 + 修复模式） |
+| Path | Purpose |
+|------|---------|
+| [references/core-concepts.md](references/core-concepts.md) | CloudMonitor core concepts and terminology |
+| [references/api-sdk-usage.md](references/api-sdk-usage.md) | SDK operation mapping, request/response fields, error handling |
+| [references/cli-usage.md](references/cli-usage.md) | CLI command reference + detailed CLI command descriptions |
+| [references/troubleshooting.md](references/troubleshooting.md) | Common issues and solutions |
+| [references/monitoring.md](references/monitoring.md) | Monitoring metrics, alarm configuration + operations best practices |
+| [references/integration.md](references/integration.md) | SDK, OpenAPI, Prometheus, Grafana, Webhook integration |
+| [references/integration-java.md](references/integration-java.md) | Java SDK integration |
+| [references/integration-iac.md](references/integration-iac.md) | Terraform & CI/CD integration |
+| [references/rubric.md](references/rubric.md) | GCL Critic scoring rules (5-dimension rubric + silent failure protection) |
+| [references/prompt-templates.md](references/prompt-templates.md) | Generator / Critic / Orchestrator prompt skeletons |
+| [references/operations.md](references/operations.md) | Core operation execution flow (create alarm / query monitoring / delete alarm) |
+| [references/fallback-strategy.md](references/fallback-strategy.md) | Smart fallback strategy (error classification / CLI Bug workarounds / SDK pitfalls) |
+| [references/prerequisites.md](references/prerequisites.md) | Prerequisites and environment configuration (uv / jdc / SDK installation) |
+| [references/monitor-pitfalls.md](references/monitor-pitfalls.md) | Monitoring pitfalls (7 known pitfalls + fix patterns) |

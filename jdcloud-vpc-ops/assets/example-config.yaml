@@ -1,29 +1,29 @@
-# jdcloud-vpc-ops 配置示例
+# jdcloud-vpc-ops Configuration Example
 
 # ================================================
-# 凭证 — NEVER hardcode,NEVER log,NEVER commit
+# Credentials — NEVER hardcode, NEVER log, NEVER commit
 # ================================================
-# CLI 模式: ~/.jdc/config INI 文件
-# SDK 模式: env vars JDC_ACCESS_KEY / JDC_SECRET_KEY
-# .env 文件: cp .env.example .env (已 gitignored)
+# CLI mode: ~/.jdc/config INI file
+# SDK mode: env vars JDC_ACCESS_KEY / JDC_SECRET_KEY
+# .env file: cp .env.example .env (already gitignored)
 
 # ================================================
-# 运行时环境变量 ({{env.*}})
+# Runtime environment variables ({{env.*}})
 # ================================================
 x-env: &env
   JDC_ACCESS_KEY: "{{env.JDC_ACCESS_KEY}}"   # NEVER ask user
-  JDC_SECRET_KEY: "{{env.JDC_SECRET_KEY}}"   # NEVER log,NEVER print
-  JDC_REGION: "{{env.JDC_REGION:cn-north-1}}" # 默认地域
+  JDC_SECRET_KEY: "{{env.JDC_SECRET_KEY}}"   # NEVER log, NEVER print
+  JDC_REGION: "{{env.JDC_REGION:cn-north-1}}" # Default region
 
 # ================================================
-# 用户输入 ({{user.*}})
+# User input ({{user.*}})
 # ================================================
 x-user: &user
   vpc_name: "{{user.vpc_name:prod-beijing-vpc}}"
   vpc_cidr: "{{user.vpc_cidr:10.0.0.0/16}}"
   vpc_description: "{{user.vpc_description:Production VPC}}"
 
-# 子网配置
+# Subnet configuration
 subnet_config:
   count: "{{user.subnet_count:3}}"
   items:
@@ -37,7 +37,7 @@ subnet_config:
       cidr: "{{user.subnet_3_cidr:10.0.3.0/24}}"
       az: "{{user.subnet_3_az:cn-north-1b}}"
 
-# 安全组配置
+# Security group configuration
 sg_items:
   - sg_name: "web-sg"
     description: "Web tier"
@@ -72,7 +72,7 @@ sg_items:
         description: "Redis from internal"
 
 # ================================================
-# 操作参数
+# Operation parameters
 # ================================================
 general:
   region: "{{env.JDC_REGION:cn-north-1}}"
@@ -81,12 +81,12 @@ general:
   retry_backoff_seconds: 2
 
 # ================================================
-# 安全门配置
+# Safety gate configuration
 # ================================================
 safety_gates:
-  # 删除操作必须用户逐字确认
+  # Delete operations require exact user confirmation
   require_exact_confirmation: true
-  # 高危端口需要额外确认
+  # High-risk ports require additional confirmation
   high_risk_ports: [22, 3389, 6379, 3306]
-  # 最大安全组规则数(超过此数建议清理)
+  # Max security group rules count (recommend cleanup if exceeded)
   sg_rule_warning_threshold: 80

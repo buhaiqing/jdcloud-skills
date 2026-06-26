@@ -43,15 +43,15 @@ elasticsearch:
   
   # Resource tags for management and billing
   tags:
-    - key: "环境"
+    - key: "Environment"
       value: "production"
-    - key: "客户"
+    - key: "Customer"
       value: "internal"
-    - key: "项目"
+    - key: "Project"
       value: "myapp"
-    - key: "负责人"
+    - key: "Owner"
       value: "ops-team"
-    - key: "成本中心"
+    - key: "CostCenter"
       value: "cc-001"
 
 # Backup configuration

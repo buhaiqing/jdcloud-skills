@@ -1,136 +1,136 @@
-# 云监控监控指标与告警配置
+# Cloud Monitor Metrics and Alarm Configuration
 
-## 监控指标概述
+## Metric Overview
 
-云监控支持 40+ 种云产品的监控，涵盖计算、网络、存储、数据库、中间件等多个类别。
+Cloud Monitor supports 40+ cloud product monitoring, covering compute, network, storage, database, middleware, and other categories.
 
-## 云主机(VM)监控指标
+## Virtual Machine (VM) Monitoring Metrics
 
-### CPU 监控
+### CPU Monitoring
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| vm.cpu.util | CPU 使用率 | % | CPU 使用率百分比 |
-| vm.cpu.idle | CPU 空闲率 | % | CPU 空闲百分比 |
-| vm.cpu.system | 系统 CPU 使用率 | % | 内核态 CPU 使用率 |
-| vm.cpu.user | 用户 CPU 使用率 | % | 用户态 CPU 使用率 |
-| vm.cpu.iowait | IO 等待率 | % | CPU 等待 IO 的百分比 |
-| vm.cpu.load1 | 1分钟平均负载 | - | 系统 1 分钟平均负载 |
-| vm.cpu.load5 | 5分钟平均负载 | - | 系统 5 分钟平均负载 |
-| vm.cpu.load15 | 15分钟平均负载 | - | 系统 15 分钟平均负载 |
+| vm.cpu.util | CPU Usage | % | CPU usage percentage |
+| vm.cpu.idle | CPU Idle | % | CPU idle percentage |
+| vm.cpu.system | System CPU Usage | % | Kernel-mode CPU usage |
+| vm.cpu.user | User CPU Usage | % | User-mode CPU usage |
+| vm.cpu.iowait | I/O Wait | % | CPU I/O wait percentage |
+| vm.cpu.load1 | 1-min Load Average | - | System 1-minute average load |
+| vm.cpu.load5 | 5-min Load Average | - | System 5-minute average load |
+| vm.cpu.load15 | 15-min Load Average | - | System 15-minute average load |
 
-### 内存监控
+### Memory Monitoring
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| vm.memory.util | 内存使用率 | % | 内存使用百分比 |
-| vm.memory.used | 已用内存 | MB | 已使用的内存大小 |
-| vm.memory.free | 空闲内存 | MB | 空闲内存大小 |
-| vm.memory.buffers | 缓冲区 | MB | 缓冲区大小 |
-| vm.memory.cached | 缓存 | MB | 缓存大小 |
-| vm.memory.swap.util | 交换分区使用率 | % | Swap 使用百分比 |
-| vm.memory.swap.used | 已用交换分区 | MB | 已使用的 Swap 大小 |
+| vm.memory.util | Memory Usage | % | Memory usage percentage |
+| vm.memory.used | Used Memory | MB | Used memory size |
+| vm.memory.free | Free Memory | MB | Free memory size |
+| vm.memory.buffers | Buffers | MB | Buffer size |
+| vm.memory.cached | Cached | MB | Cache size |
+| vm.memory.swap.util | Swap Usage | % | Swap usage percentage |
+| vm.memory.swap.used | Used Swap | MB | Used swap size |
 
-### 磁盘监控
+### Disk Monitoring
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| vm.disk.util | 磁盘使用率 | % | 磁盘空间使用百分比 |
-| vm.disk.used | 已用磁盘空间 | GB | 已使用的磁盘空间 |
-| vm.disk.free | 空闲磁盘空间 | GB | 空闲磁盘空间 |
-| vm.disk.read | 磁盘读速率 | Bps | 磁盘每秒读取字节数 |
-| vm.disk.write | 磁盘写速率 | Bps | 磁盘每秒写入字节数 |
-| vm.disk.iops.read | 磁盘读 IOPS | 次/秒 | 每秒读操作次数 |
-| vm.disk.iops.write | 磁盘写 IOPS | 次/秒 | 每秒写操作次数 |
+| vm.disk.util | Disk Usage | % | Disk space usage percentage |
+| vm.disk.used | Used Disk Space | GB | Used disk space |
+| vm.disk.free | Free Disk Space | GB | Free disk space |
+| vm.disk.read | Disk Read Rate | Bps | Disk bytes read per second |
+| vm.disk.write | Disk Write Rate | Bps | Disk bytes written per second |
+| vm.disk.iops.read | Disk Read IOPS | ops/s | Read operations per second |
+| vm.disk.iops.write | Disk Write IOPS | ops/s | Write operations per second |
 
-### 网络监控
+### Network Monitoring
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| vm.network.in | 内网入速率 | bps | 内网每秒接收比特数 |
-| vm.network.out | 内网出速率 | bps | 内网每秒发送比特数 |
-| vm.network.packets.in | 内网入包量 | 个/秒 | 内网每秒接收包数 |
-| vm.network.packets.out | 内网出包量 | 个/秒 | 内网每秒发送包数 |
-| vm.network.drop.in | 内网入丢包率 | 个/秒 | 内网每秒丢弃的接收包数 |
-| vm.network.drop.out | 内网出丢包率 | 个/秒 | 内网每秒丢弃的发送包数 |
-| vm.tcp.connections | TCP 连接数 | 个 | 当前 TCP 连接总数 |
+| vm.network.in | Internal Inbound Rate | bps | Internal network bits received per second |
+| vm.network.out | Internal Outbound Rate | bps | Internal network bits sent per second |
+| vm.network.packets.in | Internal Inbound Packets | packets/s | Internal network packets received per second |
+| vm.network.packets.out | Internal Outbound Packets | packets/s | Internal network packets sent per second |
+| vm.network.drop.in | Internal Inbound Drop Rate | packets/s | Internal network received packets dropped per second |
+| vm.network.drop.out | Internal Outbound Drop Rate | packets/s | Internal network sent packets dropped per second |
+| vm.tcp.connections | TCP Connections | count | Current total TCP connections |
 
-### 进程监控
+### Process Monitoring
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| vm.process.total | 总进程数 | 个 | 系统总进程数 |
-| vm.process.running | 运行中进程数 | 个 | 正在运行的进程数 |
-| vm.process.blocked | 阻塞进程数 | 个 | 阻塞的进程数 |
+| vm.process.total | Total Processes | count | Total system processes |
+| vm.process.running | Running Processes | count | Currently running processes |
+| vm.process.blocked | Blocked Processes | count | Blocked processes |
 
-## 云数据库 RDS 监控指标
+## RDS Monitoring Metrics
 
-### MySQL 监控
+### MySQL Monitoring
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| rds.cpu.util | CPU 使用率 | % | CPU 使用率 |
-| rds.memory.util | 内存使用率 | % | 内存使用率 |
-| rds.storage.util | 存储空间使用率 | % | 存储空间使用率 |
-| rds.connection.util | 连接数使用率 | % | 连接数使用率 |
-| rds.connections.active | 活跃连接数 | 个 | 当前活跃连接数 |
-| rds.connections.total | 总连接数 | 个 | 当前总连接数 |
-| rds.qps | QPS | 次/秒 | 每秒查询数 |
-| rds.tps | TPS | 次/秒 | 每秒事务数 |
-| rds.innodb.read | InnoDB 读取次数 | 次/秒 | InnoDB 每秒读取次数 |
-| rds.innodb.write | InnoDB 写入次数 | 次/秒 | InnoDB 每秒写入次数 |
-| rds.slow.queries | 慢查询数 | 个/分钟 | 每分钟慢查询数量 |
-| rds.replication.lag | 主从延迟 | 秒 | 主从复制延迟时间 |
+| rds.cpu.util | CPU Usage | % | CPU usage |
+| rds.memory.util | Memory Usage | % | Memory usage |
+| rds.storage.util | Storage Usage | % | Storage usage |
+| rds.connection.util | Connection Usage | % | Connection usage |
+| rds.connections.active | Active Connections | count | Current active connections |
+| rds.connections.total | Total Connections | count | Current total connections |
+| rds.qps | QPS | ops/s | Queries per second |
+| rds.tps | TPS | ops/s | Transactions per second |
+| rds.innodb.read | InnoDB Reads | ops/s | InnoDB reads per second |
+| rds.innodb.write | InnoDB Writes | ops/s | InnoDB writes per second |
+| rds.slow.queries | Slow Queries | queries/min | Slow queries per minute |
+| rds.replication.lag | Replication Lag | seconds | Master-slave replication delay |
 
-## 负载均衡监控指标
+## Load Balancer Monitoring Metrics
 
-### 传统负载均衡(LB)
+### Traditional Load Balancer (LB)
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| lb.newconnection | 新建连接数 | 个/秒 | 每秒新建连接数 |
-| lb.activeconnection | 活跃连接数 | 个 | 当前活跃连接数 |
-| lb.inactiveconnection | 非活跃连接数 | 个 | 当前非活跃连接数 |
-| lb.traffic.in | 入流量 | bps | 每秒入流量 |
-| lb.traffic.out | 出流量 | bps | 每秒出流量 |
-| lb.packets.in | 入包量 | 个/秒 | 每秒入包数 |
-| lb.packets.out | 出包量 | 个/秒 | 每秒出包数 |
-| lb.httpcode.2xx | 2xx 状态码 | 个/秒 | 每秒 2xx 响应数 |
-| lb.httpcode.4xx | 4xx 状态码 | 个/秒 | 每秒 4xx 响应数 |
-| lb.httpcode.5xx | 5xx 状态码 | 个/秒 | 每秒 5xx 响应数 |
-| lb.latency | 平均延迟 | ms | 平均响应延迟 |
-| lb.qps | QPS | 次/秒 | 每秒请求数 |
+| lb.newconnection | New Connections | conn/s | New connections per second |
+| lb.activeconnection | Active Connections | count | Current active connections |
+| lb.inactiveconnection | Inactive Connections | count | Current inactive connections |
+| lb.traffic.in | Inbound Traffic | bps | Inbound traffic per second |
+| lb.traffic.out | Outbound Traffic | bps | Outbound traffic per second |
+| lb.packets.in | Inbound Packets | packets/s | Inbound packets per second |
+| lb.packets.out | Outbound Packets | packets/s | Outbound packets per second |
+| lb.httpcode.2xx | 2xx Status Codes | ops/s | 2xx responses per second |
+| lb.httpcode.4xx | 4xx Status Codes | ops/s | 4xx responses per second |
+| lb.httpcode.5xx | 5xx Status Codes | ops/s | 5xx responses per second |
+| lb.latency | Average Latency | ms | Average response latency |
+| lb.qps | QPS | ops/s | Requests per second |
 
-## 对象存储(OSS)监控指标
+## Object Storage (OSS) Monitoring Metrics
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| oss.storage.util | 存储容量使用率 | % | 存储空间使用率 |
-| oss.storage.used | 已用存储容量 | GB | 已使用的存储容量 |
-| oss.request.get | GET 请求数 | 次 | GET 请求次数 |
-| oss.request.put | PUT 请求数 | 次 | PUT 请求次数 |
-| oss.request.delete | DELETE 请求数 | 次 | DELETE 请求次数 |
-| oss.traffic.in | 流入流量 | B | 流入流量 |
-| oss.traffic.out | 流出流量 | B | 流出流量 |
-| oss.httpcode.2xx | 2xx 状态码 | 次 | 2xx 响应次数 |
-| oss.httpcode.4xx | 4xx 状态码 | 次 | 4xx 响应次数 |
-| oss.httpcode.5xx | 5xx 状态码 | 次 | 5xx 响应次数 |
+| oss.storage.util | Storage Usage | % | Storage usage |
+| oss.storage.used | Used Storage | GB | Used storage capacity |
+| oss.request.get | GET Requests | count | GET request count |
+| oss.request.put | PUT Requests | count | PUT request count |
+| oss.request.delete | DELETE Requests | count | DELETE request count |
+| oss.traffic.in | Inbound Traffic | B | Inbound traffic |
+| oss.traffic.out | Outbound Traffic | B | Outbound traffic |
+| oss.httpcode.2xx | 2xx Status Codes | count | 2xx response count |
+| oss.httpcode.4xx | 4xx Status Codes | count | 4xx response count |
+| oss.httpcode.5xx | 5xx Status Codes | count | 5xx response count |
 
-## 弹性公网 IP(EIP)监控指标
+## Elastic IP (EIP) Monitoring Metrics
 
-| 指标名称 | 显示名称 | 单位 | 说明 |
+| Metric Name | Display Name | Unit | Description |
 |---------|---------|------|------|
-| eip.traffic.in | 入流量 | bps | 每秒入流量 |
-| eip.traffic.out | 出流量 | bps | 每秒出流量 |
-| eip.packets.in | 入包量 | 个/秒 | 每秒入包数 |
-| eip.packets.out | 出包量 | 个/秒 | 每秒出包数 |
-| eip.bandwidth.util | 带宽使用率 | % | 带宽使用率 |
+| eip.traffic.in | Inbound Traffic | bps | Inbound traffic per second |
+| eip.traffic.out | Outbound Traffic | bps | Outbound traffic per second |
+| eip.packets.in | Inbound Packets | packets/s | Inbound packets per second |
+| eip.packets.out | Outbound Packets | packets/s | Outbound packets per second |
+| eip.bandwidth.util | Bandwidth Usage | % | Bandwidth usage |
 
-## 告警配置最佳实践
+## Alarm Configuration Best Practices
 
-### 云主机告警配置示例
+### VM Alarm Configuration Examples
 
-#### CPU 使用率告警
+#### CPU Usage Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -147,11 +147,11 @@ jdc monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-**建议阈值**：
-- 警告级别：CPU > 70%
-- 严重级别：CPU > 90%
+**Recommended Thresholds**:
+- Warning Level: CPU > 70%
+- Critical Level: CPU > 90%
 
-#### 内存使用率告警
+#### Memory Usage Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -168,11 +168,11 @@ jdc monitor create-alarm \
   --notice-type "email"
 ```
 
-**建议阈值**：
-- 警告级别：内存 > 80%
-- 严重级别：内存 > 95%
+**Recommended Thresholds**:
+- Warning Level: Memory > 80%
+- Critical Level: Memory > 95%
 
-#### 磁盘使用率告警
+#### Disk Usage Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -189,11 +189,11 @@ jdc monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-**建议阈值**：
-- 警告级别：磁盘 > 70%
-- 严重级别：磁盘 > 85%
+**Recommended Thresholds**:
+- Warning Level: Disk > 70%
+- Critical Level: Disk > 85%
 
-#### 系统负载告警
+#### System Load Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -210,13 +210,13 @@ jdc monitor create-alarm \
   --notice-type "email"
 ```
 
-**建议阈值**：
-- 警告级别：1分钟负载 > CPU 核数 * 2
-- 严重级别：1分钟负载 > CPU 核数 * 4
+**Recommended Thresholds**:
+- Warning Level: 1-min Load > CPU Cores * 2
+- Critical Level: 1-min Load > CPU Cores * 4
 
-### RDS 告警配置示例
+### RDS Alarm Configuration Examples
 
-#### CPU 使用率告警
+#### CPU Usage Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -233,11 +233,11 @@ jdc monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-**建议阈值**：
-- 警告级别：CPU > 60%
-- 严重级别：CPU > 80%
+**Recommended Thresholds**:
+- Warning Level: CPU > 60%
+- Critical Level: CPU > 80%
 
-#### 连接数使用率告警
+#### Connection Usage Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -254,11 +254,11 @@ jdc monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-**建议阈值**：
-- 警告级别：连接数 > 70%
-- 严重级别：连接数 > 85%
+**Recommended Thresholds**:
+- Warning Level: Connections > 70%
+- Critical Level: Connections > 85%
 
-#### 慢查询告警
+#### Slow Query Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -275,9 +275,9 @@ jdc monitor create-alarm \
   --notice-type "email"
 ```
 
-### 负载均衡告警配置示例
+### Load Balancer Alarm Configuration Examples
 
-#### 活跃连接数告警
+#### Active Connections Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -294,7 +294,7 @@ jdc monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-#### 5xx 错误率告警
+#### 5xx Error Rate Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -311,11 +311,11 @@ jdc monitor create-alarm \
   --notice-type "sms,email"
 ```
 
-**建议阈值**：
-- 警告级别：5xx > 5 次/秒
-- 严重级别：5xx > 10 次/秒
+**Recommended Thresholds**:
+- Warning Level: 5xx > 5 ops/s
+- Critical Level: 5xx > 10 ops/s
 
-#### 延迟告警
+#### Latency Alarm
 
 ```bash
 jdc monitor create-alarm \
@@ -332,35 +332,35 @@ jdc monitor create-alarm \
   --notice-type "email"
 ```
 
-**建议阈值**：
-- 警告级别：延迟 > 200ms
-- 严重级别：延迟 > 500ms
+**Recommended Thresholds**:
+- Warning Level: Latency > 200ms
+- Critical Level: Latency > 500ms
 
-## 告警模板使用
+## Using Alarm Templates
 
-### 创建自定义告警模板
+### Create Custom Alarm Template
 
 ```bash
-# 使用默认模板复制
+# Copy from default template
 jdc monitor copy-alarm-template \
   --region-id cn-north-1 \
   --template-id default-vm \
   --template-name "My-VM-Template"
 ```
 
-### 应用告警模板
+### Apply Alarm Template
 
 ```bash
-# 将模板应用到资源
+# Apply template to resources
 jdc monitor apply-alarm-template \
   --region-id cn-north-1 \
   --template-id template-xxx \
   --resource-ids '["i-xxx1","i-xxx2"]'
 ```
 
-## 告警回调配置
+## Alarm Callback Configuration
 
-### 创建带回调的告警规则
+### Create Alarm Rule with Callback
 
 ```bash
 jdc monitor create-alarm \
@@ -377,7 +377,7 @@ jdc monitor create-alarm \
   --callback-url "https://your-domain.com/webhook"
 ```
 
-### 回调消息格式
+### Callback Message Format
 
 ```json
 {
@@ -393,12 +393,12 @@ jdc monitor create-alarm \
 }
 ```
 
-## 监控数据查询示例
+## Monitoring Data Query Examples
 
-### 查询云主机最近1小时 CPU 数据
+### Query Last 1-Hour VM CPU Data
 
 ```bash
-# 计算时间
+# Calculate time range
 start_time=$(date -u -v-1H +"%Y-%m-%dT%H:%M:%SZ")
 end_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -413,7 +413,7 @@ jdc monitor describe-metric-data \
   --period 300
 ```
 
-### 批量查询多台云主机最新指标
+### Batch Query Latest Metrics for Multiple VMs
 
 ```bash
 #!/bin/bash
@@ -432,20 +432,55 @@ for vm_id in "${vm_ids[@]}"; do
 done
 ```
 
-## 监控数据保留策略
+## Monitoring Data Retention Policy
 
-| 数据类型 | 保留期限 | 说明 |
+| Data Type | Retention Period | Description |
 |---------|---------|------|
-| 原始数据 | 15 天 | 按采集周期存储的原始数据 |
-| 1小时聚合 | 30 天 | 按小时聚合的数据 |
-| 1天聚合 | 180 天 | 按天聚合的数据 |
+| Raw Data | 15 days | Raw data stored at collection interval |
+| 1-hour Aggregate | 30 days | Hourly aggregated data |
+| 1-day Aggregate | 180 days | Daily aggregated data |
 
-## 监控采集周期
+## Monitoring Collection Interval
 
-| 产品 | 默认采集周期 | 最小周期 |
+| Product | Default Collection Interval | Minimum Interval |
 |------|-------------|---------|
-| 云主机 | 60 秒 | 10 秒 |
-| RDS | 60 秒 | 60 秒 |
-| 负载均衡 | 60 秒 | 60 秒 |
-| 对象存储 | 300 秒 | 300 秒 |
-| 自定义监控 | 60 秒 | 10 秒 |
+| VM | 60 seconds | 10 seconds |
+| RDS | 60 seconds | 60 seconds |
+| Load Balancer | 60 seconds | 60 seconds |
+| Object Storage | 300 seconds | 300 seconds |
+| Custom Monitoring | 60 seconds | 10 seconds |
+
+## Operations Best Practices
+
+### Monitoring Coverage Strategy
+- **Core Resources**: Enable basic monitoring for all production cloud resources
+- **Key Metrics**: CPU, memory, disk, network — the four golden signals — must have alarms configured
+- **Business Metrics**: Report business-critical metrics via custom monitoring
+
+### Alarm Rule Configuration
+- **Threshold Settings**: Set reasonable alarm thresholds based on business characteristics to avoid alarm storms
+- **Notification Strategy**: Configure multi-channel notifications (SMS + Email + Callback), set notification cycles to avoid redundant interruptions
+- **Graded Alarming**: Distinguish P0/P1/P2 levels with different notification strategies and response times
+
+### Dashboard Management
+- **Business Perspective**: Organize monitoring panels by business system
+- **Key Metrics on Top**: Place the most important metrics at the top of the panel
+- **Template Variables**: Use template variables for quick resource switching
+
+### Cost Optimization
+- **Storage Periods**: Set different data retention periods based on data importance
+- **Collection Frequency**: Reduce monitoring data collection frequency for non-critical resources
+
+### API Limits
+| Limit Item | Description |
+|--------|------|
+| Query Frequency | Monitoring data query API default QPS limit is 100 |
+| Data Retention | Raw monitoring data retained for 15 days, aggregated data retained for 30 days |
+| Alarm Rules | Up to 500 alarm rules per region |
+| Custom Metrics | Up to 1000 custom metrics per namespace |
+
+### Related Links
+- [JD Cloud Monitoring Product Page](https://www.jdcloud.com/cn/products/monitoring)
+- [Cloud Monitor Documentation](https://docs.jdcloud.com/cn/monitoring/learning)
+- [Cloud Monitor API Documentation](https://docs.jdcloud.com/cn/monitoring/api/overview)
+- [JD Cloud CLI](https://github.com/jdcloud-api/jdcloud-cli)

@@ -1,10 +1,10 @@
-# 集成指南 — Terraform & CI/CD
+# Integration Guide — Terraform & CI/CD
 
-> 本文档从 `integration.md` 提取。
+> This document is extracted from `integration.md`.
 
-## Terraform 集成
+## Terraform Integration
 
-### 配置 Provider
+### Configuring Provider
 
 ```hcl
 provider "jdcloud" {
@@ -14,7 +14,7 @@ provider "jdcloud" {
 }
 ```
 
-### 创建告警规则
+### Creating Alarm Rule
 
 ```hcl
 resource "jdcloud_monitor_alarm" "high_cpu" {
@@ -32,9 +32,9 @@ resource "jdcloud_monitor_alarm" "high_cpu" {
 }
 ```
 
-## CI/CD 集成
+## CI/CD Integration
 
-### GitHub Actions 示例
+### GitHub Actions Example
 
 ```yaml
 name: Monitor Deployment
@@ -76,7 +76,7 @@ jobs:
             --callback-url "${{ secrets.WEBHOOK_URL }}"
 ```
 
-### Jenkins Pipeline 示例
+### Jenkins Pipeline Example
 
 ```groovy
 pipeline {

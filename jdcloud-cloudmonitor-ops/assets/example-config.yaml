@@ -1,6 +1,6 @@
-# 京东云云监控告警配置示例
+# JD Cloud Cloud Monitor Alarm Configuration Examples
 
-# 云主机监控告警配置
+# VM monitoring alarm configuration
 vm_alarms:
   - name: "VM-CPU-Critical"
     service_code: "vm"
@@ -72,7 +72,7 @@ vm_alarms:
     level: "warning"
     notice_type: "email"
 
-# RDS 监控告警配置
+# RDS monitoring alarm configuration
 rds_alarms:
   - name: "RDS-CPU-Critical"
     service_code: "rds"
@@ -134,7 +134,7 @@ rds_alarms:
     level: "warning"
     notice_type: "email"
 
-# 负载均衡监控告警配置
+# Load balancer monitoring alarm configuration
 lb_alarms:
   - name: "LB-Connection-Critical"
     service_code: "lb"
@@ -186,7 +186,7 @@ lb_alarms:
     level: "warning"
     notice_type: "email"
 
-# Redis 监控告警配置
+# Redis monitoring alarm configuration
 redis_alarms:
   - name: "Redis-CPU-Critical"
     service_code: "redis"
@@ -218,7 +218,7 @@ redis_alarms:
     level: "warning"
     notice_type: "email"
 
-# 自定义监控配置
+# Custom monitoring configuration
 custom_metrics:
   namespace: "my-application"
   metrics:
@@ -242,20 +242,20 @@ custom_metrics:
         - name: "service"
           value: "api-gateway"
 
-# Dashboard 配置
+# Dashboard configuration
 dashboards:
   - name: "Production-Overview"
-    description: "生产环境监控总览"
+    description: "Production environment monitoring overview"
     widgets:
       - type: "line"
-        title: "CPU 使用率趋势"
+        title: "CPU Usage Trend"
         service_code: "vm"
         metrics:
           - "vm.cpu.util"
         period: 300
         
       - type: "line"
-        title: "内存使用率趋势"
+        title: "Memory Usage Trend"
         service_code: "vm"
         metrics:
           - "vm.memory.util"
@@ -269,49 +269,49 @@ dashboards:
         period: 60
         
       - type: "number"
-        title: "活跃连接数"
+        title: "Active Connections"
         service_code: "lb"
         metrics:
           - "lb.activeconnection"
           
   - name: "Application-Metrics"
-    description: "应用自定义指标"
+    description: "Application custom metrics"
     widgets:
       - type: "line"
-        title: "订单量"
+        title: "Order Volume"
         namespace: "my-application"
         metric: "order-count"
         period: 60
         
       - type: "line"
-        title: "API 延迟"
+        title: "API Latency"
         namespace: "my-application"
         metric: "api-latency"
         period: 60
         
       - type: "line"
-        title: "错误率"
+        title: "Error Rate"
         namespace: "my-application"
         metric: "error-rate"
         period: 60
 
-# 通知配置
+# Notification configuration
 notifications:
   contact_groups:
     - id: 1
-      name: "运维团队"
+      name: "Ops Team"
       members:
-        - name: "张三"
+        - name: "Zhang San"
           phone: "138****8888"
           email: "zhangsan@example.com"
-        - name: "李四"
+        - name: "Li Si"
           phone: "139****9999"
           email: "lisi@example.com"
           
     - id: 2
-      name: "开发团队"
+      name: "Dev Team"
       members:
-        - name: "王五"
+        - name: "Wang Wu"
           phone: "137****7777"
           email: "wangwu@example.com"
           
@@ -323,9 +323,9 @@ notifications:
     webhook: "https://oapi.dingtalk.com/robot/send?access_token=xxx"
     secret: "your-dingtalk-secret"
 
-# 监控策略
+# Monitoring policies
 policies:
-  # 采集周期配置
+  # Collection period configuration
   collection:
     vm:
       period: 60
@@ -336,14 +336,14 @@ policies:
     custom:
       period: 60
       
-  # 数据保留策略
+  # Data retention policy
   retention:
-    raw_data: 15  # 天
-    hour_aggregation: 30  # 天
-    day_aggregation: 180  # 天
+    raw_data: 15  # days
+    hour_aggregation: 30  # days
+    day_aggregation: 180  # days
     
-  # 告警抑制策略
+  # Alarm suppression policy
   suppression:
     enabled: true
-    cooldown_period: 300  # 秒
-    max_notifications: 5  # 每小时最大通知次数
+    cooldown_period: 300  # seconds
+    max_notifications: 5  # max notifications per hour

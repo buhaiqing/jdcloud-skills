@@ -1,26 +1,26 @@
-# 云监控执行流程
+# Cloud Monitor Execution Flow
 
-> 本文档从 `SKILL.md` 提取，包含云监控核心操作的详细执行流程。
-> 每个操作遵循：**前置检查 → 执行（jdc 主路径 / SDK 降级） → 后置验证 → 失败恢复**。
+> This document is extracted from `SKILL.md` and contains detailed execution flows for core Cloud Monitor operations.
+> Each operation follows: **Pre-flight Check → Execute (jdc primary path / SDK fallback) → Post-execution Validation → Failure Recovery**.
 
-## jdc-first 策略
+## jdc-first Strategy
 
-Agent **必须**优先尝试 `jdc` CLI（主路径）。若 `jdc` 失败后（指数退避 **3 次重试**：0s → 2s → 4s），降级到 SDK/API。
+Agent **must** prefer the `jdc` CLI (primary path). If `jdc` fails after exponential backoff (**3 retries**: 0s → 2s → 4s), fall back to SDK/API.
 
 ---
 
-## 操作：创建告警规则
+## Operation: Create Alarm Rule
 
-### 前置检查
+### Pre-flight Check
 
-| 检查项 | 方法 | 期望 | 失败处理 |
-|--------|------|------|---------|
-| CLI 已安装 | `jdc --version` | exit code 0 | 最多重试 3 次，然后降级到 SDK |
-| SDK 已安装 | `python -c "import jdcloud_sdk"` | 无错误 | 引导安装（降级路径） |
-| 凭证有效 | `jdc --output json monitor describe-services --region-id cn-north-1` | `$.error == null` | 提示配置 CLI 凭证（`~/.jdc/config`）或 SDK 环境变量 |
-| 区域可用 | SDK/CLI 调用 describeServices | 返回服务列表非空 | 建议最近可用区域 |
+| Check Item | Method | Expected | Failure Handling |
+|-----------|--------|----------|-----------------|
+| CLI installed | `jdc --version` | exit code 0 | Retry up to 3 times, then fall back to SDK |
+| SDK installed | `python -c "import jdcloud_sdk"` | No error | Guide installation (fallback path) |
+| Credentials valid | `jdc --output json monitor describe-services --region-id cn-north-1` | `$.error == null` | Prompt to configure CLI credentials (`~/.jdc/config`) or SDK environment variables |
+| Region available | SDK/CLI call describeServices | Service list returned non-empty | Suggest nearest available region |
 
-### 执行 — CLI (`jdc`) [主路径]
+### Execution — CLI (`jdc`) [Primary Path]
 
 ```bash
 jdc --output json monitor create-alarm \
@@ -37,7 +37,7 @@ jdc --output json monitor create-alarm \
   --notice-type "{{user.notice_type}}"
 ```
 
-### 执行 — SDK (降级路径 — 3 次 jdc 失败后)
+### Execution — SDK (Fallback Path — after 3 jdc failures)
 
 ```python
 import os
@@ -63,45 +63,45 @@ request = CreateAlarmRequest({
 })
 
 response = client.createAlarm(request)
-# JSON 路径: $.result.alarmId
+# JSON path: $.result.alarmId
 alarm_id = response.result.alarmId
 ```
 
-### 后置验证
+### Post-execution Validation
 
-1. 从 CLI JSON `$.result.alarmId` 或 SDK `response.result.alarmId` 捕获 `{{output.alarm_id}}`
-2. 验证告警已创建（CLI 优先）：
+1. Capture `{{output.alarm_id}}` from CLI JSON `$.result.alarmId` or SDK `response.result.alarmId`
+2. Verify alarm was created (CLI preferred):
    ```bash
-   # CLI 验证（主路径）
+   # CLI verification (primary path)
    jdc --output json monitor describe-alarm \
      --region-id {{user.region}} \
      --alarm-id {{output.alarm_id}} | jq -r '.result.alarm.status'
    ```
    ```python
-   # SDK 验证（降级路径）
+   # SDK verification (fallback path)
    from jdcloud_sdk.services.monitor.apis.DescribeAlarmRequest import DescribeAlarmRequest
    req = DescribeAlarmRequest({"regionId": "{{user.region}}", "alarmId": "{{output.alarm_id}}"})
    resp = client.describeAlarm(req)
    status = resp.result.alarm.status  # ALARM/OK/INSUFFICIENT_DATA
    ```
-3. 若返回有效状态 → 操作成功，向用户报告 `{{output.alarm_id}}`
-4. 若返回错误 → 捕获错误信息，进入失败恢复
+3. If valid status returned → operation success, report `{{output.alarm_id}}` to user
+4. If error returned → capture error info, enter failure recovery
 
-### 失败恢复
+### Failure Recovery
 
-| 错误模式 (regex) | 最大重试 | 退避策略 | Agent 动作 |
-|-----------------|---------|---------|-----------|
-| `InvalidParameter` | 1 | - | 检查参数格式，修正后重试 |
-| `QuotaExceeded` | 0 | - | 停止。告知用户告警规则配额已满（每区域最多 500 条） |
-| `MetricNotFound` | 1 | - | 确认监控项名称，用 `describe-metrics` 查询可用项后重试 |
-| `ResourceAlreadyExists` | 0 | - | 告警名称已存在，询问用户是否复用或换名 |
-| `InternalError` | 3 | 2s, 4s, 8s | 指数退避重试。第 3 次失败后报告用户 |
+| Error Pattern (regex) | Max Retries | Backoff | Agent Action |
+|----------------------|------------|---------|-------------|
+| `InvalidParameter` | 1 | - | Check parameter format, correct and retry |
+| `QuotaExceeded` | 0 | - | Stop. Inform user alarm rule quota is full (max 500 per region) |
+| `MetricNotFound` | 1 | - | Confirm metric name, query available metrics with `describe-metrics`, then retry |
+| `ResourceAlreadyExists` | 0 | - | Alarm name already exists, ask user whether to reuse or rename |
+| `InternalError` | 3 | 2s, 4s, 8s | Exponential backoff retry. Report user after 3rd failure |
 
 ---
 
-## 操作：查询监控数据
+## Operation: Query Monitoring Data
 
-### 执行 — CLI (`jdc`) [主路径]
+### Execution — CLI (`jdc`) [Primary Path]
 
 ```bash
 jdc --output json monitor describe-metric-data \
@@ -114,7 +114,7 @@ jdc --output json monitor describe-metric-data \
   --aggr-type avg
 ```
 
-### 执行 — SDK (降级路径 — 3 次 jdc 失败后)
+### Execution — SDK (Fallback Path — after 3 jdc failures)
 
 ```python
 import os
@@ -136,35 +136,35 @@ request = DescribeMetricDataRequest({
 })
 
 response = client.describeMetricData(request)
-# JSON 路径: $.result.metricDatas[*].value
+# JSON path: $.result.metricDatas[*].value
 for data in response.result.metricDatas:
     print(f"Time: {data.timestamp}, Value: {data.value}, Unit: {data.unit}")
 ```
 
-### 后置验证
+### Post-execution Validation
 
-1. 检查 SDK `response.result.metricDatas` 或 CLI JSON `$.result.metricDatas` 是否非空
-2. 若为空 → 可能原因：资源刚创建无数据、时间范围错误、监控项名错误
-3. 以表格形式展示：时间戳 | 数值 | 单位
+1. Check SDK `response.result.metricDatas` or CLI JSON `$.result.metricDatas` is not empty
+2. If empty → possible causes: resource just created no data yet, time range error, metric name error
+3. Display in table format: Timestamp | Value | Unit
 
-### 失败恢复
+### Failure Recovery
 
-| 错误模式 (regex) | 最大重试 | 退避策略 | Agent 动作 |
-|-----------------|---------|---------|-----------|
-| `RateLimitExceeded` | 3 | 2s, 4s, 8s | 降低频率重试 |
-| `ResourceNotFound` | 0 | - | 停止。告知用户资源 ID 不存在 |
-| `MetricNotFound` | 1 | - | 用 `describe-metrics` 确认名称后重试 |
+| Error Pattern (regex) | Max Retries | Backoff | Agent Action |
+|----------------------|------------|---------|-------------|
+| `RateLimitExceeded` | 3 | 2s, 4s, 8s | Retry with reduced frequency |
+| `ResourceNotFound` | 0 | - | Stop. Inform user resource ID does not exist |
+| `MetricNotFound` | 1 | - | Confirm metric name with `describe-metrics`, then retry |
 
 ---
 
-## 操作：删除告警规则
+## Operation: Delete Alarm Rule
 
-### 前置检查（安全门）
+### Pre-flight Check (Safety Gate)
 
-- **必须**询问用户："确认删除告警规则 `{{user.alarm_name}}` ({{user.alarm_id}})？此操作不可撤销。"
-- **必须**等待用户明确回复"确认"或"yes"后才继续（SDK 和 CLI 路径均需此安全门）
+- **Must** ask user: "Confirm delete alarm rule `{{user.alarm_name}}` ({{user.alarm_id}})? This operation is irreversible."
+- **Must** wait for explicit user confirmation ("confirm" or "yes") before proceeding (required for both SDK and CLI paths)
 
-### 执行 — CLI (`jdc`) [主路径]
+### Execution — CLI (`jdc`) [Primary Path]
 
 ```bash
 jdc --output json monitor delete-alarms \
@@ -172,7 +172,7 @@ jdc --output json monitor delete-alarms \
   --alarm-ids '["{{user.alarm_id}}"]'
 ```
 
-### 执行 — SDK (降级路径 — 3 次 jdc 失败后)
+### Execution — SDK (Fallback Path — after 3 jdc failures)
 
 ```python
 import os
@@ -189,21 +189,21 @@ request = DeleteAlarmsRequest({
 })
 
 response = client.deleteAlarms(request)
-# 返回 requestId 表示成功
+# Returns requestId on success
 print(f"Delete request accepted: {response.requestId}")
 ```
 
-### 后置验证
+### Post-execution Validation
 
-1. 再次查询确认不存在（CLI 优先）：
+1. Query again to confirm it no longer exists (CLI preferred):
    ```bash
-   # CLI 验证（主路径）
+   # CLI verification (primary path)
    jdc --output json monitor describe-alarm \
      --region-id {{env.JDC_REGION}} \
      --alarm-id {{user.alarm_id}} 2>&1
    ```
    ```python
-   # SDK 验证（降级路径）
+   # SDK verification (fallback path)
    from jdcloud_sdk.services.monitor.apis.DescribeAlarmRequest import DescribeAlarmRequest
    req = DescribeAlarmRequest({"regionId": "{{env.JDC_REGION}}", "alarmId": "{{user.alarm_id}}"})
    try:
@@ -212,4 +212,4 @@ print(f"Delete request accepted: {response.requestId}")
        if "AlarmNotFound" in str(e) or "ResourceNotFound" in str(e):
            print("Alarm deleted successfully")
    ```
-2. 期望返回 `AlarmNotFound` 错误 → 删除成功
+2. Expected to return `AlarmNotFound` error → deletion successful

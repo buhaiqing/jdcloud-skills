@@ -1,40 +1,40 @@
-# API & SDK — 云监控(CloudMonitor)
+# API & SDK — CloudMonitor
 
-## OpenAPI 规格
+## OpenAPI Specification
 
-- **API 文档**: https://docs.jdcloud.com/cn/monitoring/api/overview
-- **服务标识**: `monitor`
-- **基础路径**: `monitor.jdcloud-api.com`
-- **API 版本**: v1
+- **API Docs**: https://docs.jdcloud.com/cn/monitoring/api/overview
+- **Service Code**: `monitor`
+- **Base Path**: `monitor.jdcloud-api.com`
+- **API Version**: v1
 
-## SDK 操作映射
+## SDK Operation Mapping
 
-| 目标 | API operationId | SDK 方法 (Python) |
-|------|-----------------|-------------------|
-| 查询服务列表 | `describeServices` | `client.describeServices(request)` |
-| 查询监控项 | `describeMetrics` | `client.describeMetrics(request)` |
-| 查询监控数据 | `describeMetricData` | `client.describeMetricData(request)` |
-| 查询最新数据 | `lastDownsample` | `client.lastDownsample(request)` |
-| 创建告警规则 | `createAlarm` | `client.createAlarm(request)` |
-| 查询告警列表 | `describeAlarms` | `client.describeAlarms(request)` |
-| 查询告警详情 | `describeAlarm` | `client.describeAlarm(request)` |
-| 修改告警规则 | `updateAlarm` | `client.updateAlarm(request)` |
-| 启用/禁用告警 | `enableAlarm` | `client.enableAlarm(request)` |
-| 删除告警规则 | `deleteAlarms` | `client.deleteAlarms(request)` |
-| 查询告警历史 | `describeAlarmHistory` | `client.describeAlarmHistory(request)` |
-| 查询告警联系人 | `describeAlarmContacts` | `client.describeAlarmContacts(request)` |
-| 上报自定义数据 | `putMetricData` | `client.putMetricData(request)` |
-| 查询自定义数据 | `describeCustomMetricData` | `client.describeCustomMetricData(request)` |
+| Target | API operationId | SDK Method (Python) |
+|--------|-----------------|---------------------|
+| Query service list | `describeServices` | `client.describeServices(request)` |
+| Query metrics | `describeMetrics` | `client.describeMetrics(request)` |
+| Query metric data | `describeMetricData` | `client.describeMetricData(request)` |
+| Query latest data | `lastDownsample` | `client.lastDownsample(request)` |
+| Create alarm rule | `createAlarm` | `client.createAlarm(request)` |
+| Query alarm list | `describeAlarms` | `client.describeAlarms(request)` |
+| Query alarm details | `describeAlarm` | `client.describeAlarm(request)` |
+| Update alarm rule | `updateAlarm` | `client.updateAlarm(request)` |
+| Enable/disable alarm | `enableAlarm` | `client.enableAlarm(request)` |
+| Delete alarm rule | `deleteAlarms` | `client.deleteAlarms(request)` |
+| Query alarm history | `describeAlarmHistory` | `client.describeAlarmHistory(request)` |
+| Query alarm contacts | `describeAlarmContacts` | `client.describeAlarmContacts(request)` |
+| Push custom metric data | `putMetricData` | `client.putMetricData(request)` |
+| Query custom metric data | `describeCustomMetricData` | `client.describeCustomMetricData(request)` |
 
-## Python SDK 使用
+## Python SDK Usage
 
-### 安装
+### Installation
 
 ```bash
 pip install jdcloud_sdk
 ```
 
-### 初始化客户端
+### Initialize Client
 
 ```python
 import os
@@ -42,18 +42,18 @@ from jdcloud_sdk.core.credential import Credential
 from jdcloud_sdk.core.config import Config
 from jdcloud_sdk.services.monitor.client import MonitorClient
 
-# 使用环境变量配置凭证（推荐）
+# Use environment variables for credentials (recommended)
 credential = Credential(
     os.environ['JDC_ACCESS_KEY'],
     os.environ['JDC_SECRET_KEY']
 )
 
-# 创建客户端
+# Create client
 config = Config(timeout=30)
 client = MonitorClient(config, credential, os.environ.get('JDC_REGION', 'cn-north-1'))
 ```
 
-### 查询监控服务列表
+### Query Monitoring Services
 
 ```python
 from jdcloud_sdk.services.monitor.apis.DescribeServicesRequest import DescribeServicesRequest
@@ -63,12 +63,12 @@ request = DescribeServicesRequest({
 })
 
 response = client.describeServices(request)
-# JSON 路径: $.result.services[*].serviceCode
+# JSON path: $.result.services[*].serviceCode
 for service in response.result.services:
     print(f"Service: {service.serviceCode} - {service.serviceName}")
 ```
 
-### 查询监控数据
+### Query Metric Data
 
 ```python
 from jdcloud_sdk.services.monitor.apis.DescribeMetricDataRequest import DescribeMetricDataRequest
@@ -84,12 +84,12 @@ request = DescribeMetricDataRequest({
 })
 
 response = client.describeMetricData(request)
-# JSON 路径: $.result.metricDatas[*].value
+# JSON path: $.result.metricDatas[*].value
 for data in response.result.metricDatas:
     print(f"Time: {data.timestamp}, Value: {data.value}, Unit: {data.unit}")
 ```
 
-### 创建告警规则
+### Create Alarm Rule
 
 ```python
 from jdcloud_sdk.services.monitor.apis.CreateAlarmRequest import CreateAlarmRequest
@@ -109,12 +109,12 @@ request = CreateAlarmRequest({
 })
 
 response = client.createAlarm(request)
-# JSON 路径: $.result.alarmId
+# JSON path: $.result.alarmId
 alarm_id = response.result.alarmId
 print(f"Alarm created: {alarm_id}")
 ```
 
-### 查询告警规则列表
+### Query Alarm Rules List
 
 ```python
 from jdcloud_sdk.services.monitor.apis.DescribeAlarmsRequest import DescribeAlarmsRequest
@@ -127,12 +127,12 @@ request = DescribeAlarmsRequest({
 })
 
 response = client.describeAlarms(request)
-# JSON 路径: $.result.alarms[*].alarmId
+# JSON path: $.result.alarms[*].alarmId
 for alarm in response.result.alarms:
     print(f"Alarm: {alarm.alarmName}, Status: {alarm.status}, ID: {alarm.alarmId}")
 ```
 
-### 删除告警规则
+### Delete Alarm Rule
 
 ```python
 from jdcloud_sdk.services.monitor.apis.DeleteAlarmsRequest import DeleteAlarmsRequest
@@ -143,11 +143,11 @@ request = DeleteAlarmsRequest({
 })
 
 response = client.deleteAlarms(request)
-# 返回 requestId 表示成功
+# Returning requestId indicates success
 print(f"Delete request ID: {response.requestId}")
 ```
 
-### 上报自定义监控数据
+### Push Custom Metric Data
 
 ```python
 from jdcloud_sdk.services.monitor.apis.PutMetricDataRequest import PutMetricDataRequest
@@ -165,69 +165,69 @@ response = client.putMetricData(request)
 print("Metric data uploaded successfully")
 ```
 
-## 请求/响应字段说明
+## Request/Response Field Description
 
-### 创建告警规则 (createAlarm)
+### Create Alarm Rule (createAlarm)
 
-**请求必填字段**:
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| regionId | string | 区域 ID |
-| alarmName | string | 告警规则名称 |
-| serviceCode | string | 服务代码 |
-| resourceId | string | 资源 ID |
-| metricName | string | 监控项名称 |
-| comparisonOperator | string | 比较运算符 (gt/lt/ge/le/eq/ne) |
-| threshold | number | 阈值 |
-| period | integer | 统计周期（秒） |
-| evaluationPeriods | integer | 连续周期数 |
+**Required Request Fields**:
+| Field | Type | Description |
+|-------|------|-------------|
+| regionId | string | Region ID |
+| alarmName | string | Alarm rule name |
+| serviceCode | string | Service code |
+| resourceId | string | Resource ID |
+| metricName | string | Metric name |
+| comparisonOperator | string | Comparison operator (gt/lt/ge/le/eq/ne) |
+| threshold | number | Threshold |
+| period | integer | Statistics period (seconds) |
+| evaluationPeriods | integer | Number of consecutive periods |
 
-**响应字段**:
-| 字段 | JSON 路径 | 类型 | 说明 |
-|------|-----------|------|------|
-| alarmId | `$.result.alarmId` | string | 告警规则 ID |
+**Response Fields**:
+| Field | JSON path | Type | Description |
+|-------|-----------|------|-------------|
+| alarmId | `$.result.alarmId` | string | Alarm rule ID |
 
-### 查询监控数据 (describeMetricData)
+### Query Metric Data (describeMetricData)
 
-**请求必填字段**:
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| regionId | string | 区域 ID |
-| metric | string | 监控项名称 |
-| serviceCode | string | 服务代码 |
-| resourceId | string | 资源 ID |
-| startTime | string | 开始时间 (ISO8601) |
-| endTime | string | 结束时间 (ISO8601) |
+**Required Request Fields**:
+| Field | Type | Description |
+|-------|------|-------------|
+| regionId | string | Region ID |
+| metric | string | Metric name |
+| serviceCode | string | Service code |
+| resourceId | string | Resource ID |
+| startTime | string | Start time (ISO8601) |
+| endTime | string | End time (ISO8601) |
 
-**响应字段**:
-| 字段 | JSON 路径 | 类型 | 说明 |
-|------|-----------|------|------|
-| metricDatas | `$.result.metricDatas` | array | 监控数据数组 |
-| timestamp | `$.result.metricDatas[*].timestamp` | string | 时间戳 |
-| value | `$.result.metricDatas[*].value` | number | 监控值 |
-| unit | `$.result.metricDatas[*].unit` | string | 单位 |
+**Response Fields**:
+| Field | JSON path | Type | Description |
+|-------|-----------|------|-------------|
+| metricDatas | `$.result.metricDatas` | array | Metric data array |
+| timestamp | `$.result.metricDatas[*].timestamp` | string | Timestamp |
+| value | `$.result.metricDatas[*].value` | number | Metric value |
+| unit | `$.result.metricDatas[*].unit` | string | Unit |
 
-### 查询告警列表 (describeAlarms)
+### Query Alarm List (describeAlarms)
 
-**响应字段**:
-| 字段 | JSON 路径 | 类型 | 说明 |
-|------|-----------|------|------|
-| alarms | `$.result.alarms` | array | 告警规则数组 |
-| alarmId | `$.result.alarms[*].alarmId` | string | 告警 ID |
-| alarmName | `$.result.alarms[*].alarmName` | string | 告警名称 |
-| status | `$.result.alarms[*].status` | string | 状态 (ALARM/OK/INSUFFICIENT_DATA) |
+**Response Fields**:
+| Field | JSON path | Type | Description |
+|-------|-----------|------|-------------|
+| alarms | `$.result.alarms` | array | Alarm rule array |
+| alarmId | `$.result.alarms[*].alarmId` | string | Alarm ID |
+| alarmName | `$.result.alarms[*].alarmName` | string | Alarm name |
+| status | `$.result.alarms[*].status` | string | Status (ALARM/OK/INSUFFICIENT_DATA) |
 
-## 分页处理
+## Pagination
 
-云监控 API 使用标准分页参数：
+CloudMonitor API uses standard pagination parameters:
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| pageNumber | integer | 页码，默认 1 |
-| pageSize | integer | 每页数量，默认 20，最大 100 |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| pageNumber | integer | Page number, default 1 |
+| pageSize | integer | Items per page, default 20, max 100 |
 
 ```python
-# 分页查询示例
+# Pagination example
 page_number = 1
 while True:
     request = DescribeAlarmsRequest({
@@ -245,7 +245,7 @@ while True:
     page_number += 1
 ```
 
-## 错误处理
+## Error Handling
 
 ```python
 from jdcloud_sdk.core.exception import ClientException
@@ -254,42 +254,42 @@ from jdcloud_sdk.core.exception import ServerException
 try:
     response = client.describeMetricData(request)
 except ClientException as e:
-    # 客户端错误（参数问题等）
+    # Client error (parameter issues, etc.)
     print(f"Client error: {e.error_msg}")
     if "InvalidParameter" in e.error_msg:
-        # 检查参数格式
+        # Check parameter format
         pass
 except ServerException as e:
-    # 服务端错误
+    # Server error
     print(f"Server error: {e.error_msg}")
     if "InternalError" in e.error_msg:
-        # 可重试
+        # Retryable
         pass
 ```
 
-## 常见错误码
+## Common Error Codes
 
-| 错误码 | HTTP 状态 | 说明 | Agent 动作 |
-|--------|-----------|------|-----------|
-| `InvalidParameter` | 400 | 参数无效 | 检查参数格式，修正后重试（最多1次） |
-| `MetricNotFound` | 404 | 监控项不存在 | 用 describeMetrics 确认名称后重试 |
-| `ResourceNotFound` | 404 | 资源不存在 | HALT，告知用户资源 ID 错误 |
-| `AlarmNotFound` | 404 | 告警规则不存在 | HALT，告知用户告警 ID 错误 |
-| `QuotaExceeded` | 403 | 配额超限 | HALT，告知用户配额已满（每区域最多500条） |
-| `RateLimitExceeded` | 429 | 请求频率超限 | 指数退避重试（最多3次） |
-| `InternalError` | 500 | 内部错误 | 指数退避重试（最多3次） |
+| Error Code | HTTP Status | Description | Agent Action |
+|------------|-------------|-------------|--------------|
+| `InvalidParameter` | 400 | Invalid parameter | Check parameter format, fix and retry (max 1 time) |
+| `MetricNotFound` | 404 | Metric not found | Confirm name via describeMetrics, then retry |
+| `ResourceNotFound` | 404 | Resource not found | HALT, inform user resource ID is wrong |
+| `AlarmNotFound` | 404 | Alarm rule not found | HALT, inform user alarm ID is wrong |
+| `QuotaExceeded` | 403 | Quota exceeded | HALT, inform user quota is full (max 500 per region) |
+| `RateLimitExceeded` | 429 | Request rate exceeded | Exponential backoff retry (max 3 times) |
+| `InternalError` | 500 | Internal error | Exponential backoff retry (max 3 times) |
 
-## SDK 与 CLI 对比
+## SDK vs CLI Comparison
 
-| 操作 | SDK 支持 | CLI 支持 | 推荐 |
-|------|---------|---------|------|
-| 查询服务列表 | ✓ | ✓ | CLI（快速查询） |
-| 查询监控数据 | ✓ | ✓ | SDK（批量/复杂查询） |
-| 创建告警规则 | ✓ | ✓ | SDK（集成/自动化） |
-| 删除告警规则 | ✓ | ✓ | CLI（快速操作） |
-| 上报自定义数据 | ✓ | ✓ | SDK（程序上报） |
+| Operation | SDK Support | CLI Support | Recommendation |
+|-----------|-------------|-------------|----------------|
+| Query service list | ✓ | ✓ | CLI (quick query) |
+| Query metric data | ✓ | ✓ | SDK (batch/complex queries) |
+| Create alarm rule | ✓ | ✓ | SDK (automation/integration) |
+| Delete alarm rule | ✓ | ✓ | CLI (quick operations) |
+| Push custom metric data | ✓ | ✓ | SDK (programmatic push) |
 
-**路径偏好**:
-- **无 Python 运行时** → 使用 `jdc` CLI
-- **批量操作/集成测试** → 使用 SDK
-- **快速一次性查询** → 使用 CLI
+**Path Preference**:
+- **No Python runtime** → Use `jdc` CLI
+- **Batch operations / integration testing** → Use SDK
+- **Quick one-off queries** → Use CLI

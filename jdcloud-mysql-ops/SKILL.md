@@ -1394,7 +1394,7 @@ def generate_optimization_advice(findings: list, log: dict) -> list:
 **Step 1: 配置慢查询告警规则**（通过 `jdcloud-cloudmonitor-ops`）
 ```bash
 # 当慢查询数量超过阈值时触发告警
-jdc --output json cm create-alarm-rule \
+jdc --output json monitor create-alarm-rule \
   --region-id "{{user.region}}" \
   --alarm-rule-name "mysql-slow-query-alert" \
   --metric-name "SlowQueries" \
@@ -1545,15 +1545,6 @@ Critical 级别: 3 → 2 (-33.3%) ✅
 昨日建议 #1 (rds-prod-02): 已添加索引 ✅
 昨日建议 #3 (rds-prod-01): 已优化 SQL ✅
 ```
-
-#### Failure Recovery
-
-| 错误模式 | 重试 | Agent 行动 |
-|---------|:----:|-----------|
-| 慢日志数据为空 | 0 | 报告"该时段无慢查询"; 建议缩小时间范围或检查 slow_query_log 是否开启 |
-| SQL 文本过短(截断) | 0 | 基于可用的执行指标进行分析; 提示用户使用 `SELECT * FROM performance_schema` 获取完整 SQL |
-| 指标数据缺失(如 lockTime) | 0 | 基于已有指标进行分析; 标注"部分分析因数据缺失受限" |
-| 实例不存在 | 0 | HALT; 提示检查实例 ID |
 
 #### 与 describeSlowLogs 的关系
 

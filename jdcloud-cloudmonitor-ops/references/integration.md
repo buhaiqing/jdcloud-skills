@@ -1,54 +1,54 @@
-# 云监控集成指南
+# Cloud Monitor Integration Guide
 
-> **⚠️ 安全警告：** **绝不**在日志、控制台输出或调试信息中打印 `JDC_SECRET_KEY` 的值。验证凭证时仅检查存在性，如需记录状态请使用脱敏占位符（如 `JDC_SECRET_KEY=<masked>`）。
+> **⚠️ Security Warning:** **Never** print `JDC_SECRET_KEY` value in logs, console output, or debug information. When verifying credentials, only check existence. If status logging is needed, use a sanitized placeholder (e.g. `JDC_SECRET_KEY=<masked>`).
 
-## SDK 版本锁定
+## SDK Version Locking
 
-> **推荐**：使用锁定的SDK版本确保可重现环境。详见 [SDK版本锁定指南](../../docs/SDK_VERSION_LOCKING.md)。
+> **Recommended**: Use locked SDK versions to ensure reproducible environments. See [SDK Version Locking Guide](../../docs/SDK_VERSION_LOCKING.md).
 
-### 推荐版本
+### Recommended Versions
 
 | Package | Version | Notes |
 |---------|---------|-------|
-| jdcloud_cli | 1.2.12 | 云监控CLI (supports full Monitor subcommands) |
-| jdcloud_sdk | >=1.6.26 | SDK兜底 |
+| jdcloud_cli | 1.2.12 | Cloud Monitor CLI (supports full Monitor subcommands) |
+| jdcloud_sdk | >=1.6.26 | SDK Fallback |
 
-### 安装锁定版本
+### Install Locked Versions
 
 ```bash
-# 使用 uv（推荐）
+# Using uv (recommended)
 uv pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
 
-# 或使用 pip
+# Or using pip
 pip install jdcloud_cli==1.2.12 jdcloud_sdk>=1.6.26
 ```
 
-### 验证版本
+### Verify Versions
 
 ```bash
 jdc --version
 python -c "import jdcloud_sdk; print(f'SDK version: {jdcloud_sdk.__version__}')"
 ```
 
-### 版本兼容性
+### Version Compatibility
 
 | SDK Version | CLI Version | Python | Monitor API | Status |
 |-------------|-------------|--------|-------------|--------|
 | >=1.6.26 | 1.2.12 | 3.10+ | Monitor API v1.0 | ✅ Tested |
 
-## SDK 集成
+## SDK Integration
 
-### Python SDK 集成
+### Python SDK Integration
 
-#### 安装 SDK
+#### Install SDK
 
 ```bash
 pip install jdcloud_sdk
 ```
 
-#### SDK 初始化
+#### SDK Initialization
 
-**环境变量配置方式：**
+**Environment Variable Configuration:**
 
 | Variable | Required | Description | Default |
 |----------|----------|-------------|--------|
@@ -70,13 +70,13 @@ from jdcloud_sdk.core.credential import Credential
 from jdcloud_sdk.core.config import Config
 from jdcloud_sdk.services.monitor.client import MonitorClient
 
-# 使用环境变量配置凭证（推荐）
+# Configure credentials using environment variables (recommended)
 credential = Credential(
     os.environ['JDC_ACCESS_KEY'],
     os.environ['JDC_SECRET_KEY']
 )
 
-# 创建客户端
+# Create client
 config = Config(timeout=30)
 client = MonitorClient(config, credential, os.environ.get('JDC_REGION', 'cn-north-1'))
 ```
@@ -88,7 +88,7 @@ jdc config init
 
 > **Priority**: Shell env > `.env` > CLI config > Defaults. Never commit `.env` to version control.
 
-#### 查询监控服务列表
+#### List Monitoring Services
 
 ```python
 from jdcloud_sdk.services.monitor.apis.DescribeServicesRequest import DescribeServicesRequest
@@ -101,7 +101,7 @@ response = client.describeServices(request)
 print(response.result)
 ```
 
-#### 查询监控数据
+#### Query Metric Data
 
 ```python
 from jdcloud_sdk.services.monitor.apis.DescribeMetricDataRequest import DescribeMetricDataRequest
@@ -121,7 +121,7 @@ for data in response.result.metricDatas:
     print(f"Time: {data.timestamp}, Value: {data.value}")
 ```
 
-#### 创建告警规则
+#### Create Alarm Rule
 
 ```python
 from jdcloud_sdk.services.monitor.apis.CreateAlarmRequest import CreateAlarmRequest
@@ -144,7 +144,7 @@ response = client.createAlarm(request)
 print(f"Alarm created: {response.result.alarmId}")
 ```
 
-#### 查询告警规则
+#### Query Alarm Rules
 
 ```python
 from jdcloud_sdk.services.monitor.apis.DescribeAlarmsRequest import DescribeAlarmsRequest
@@ -161,7 +161,7 @@ for alarm in response.result.alarms:
     print(f"Alarm: {alarm.alarmName}, Status: {alarm.status}")
 ```
 
-#### 上报自定义监控数据
+#### Report Custom Metric Data
 
 ```python
 from jdcloud_sdk.services.monitor.apis.PutMetricDataRequest import PutMetricDataRequest
@@ -179,13 +179,13 @@ response = client.putMetricData(request)
 print("Metric data uploaded successfully")
 ```
 
-## OpenAPI 集成
+## OpenAPI Integration
 
-### API 认证
+### API Authentication
 
-云监控 API 使用京东云统一认证机制，需要在请求头中包含签名信息。
+Cloud Monitor API uses JD Cloud unified authentication mechanism, requiring signature information in the request headers.
 
-#### 签名算法
+#### Signature Algorithm
 
 ```python
 import hmac
@@ -194,28 +194,28 @@ import base64
 from datetime import datetime
 
 def sign_request(access_key, secret_key, method, uri, headers, query_params):
-    """生成请求签名"""
-    # 1. 构建规范请求
+    """Generate request signature"""
+    # 1. Build canonical request
     canonical_request = build_canonical_request(method, uri, headers, query_params)
     
-    # 2. 构建待签名字符串
+    # 2. Build string to sign
     string_to_sign = build_string_to_sign(canonical_request)
     
-    # 3. 计算签名
+    # 3. Calculate signature
     signature = hmac.new(
         secret_key.encode('utf-8'),
         string_to_sign.encode('utf-8'),
         hashlib.sha256
     ).digest()
     
-    # 4. Base64 编码
+    # 4. Base64 encode
     return base64.b64encode(signature).decode('utf-8')
 ```
 
-#### 请求示例
+#### Request Example
 
 ```bash
-# 查询监控数据
+# Query metric data
 curl -X GET \
   'https://open.jdcloud-api.com/v1/regions/cn-north-1/metrics/vm.cpu.util/data?serviceCode=vm&resourceId=i-xxx&startTime=2024-01-01T00:00:00Z&endTime=2024-01-01T23:59:59Z' \
   -H 'Content-Type: application/json' \
@@ -223,19 +223,19 @@ curl -X GET \
   -H 'Authorization: JDCLOUD2-HMAC-SHA256 Credential=your_access_key/20240101/cn-north-1/monitor/jdcloud2_request, SignedHeaders=content-type;host;x-jdcloud-date, Signature=your_signature'
 ```
 
-### API 端点
+### API Endpoints
 
-| 区域 | 端点 |
+| Region | Endpoint |
 |------|------|
-| 华北-北京(cn-north-1) | open.jdcloud-api.com |
-| 华东-上海(cn-east-1) | open.jdcloud-api.com |
-| 华南-广州(cn-south-1) | open.jdcloud-api.com |
+| North China-Beijing (cn-north-1) | open.jdcloud-api.com |
+| East China-Shanghai (cn-east-1) | open.jdcloud-api.com |
+| South China-Guangzhou (cn-south-1) | open.jdcloud-api.com |
 
-## Prometheus 集成
+## Prometheus Integration
 
-云监控支持通过 Prometheus Remote Write 协议接收监控数据。
+Cloud Monitor supports receiving metric data via the Prometheus Remote Write protocol.
 
-### 配置 Remote Write
+### Configure Remote Write
 
 ```yaml
 # prometheus.yml
@@ -250,7 +250,7 @@ remote_write:
         action: keep
 ```
 
-### 使用 Remote Read
+### Use Remote Read
 
 ```yaml
 # prometheus.yml
@@ -261,33 +261,33 @@ remote_read:
       X-JDC-Access-Key: "your_access_key"
 ```
 
-## Grafana 集成
+## Grafana Integration
 
-### 配置数据源
+### Configure Data Source
 
-1. 安装京东云监控数据源插件
-2. 配置数据源参数：
+1. Install the JD Cloud Monitor data source plugin
+2. Configure data source parameters:
 
-| 参数 | 值 |
+| Parameter | Value |
 |------|-----|
 | Name | JD Cloud Monitor |
 | Type | JD Cloud Monitor |
-| Access Key | 您的 Access Key |
-| Secret Key | 您的 Secret Key |
+| Access Key | Your Access Key |
+| Secret Key | Your Secret Key |
 | Region | cn-north-1 |
 
-### 导入 Dashboard
+### Import Dashboard
 
-云监控提供预置的 Grafana Dashboard 模板，可从以下地址下载：
-- 云主机 Dashboard: https://github.com/jdcloud/grafana-dashboards/vm.json
+Cloud Monitor provides pre-built Grafana Dashboard templates, available from the following addresses:
+- VM Dashboard: https://github.com/jdcloud/grafana-dashboards/vm.json
 - RDS Dashboard: https://github.com/jdcloud/grafana-dashboards/rds.json
-- 负载均衡 Dashboard: https://github.com/jdcloud/grafana-dashboards/lb.json
+- Load Balancer Dashboard: https://github.com/jdcloud/grafana-dashboards/lb.json
 
-## Webhook 集成
+## Webhook Integration
 
-### 告警回调配置
+### Alarm Callback Configuration
 
-配置告警规则时指定回调 URL：
+Specify a callback URL when configuring alarm rules:
 
 ```bash
 jdc monitor create-alarm \
@@ -304,9 +304,9 @@ jdc monitor create-alarm \
   --callback-url "https://your-domain.com/webhook"
 ```
 
-### 回调消息格式
+### Callback Message Format
 
-#### 告警触发消息
+#### Alarm Trigger Message
 
 ```json
 {
@@ -324,11 +324,11 @@ jdc monitor create-alarm \
   "triggerTime": "2024-01-01T12:00:00Z",
   "regionId": "cn-north-1",
   "duration": 600,
-  "description": "CPU使用率超过阈值"
+  "description": "CPU usage exceeds threshold"
 }
 ```
 
-#### 告警恢复消息
+#### Alarm Recovery Message
 
 ```json
 {
@@ -346,11 +346,11 @@ jdc monitor create-alarm \
   "triggerTime": "2024-01-01T12:30:00Z",
   "regionId": "cn-north-1",
   "duration": 0,
-  "description": "CPU使用率已恢复正常"
+  "description": "CPU usage has returned to normal"
 }
 ```
 
-### Webhook 处理示例 (Python)
+### Webhook Processing Example (Python)
 
 ```python
 from flask import Flask, request, jsonify
@@ -362,11 +362,11 @@ app = Flask(__name__)
 def webhook():
     data = request.get_json()
     
-    # 验证签名（可选）
+    # Verify signature (optional)
     if not verify_signature(request):
         return jsonify({"error": "Invalid signature"}), 401
     
-    # 处理告警消息
+    # Process alarm message
     if data['status'] == 'ALARM':
         handle_alarm(data)
     elif data['status'] == 'OK':
@@ -375,52 +375,52 @@ def webhook():
     return jsonify({"message": "OK"})
 
 def handle_alarm(data):
-    """处理告警"""
-    print(f"告警触发: {data['alarmName']}")
-    print(f"资源: {data['resourceId']}")
-    print(f"当前值: {data['metricValue']}")
+    """Handle alarm"""
+    print(f"Alarm triggered: {data['alarmName']}")
+    print(f"Resource: {data['resourceId']}")
+    print(f"Current value: {data['metricValue']}")
     
-    # 发送通知到钉钉/企业微信/Slack
+    # Send notification to DingTalk/WeCom/Slack
     send_notification(data)
 
 def handle_recovery(data):
-    """处理告警恢复"""
-    print(f"告警恢复: {data['alarmName']}")
-    print(f"资源: {data['resourceId']}")
+    """Handle alarm recovery"""
+    print(f"Alarm recovered: {data['alarmName']}")
+    print(f"Resource: {data['resourceId']}")
     
-    # 发送恢复通知
+    # Send recovery notification
     send_recovery_notification(data)
 
 def verify_signature(request):
-    """验证请求签名"""
-    # 实现签名验证逻辑
+    """Verify request signature"""
+    # Implement signature verification logic
     return True
 
 def send_notification(data):
-    """发送通知"""
-    # 实现通知发送逻辑
+    """Send notification"""
+    # Implement notification sending logic
     pass
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
 ```
 
-## 其他集成方式
+## Other Integration Methods
 
-| 集成方式 | 参考文档 |
+| Integration Method | Reference |
 |---------|---------|
 | Java SDK | [integration-java.md](integration-java.md) |
 | Terraform & CI/CD (GitHub Actions / Jenkins) | [integration-iac.md](integration-iac.md) |
 
-## 最佳实践
+## Best Practices
 
-### 1. 凭证管理
+### 1. Credential Management
 
-- 使用环境变量或密钥管理服务存储凭证
-- 定期轮换 Access Key
-- 为不同环境使用不同的凭证
+- Store credentials using environment variables or key management services
+- Rotate Access Key regularly
+- Use different credentials for different environments
 
-### 2. 错误处理
+### 2. Error Handling
 
 ```python
 from jdcloud_sdk.core.exception import ClientException
@@ -434,7 +434,7 @@ except ServerException as e:
     print(f"Server error: {e.error_msg}")
 ```
 
-### 3. 重试策略
+### 3. Retry Strategy
 
 ```python
 import time
@@ -460,9 +460,9 @@ def get_metric_data(client, request):
     return client.describeMetricData(request)
 ```
 
-### 4. 性能优化
+### 4. Performance Optimization
 
-- 使用批量 API 减少请求次数
-- 合理设置查询时间范围
-- 使用缓存避免重复查询
-- 控制并发请求数量
+- Use batch APIs to reduce request count
+- Set reasonable query time ranges
+- Use caching to avoid duplicate queries
+- Control concurrent request count
