@@ -26,7 +26,7 @@ import json
 import shlex
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 try:
     from jdcloud_sdk.services.cloudshell.client.CloudshellClient import CloudshellClient
@@ -40,9 +40,7 @@ except ImportError:
     CloudshellClient = None
 
 from .k8s_client import (
-    K8sClientError,
     CloudShellUnavailableError,
-    K8sPermissionError,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,8 +67,8 @@ class CloudShellExecutor:
     def __init__(
         self,
         region_id: str,
-        cluster_id: Optional[str] = None,
-        kubeconfig_path: Optional[str] = None,
+        cluster_id: str | None = None,
+        kubeconfig_path: str | None = None,
     ):
         """Initialize CloudShell executor.
 
@@ -106,9 +104,9 @@ class CloudShellExecutor:
     def execute_kubectl(
         self,
         command: str,
-        namespace: Optional[str] = "default",
+        namespace: str | None = "default",
         timeout: int = 60,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute kubectl command via CloudShell.
 
         Args:
@@ -131,7 +129,7 @@ class CloudShellExecutor:
             - If local kubectl unavailable, return manual steps
         """
         degradation_reasons = []
-        
+
         # Try CloudShell first
         if self._client:
             try:
@@ -189,7 +187,7 @@ class CloudShellExecutor:
         command: str,
         namespace: str,
         timeout: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute command via CloudShell API."""
         if not self._client:
             raise CloudShellUnavailableError("CloudShell client not initialized")
@@ -246,7 +244,7 @@ class CloudShellExecutor:
         command: str,
         namespace: str,
         timeout: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute command via local kubectl binary."""
         import subprocess
 
@@ -295,7 +293,7 @@ class CloudShellExecutor:
         self,
         command: str,
         namespace: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Return structured manual execution steps."""
         return {
             "success": False,
@@ -307,7 +305,7 @@ class CloudShellExecutor:
             "manual_steps": {
                 "description": "Execute kubectl command manually",
                 "steps": [
-                    f"1. Ensure kubeconfig is configured: kubectl config view",
+                    "1. Ensure kubeconfig is configured: kubectl config view",
                     f"2. Run command: kubectl {command}",
                     f"3. If permission denied, check RBAC: kubectl auth can-i {shlex.split(command)[0] if shlex.split(command) else command}",
                 ],
@@ -326,8 +324,8 @@ class CloudShellExecutor:
     def collect_diagnostics(
         self,
         namespace: str,
-        resource_types: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        resource_types: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Collect diagnostic information from the cluster.
 
         Args:
@@ -404,10 +402,10 @@ class CloudShellExecutor:
 def execute_kubectl_with_fallback(
     command: str,
     region_id: str,
-    cluster_id: Optional[str] = None,
-    kubeconfig_path: Optional[str] = None,
+    cluster_id: str | None = None,
+    kubeconfig_path: str | None = None,
     namespace: str = "default",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Convenience function to execute kubectl with automatic fallback.
 
     Args:

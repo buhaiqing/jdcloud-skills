@@ -15,7 +15,11 @@ Usage:
   python3 topo-render.py <output_dir> <mode:brief|detailed> <timestamp> <region> [--format ascii|mermaid|both] [--health-json path]
 """
 
-import json, sys, os, argparse, subprocess
+import json
+import sys
+import os
+import argparse
+import subprocess
 
 # ── Safe rendering utilities ──
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib'))
@@ -290,7 +294,7 @@ def render_mermaid():
     lines.append("graph TB")
     vpc_label = mermaid_safe_vpc_label(vpc_name, vpc_id)
     lines.append(f"    subgraph VPC[{vpc_label}]")
-    lines.append(f"        style VPC fill:#e8f4fd,stroke:#3b82f6")
+    lines.append("        style VPC fill:#e8f4fd,stroke:#3b82f6")
 
     for sid, sn in subnet_map.items():
         safe_sn = mermaid_safe_id(f"sub_{sid}")
@@ -319,7 +323,7 @@ def render_mermaid():
                 label = mermaid_safe_label(label)
                 lines.append(f"        {safe_id}[{label}]")
             if not items:
-                lines.append(f"        empty_spot[&#40;预留&#41;]")
+                lines.append("        empty_spot[&#40;预留&#41;]")
         lines.append("    end")
 
     # EIP → CLB connections

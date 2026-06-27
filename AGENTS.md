@@ -346,10 +346,68 @@ When a user's request spans multiple JD Cloud products:
 
 ## Validation
 
+### Markdown（Skill 文档）
+
 ```bash
 npm install -g markdownlint-cli
 markdownlint jdcloud-[product]-ops/SKILL.md
 ```
+
+### Python（脚本 / Skill 代码）
+
+所有 Python 变更（新增、修改、重构）完成后 **必须** 通过 Ruff 检查并自动格式化。
+Ruff 同时承担 lint + format 职责（替代 flake8 / isort / black / pyupgrade）。
+
+**安装**（一次性；项目 `pyproject.toml` 已声明 `ruff>=0.6` 为 dev 依赖）：
+
+```bash
+source .venv/bin/activate
+uv pip install "ruff>=0.6"
+```
+
+**变更完成后必跑**（Agent 自我验收三步，缺一不可）：
+
+```bash
+# 1) lint：检查语法、未使用导入、可简化分支、bug 风险等
+ruff check .
+
+# 2) format：自动按仓库统一风格（双引号、空格缩进、line-length=100）格式化
+ruff format .
+
+# 3) 复核：lint 必须再次零错误
+ruff check .
+```
+
+**强制要求**：
+
+| 场景 | 要求 |
+|---|---|
+| 新增 / 修改任何 `.py` 文件 | `ruff check .` + `ruff format .` 必须全部通过，**禁止带着 lint 错误提交** |
+| `ruff check .` 报 `# noqa` 之外的非空结果 | **视为未完成**，先修代码或调整规则（不要 `noqa` 堆叠） |
+| 仓库 `pyproject.toml` 的 `[tool.ruff]` 已锁定规则集 | 改动规则需在 PR 描述里说明原因；不要在本地静默改规则绕过报错 |
+| `clean_python.sh` 顺带清理 `.ruff_cache` | 提交前可运行 `./clean_python.sh --yes` 一并清掉缓存 |
+
+**CI 落地建议**（`.github/workflows/ruff.yml`，本仓库未启用时按下例追加）：
+
+```yaml
+name: ruff
+on: [push, pull_request]
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v1
+        with:
+          args: "check --output-format=github ."
+      - run: ruff format --check .
+```
+
+**不在范围**（明确不做，避免过度工程）：
+
+- 不强制 mypy / pyright 类型检查 — 仓库脚本以调用 SDK 为主，类型收益低、迁移成本高。
+- 不强制 `ruff format` 与 `black` 100% 等价的全部细节；以 Ruff format 为准。
+- 不引入 pre-commit 框架 — Agent 手动跑三步即可落地，避免额外依赖。
 
 ## Versioning
 

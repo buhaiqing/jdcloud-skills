@@ -1,0 +1,9 @@
+{
+  "ruleId": "rule-001",
+  "domain": "cdn.example.com",
+  "rulePath": "/static/*",
+  "cacheType": "prefix",
+  "cacheTtl": 2592000,
+  "priority": 10,
+  "comment": "Static assets — 30 day cache"
+}

@@ -1,7 +1,5 @@
 """Tests for local baseline backend (mirrors alicloud-topo-discovery Phase 15 tests)."""
-import shutil
-from datetime import date, timedelta
-from pathlib import Path
+from datetime import date
 from scripts.lib.baseline_local import LocalBackend
 
 

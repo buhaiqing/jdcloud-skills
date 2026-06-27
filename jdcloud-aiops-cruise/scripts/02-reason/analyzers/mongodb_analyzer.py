@@ -17,7 +17,6 @@ appropriate ops skill with human confirmation.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-import path_setup
 
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer

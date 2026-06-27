@@ -14,7 +14,8 @@ import os
 import time
 import logging
 import threading
-from typing import Optional, Callable, Any, Dict
+from typing import Any
+from collections.abc import Callable
 from functools import wraps
 
 try:
@@ -29,11 +30,11 @@ logger = logging.getLogger(__name__)
 
 # Client cache to avoid repeated kubeconfig loading (thread-safe)
 # Cache value format: {"client": <client>, "mtime": <float|None>, "loaded_at": <float>}
-_client_cache: Dict[str, Dict[str, Any]] = {}
+_client_cache: dict[str, dict[str, Any]] = {}
 _client_cache_lock = threading.Lock()
 
 
-def _get_kubeconfig_mtime(kubeconfig_path: Optional[str]) -> Optional[float]:
+def _get_kubeconfig_mtime(kubeconfig_path: str | None) -> float | None:
     """Get kubeconfig file modification time.
 
     Args:
@@ -50,7 +51,7 @@ def _get_kubeconfig_mtime(kubeconfig_path: Optional[str]) -> Optional[float]:
         return None
 
 
-def _is_cache_valid(cache_key: str, current_mtime: Optional[float]) -> bool:
+def _is_cache_valid(cache_key: str, current_mtime: float | None) -> bool:
     """Check if cached client is still valid.
 
     Args:
@@ -89,10 +90,10 @@ class K8sClientError(Exception):
     def __init__(
         self,
         message: str,
-        resource_type: Optional[str] = None,
-        resource_name: Optional[str] = None,
-        namespace: Optional[str] = None,
-        original_error: Optional[Exception] = None,
+        resource_type: str | None = None,
+        resource_name: str | None = None,
+        namespace: str | None = None,
+        original_error: Exception | None = None,
     ):
         super().__init__(message)
         self.message = message
@@ -218,7 +219,7 @@ def handle_k8s_api_errors(func: Callable) -> Callable:
     return wrapper
 
 
-def _load_kube_config(kubeconfig_path: Optional[str] = None) -> None:
+def _load_kube_config(kubeconfig_path: str | None = None) -> None:
     """Load kubeconfig from file or in-cluster config.
 
     Args:
@@ -253,7 +254,7 @@ def _load_kube_config(kubeconfig_path: Optional[str] = None) -> None:
         ) from e
 
 
-def _get_cache_key(kubeconfig_path: Optional[str], client_type: str) -> str:
+def _get_cache_key(kubeconfig_path: str | None, client_type: str) -> str:
     """Generate cache key for client caching.
 
     Args:
@@ -271,7 +272,7 @@ T = Any
 
 
 def _get_or_create_client(
-    kubeconfig_path: Optional[str],
+    kubeconfig_path: str | None,
     client_type: str,
     client_class,
 ) -> Any:
@@ -299,7 +300,7 @@ def _get_or_create_client(
         return _client_cache[cache_key]["client"]
 
 
-def get_k8s_client(kubeconfig_path: Optional[str] = None) -> client.CoreV1Api:
+def get_k8s_client(kubeconfig_path: str | None = None) -> client.CoreV1Api:
     """Initialize K8s CoreV1Api client with caching.
 
     Args:
@@ -315,33 +316,33 @@ def get_k8s_client(kubeconfig_path: Optional[str] = None) -> client.CoreV1Api:
     return _get_or_create_client(kubeconfig_path, "CoreV1Api", client.CoreV1Api)
 
 
-def get_apps_v1_client(kubeconfig_path: Optional[str] = None) -> client.AppsV1Api:
+def get_apps_v1_client(kubeconfig_path: str | None = None) -> client.AppsV1Api:
     """Initialize K8s AppsV1Api client for Deployments/StatefulSets/DaemonSets with caching."""
     return _get_or_create_client(kubeconfig_path, "AppsV1Api", client.AppsV1Api)
 
 
-def get_autoscaling_v1_client(kubeconfig_path: Optional[str] = None) -> client.AutoscalingV1Api:
+def get_autoscaling_v1_client(kubeconfig_path: str | None = None) -> client.AutoscalingV1Api:
     """Initialize K8s AutoscalingV1Api client for HPA with caching."""
     return _get_or_create_client(kubeconfig_path, "AutoscalingV1Api", client.AutoscalingV1Api)
 
 
-def get_networking_v1_client(kubeconfig_path: Optional[str] = None) -> client.NetworkingV1Api:
+def get_networking_v1_client(kubeconfig_path: str | None = None) -> client.NetworkingV1Api:
     """Initialize K8s NetworkingV1Api client for Ingress with caching."""
     return _get_or_create_client(kubeconfig_path, "NetworkingV1Api", client.NetworkingV1Api)
 
 
-def get_storage_v1_client(kubeconfig_path: Optional[str] = None) -> client.StorageV1Api:
+def get_storage_v1_client(kubeconfig_path: str | None = None) -> client.StorageV1Api:
     """Initialize K8s StorageV1Api client for StorageClass with caching."""
     return _get_or_create_client(kubeconfig_path, "StorageV1Api", client.StorageV1Api)
 
 
-def get_batch_v1_client(kubeconfig_path: Optional[str] = None) -> client.BatchV1Api:
+def get_batch_v1_client(kubeconfig_path: str | None = None) -> client.BatchV1Api:
     """Initialize K8s BatchV1Api client for Jobs/CronJobs with caching."""
     return _get_or_create_client(kubeconfig_path, "BatchV1Api", client.BatchV1Api)
 
 
 def get_rbac_authorization_v1_client(
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> client.RbacAuthorizationV1Api:
     """Initialize K8s RbacAuthorizationV1Api client for RBAC with caching."""
     return _get_or_create_client(

@@ -20,7 +20,6 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
 
 # 添加 lib 路径
 _script_dir = Path(__file__).resolve().parent
@@ -435,7 +434,7 @@ def main():
     # 初始化客户端
     client = JdcClient()
 
-    print(f"🔍 京东云资源到期巡检 V2")
+    print("🔍 京东云资源到期巡检 V2")
     print(f"   预警阈值: {args.warning_days} 天内到期")
     print(f"   区域数量: {len(regions)} ({', '.join(regions)})")
     print(f"   资源类型: {', '.join(types)}")
@@ -463,7 +462,7 @@ def main():
         if region_expiring:
             all_expiring.extend(region_expiring)
         else:
-            print(f"   ✅ 无即将到期的资源")
+            print("   ✅ 无即将到期的资源")
 
     # 输出报告
     print_report(all_expiring, args.warning_days, with_price=args.with_price)

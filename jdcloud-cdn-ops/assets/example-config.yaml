@@ -1,0 +1,123 @@
+# JD Cloud CDN — Example Configuration
+# Used by tests and as a reference for users creating their first CDN setup.
+#
+# This file is consumed by:
+#   - tests/test_smoke.py (loads as fixture)
+#   - jdcloud-cdn-ops/integration.md (static-site stack example)
+#
+# Variables: ${VAR} style — resolved by tests via envsubst or python os.environ.
+
+# === Required: credentials (resolved at runtime, never commit) ===
+credentials:
+  access_key: ${JDC_ACCESS_KEY}
+  secret_key: ${JDC_SECRET_KEY}     # NEVER commit a real value
+  region: ${JDC_REGION:-cn-north-1}
+
+# === Domain configuration ===
+domain:
+  primary: cdn.example.com
+  cdn_type: vod                    # vod (点播) | live (直播, separate flow)
+  origin_type: oss                 # oss | https | http
+  origin:
+    - name: static-prod            # OSS bucket name (if origin_type=oss)
+      region: cn-north-1
+      priority: 1
+  # alternative: origin_type=https with origin: ["https://origin1.example.com","https://origin2.example.com"]
+
+# === HTTPS / SSL ===
+https:
+  enabled: true
+  cert_id: cert-abc123             # from jdcloud-cert-ops
+  http2: true
+  follow_redirect: true            # edge follows client http→https
+  cert_upload:                     # if cert_id not yet uploaded
+    method: cert-ops               # delegate to jdcloud-cert-ops
+
+# === Cache rules (priority: lower number = higher priority) ===
+cache_rules:
+  - rule_path: /api/*
+    cache_type: prefix
+    cache_ttl: 0                   # 0 = no cache
+    priority: 1                    # highest
+
+  - rule_path: /health
+    cache_type: exact
+    cache_ttl: 0
+    priority: 1
+
+  - rule_path: /static/*
+    cache_type: prefix
+    cache_ttl: 2592000             # 30 days
+    priority: 10
+
+  - rule_path: "*.jpg"
+    cache_type: suffix
+    cache_ttl: 2592000
+    priority: 11
+
+  - rule_path: "*.css"
+    cache_type: suffix
+    cache_ttl: 86400               # 1 day
+    priority: 12
+
+  - rule_path: "*.js"
+    cache_type: suffix
+    cache_ttl: 86400
+    priority: 13
+
+  - rule_path: /
+    cache_type: exact              # root index.html
+    cache_ttl: 3600                # 1 hour
+    priority: 50
+
+  # default: implicit, TTL=3600, priority=99
+
+# === Cache-key options ===
+cache_key:
+  ignore_query_string: true        # ?utm_source=... doesn't fragment cache
+  ignore_case: false               # default
+  extra_cache_time:
+    404: 60                        # cache 404 for 60s, prevents origin thrash
+    403: 60
+
+# === Compression / Headers ===
+optimization:
+  gzip: true
+  custom_response_headers:
+    - "X-Frame-Options: DENY"
+    - "X-Content-Type-Options: nosniff"
+
+# === Refresh / Prefetch defaults ===
+refresh:
+  daily_url_quota: 2000            # CDN plan default
+  batch_max: 100                   # per task
+
+prefetch:
+  daily_url_quota: 1000
+
+# === Monitoring (WAF-PERF-048) ===
+monitoring:
+  hit_rate_threshold:              # delegate to jdcloud-cloudmonitor-ops for alarms
+    pass: 0.90
+    warn: 0.70
+    fail: 0.00
+  metrics_namespace: CDN
+  bandwidth_alarm_bps: 10000000000  # 10 Gbps
+
+# === Safety gates (per skill policy) ===
+safety_gates:
+  require_user_confirmation:
+    - delete-domain
+    - stop-domain                  # only if status=running AND traffic > 0
+    - batch-delete-domain-group
+    - enable-waf-black-rules
+    - enable-waf-white-rules
+
+# === Cross-skill dependencies (handoffs) ===
+dependencies:
+  origin_bucket: jdcloud-oss-ops
+  ssl_cert: jdcloud-cert-ops
+  dns_cname: jdcloud-dns-ops
+  waf_rules: jdcloud-waf-ops
+  cost_analysis: jdcloud-billing-ops
+  alarms: jdcloud-cloudmonitor-ops

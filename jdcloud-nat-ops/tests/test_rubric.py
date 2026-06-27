@@ -152,7 +152,7 @@ def test_rubric_max_iterations_limits(rubric_template):
     for i in range(1, max_iter + 1):
         assert i <= max_iter
     # 3rd iteration would exceed
-    assert 3 > max_iter
+    assert max_iter < 3
 
 
 def test_snat_subnet_uniqueness():

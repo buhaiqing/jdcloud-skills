@@ -1,5 +1,4 @@
 """Tests for the MAPPINGS registry and individual resource type mappings (JD Cloud)."""
-import pytest
 from scripts.lib.mappings import MAPPINGS
 from scripts.lib.field_mapper import FieldMapper
 

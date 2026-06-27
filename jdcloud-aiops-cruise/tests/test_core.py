@@ -5,7 +5,9 @@ and cross-phase integration.
 Run with: python -m pytest tests/test_core.py -v
 """
 
-import sys, os, json
+import sys
+import os
+import json
 # Add scripts/ to path for lib/ imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 # Add scripts/02-reason/ to path for analyzers/ imports
@@ -550,7 +552,7 @@ class TestAnalyzers:
             try:
                 a.discover({"customer": "test", "raw": {}})
                 a.analyze()
-            except Exception as e:
+            except Exception:
                 # discovery may raise for some, but should handle gracefully
                 pass
 

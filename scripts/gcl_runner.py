@@ -93,7 +93,8 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +252,7 @@ class CriticScore:
     in each skill's `references/prompt-templates.md`."""
 
     scores: dict[str, float] = field(
-        default_factory=lambda: {d: 1.0 for d in RUBRIC_DIMENSIONS}
+        default_factory=lambda: dict.fromkeys(RUBRIC_DIMENSIONS, 1.0)
     )
     justifications: dict[str, str] = field(default_factory=dict)
     suggestions: list[str] = field(default_factory=list)
@@ -271,11 +272,11 @@ class IterationRecord:
     decision: str  # "PASS" | "RETRY" | "RETURN_BEST" | "ABORT" | "HALLUCINATION_ABORT"
     reason: str
     # §10.4 — Hallucination Detector result (None if H not enabled).
-    hallucination_detector: Optional[dict[str, Any]] = None
+    hallucination_detector: dict[str, Any] | None = None
     # §10.4 — Whether this iteration was regenerated after H FAIL.
     regenerated: bool = False
     # §11.2 — Extracted failure pattern (None if no failure).
-    failure_pattern: Optional[dict[str, Any]] = None
+    failure_pattern: dict[str, Any] | None = None
 
 
 @dataclass
@@ -292,7 +293,7 @@ class Trace:
     started_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
-    finished_at: Optional[str] = None
+    finished_at: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -440,8 +441,8 @@ def mock_critic(
     safety=0 (to demonstrate the ABORT path).
     """
     return CriticScore(
-        scores={d: 1.0 for d in RUBRIC_DIMENSIONS},
-        justifications={d: "mock pass" for d in RUBRIC_DIMENSIONS},
+        scores=dict.fromkeys(RUBRIC_DIMENSIONS, 1.0),
+        justifications=dict.fromkeys(RUBRIC_DIMENSIONS, "mock pass"),
         suggestions=[],
         blocking=False,
     )
@@ -453,11 +454,11 @@ def mock_strict_critic(
     rubric: RubricConfig,
 ) -> CriticScore:
     """Mock Critic that always returns safety=0 (ABORT demo)."""
-    scores = {d: 1.0 for d in RUBRIC_DIMENSIONS}
+    scores = dict.fromkeys(RUBRIC_DIMENSIONS, 1.0)
     scores["safety"] = 0.0
     return CriticScore(
         scores=scores,
-        justifications={d: "mock" for d in RUBRIC_DIMENSIONS},
+        justifications=dict.fromkeys(RUBRIC_DIMENSIONS, "mock"),
         suggestions=["mock-strict: safety=0 to demo ABORT"],
         blocking=True,
     )
@@ -497,7 +498,7 @@ def decide(
     score: CriticScore,
     rubric: RubricConfig,
     iter: int,
-) -> tuple[str, str, Optional[str]]:
+) -> tuple[str, str, str | None]:
     """Apply the AGENTS.md §5 decision rules in order.
 
     Returns: (decision, reason, next_iter_feedback or None)
@@ -537,7 +538,7 @@ def hallucination_detect(
     skill: str,
     operation: str,
     command: str,
-    json_payload: Optional[dict] = None,
+    json_payload: dict | None = None,
     enable_time_range_check: bool = False,
 ) -> dict[str, Any]:
     """Pre-execution structural validity check per AGENTS.md §10.2.
@@ -741,7 +742,7 @@ def extract_failure_pattern(
     command: str,
     error: str,
     decision: str,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Extract a failure pattern from a failed GCL iteration per §11.2.
 
     Returns None if the iteration passed (no failure to extract).
@@ -749,11 +750,7 @@ def extract_failure_pattern(
     if decision in ("RETURN",):
         return None
     category = "runtime"
-    if "InvalidParameter" in error or "MissingParameter" in error:
-        category = "cli_parameter"
-    elif "unrecognized" in error.lower():
-        category = "cli_parameter"
-    elif decision == "HALLUCINATION_ABORT":
+    if "InvalidParameter" in error or "MissingParameter" in error or "unrecognized" in error.lower() or decision == "HALLUCINATION_ABORT":
         category = "cli_parameter"
 
     return {
@@ -778,7 +775,7 @@ def run_gcl(
     safety_confirm: bool,
     generator_fn: GeneratorFn,
     critic_fn: CriticFn,
-    rubric: Optional[RubricConfig] = None,
+    rubric: RubricConfig | None = None,
     enable_hallucination_check: bool = False,
     operation: str = "",
     enable_reflexion: bool = True,
@@ -833,7 +830,7 @@ def run_gcl(
         gen_out = generator_fn(request, critic_feedback, rubric, it)
 
         # ---- Phase 6: Hallucination Detection (pre-execution) ----
-        h_result: Optional[dict[str, Any]] = None
+        h_result: dict[str, Any] | None = None
         regenerated = False
         if enable_hallucination_check and operation:
             h_result = hallucination_detect(
@@ -1075,9 +1072,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         # will score safety=0 if the trace doesn't carry the
         # confirm flag. This is a soft signal.
         print(
-            f"[INFO] rubric.safety_confirm_required=true but "
-            f"--safety-confirm not set; Generator must enforce or "
-            f"Critic will score safety=0",
+            "[INFO] rubric.safety_confirm_required=true but "
+            "--safety-confirm not set; Generator must enforce or "
+            "Critic will score safety=0",
             file=sys.stderr,
         )
 
@@ -1175,7 +1172,7 @@ def build_argparser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_argparser()
     args = parser.parse_args(argv)
     return args.func(args)

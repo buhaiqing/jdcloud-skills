@@ -15,7 +15,6 @@ Read-only output: upgrade assessment recommendations only; no CLB mutation.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-import path_setup
 from datetime import datetime, timezone
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer

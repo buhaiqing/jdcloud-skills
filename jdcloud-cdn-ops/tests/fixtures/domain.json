@@ -1,0 +1,10 @@
+{
+  "domain": "cdn.example.com",
+  "status": "running",
+  "cdnType": "vod",
+  "origin": "https://origin.example.com",
+  "httpsSwitch": 1,
+  "createTime": "2026-06-01T10:00:00Z",
+  "certId": "cert-abc123",
+  "comment": "Primary CDN domain for example.com static assets"
+}

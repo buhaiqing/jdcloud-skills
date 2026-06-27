@@ -11,12 +11,13 @@ Output:
     - If resources need confirmation, exits with needs_confirmation flag
 """
 
-import sys, json, argparse
+import sys
+import json
+import argparse
 from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import path_setup
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources
@@ -44,12 +45,12 @@ def main():
     topology = result["topology"]
 
     # ── Print topology preview ──
-    print(f"\n[拓扑] 拓扑初判")
+    print("\n[拓扑] 拓扑初判")
     print(f"  VPC 数量: {len(topology['vpcs'])}")
     for vpc_id, info in topology["vpcs"].items():
         print(f"    {info['name']} ({info['cidr']}): {len(info['vms'])} VMs, {len(info['subnets'])} 子网")
 
-    print(f"\n[资源] 资源分布")
+    print("\n[资源] 资源分布")
     customer_vms = [r for r in cls["resources"] if r.get("mode") != "unknown"]
     print(f"  已分类: {len(customer_vms)} 个资源")
     modes = {}
@@ -59,7 +60,7 @@ def main():
         print(f"    {m}: {c} 个")
 
     # ── Print classification ──
-    print(f"\n[分类] 部署模式分类")
+    print("\n[分类] 部署模式分类")
     for r in cls["resources"]:
         conf_bar = "█" * int(r["confidence"] * 20)
         print(f"  [{conf_bar}] {r.get('name',''):35s} {r['mode']:15s} 置信度={r['confidence']:.0%} 原因:{r['reason']}")
@@ -73,7 +74,7 @@ def main():
         print("\n  请人工确认后，重新运行或跳过确认继续 Phase 2。")
         exit_code = 1
     else:
-        print(f"\n[通过] 所有资源已自动分类，可直接进入 Phase 2。")
+        print("\n[通过] 所有资源已自动分类，可直接进入 Phase 2。")
         exit_code = 0
 
     # ── Save JSON ──

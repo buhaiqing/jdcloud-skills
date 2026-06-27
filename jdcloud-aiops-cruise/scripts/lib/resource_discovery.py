@@ -15,7 +15,7 @@ from pathlib import Path
 _scripts_dir = Path(__file__).parent.parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
-from lib.jdc_client import JdcClient, filter_by_tag, get_tag, tag_dict
+from lib.jdc_client import JdcClient, filter_by_tag, tag_dict
 
 K8S_CLUSTER_TAG = "kubernetes.jdcloud.com/cluster_id"
 K8S_CREATED_TAG = "kubernetes.jdcloud.com/created_by"

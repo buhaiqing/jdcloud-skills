@@ -35,7 +35,6 @@ from scripts.lib.dependency_inference import infer_dependencies
 from scripts.lib.manifest_builder import ManifestBuilder
 from scripts.lib.manifest_validator import ManifestValidator
 from scripts.lib.provider_locker import ProviderLocker, DEFAULT_PROVIDER_VERSION
-from datetime import datetime, timezone
 
 
 def parse_args(argv=None):
@@ -81,7 +80,7 @@ def main():
             capture_output=True, text=True, timeout=60,
         )
         if result.returncode != 0:
-            print(f"[ERROR] TYPE=ASSUME_ROLE_FAILED FIX=Check role and permissions")
+            print("[ERROR] TYPE=ASSUME_ROLE_FAILED FIX=Check role and permissions")
             print(result.stderr)
             sys.exit(10)
 
@@ -190,7 +189,7 @@ def main():
     if unsupported:
         print(f"[WARN] Unsupported types: {unsupported}")
     print(f"[SUMMARY] Duration: {elapsed_ms}ms")
-    print(f"[WARN] HCL output is DOCUMENTATION ONLY — JD Cloud has no official Terraform Provider")
+    print("[WARN] HCL output is DOCUMENTATION ONLY — JD Cloud has no official Terraform Provider")
 
 
 def _gen_import_script(ordered, block_lookup, region):

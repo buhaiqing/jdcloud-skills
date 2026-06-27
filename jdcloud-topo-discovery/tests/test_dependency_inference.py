@@ -1,5 +1,4 @@
 """Tests for dependency inference (JD Cloud)."""
-import pytest
 from scripts.lib.dependency_inference import infer_dependencies, DependencyInferenceError
 from scripts.lib.field_mapper import MappingSpec
 

@@ -11,7 +11,6 @@ Features: detects high-memory (OOM risk), low hit rate (cache miss / penetration
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-import path_setup
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag, tag_dict
@@ -110,7 +109,7 @@ class RedisAnalyzer(BaseAnalyzer):
             policy = r.get("maxmemoryPolicy", "unknown")
             if policy == "noeviction":
                 self._add_finding("info",
-                    f"淘汰策略: noeviction (内存满时写入会失败)",
+                    "淘汰策略: noeviction (内存满时写入会失败)",
                     "建议改用volatile-lru或allkeys-lru", name)
 
             # Version check

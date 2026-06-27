@@ -109,7 +109,7 @@ out_file = out_dir / f"es_env_tag_audit_{ts}.json"
 with open(out_file, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2, ensure_ascii=False)
 
-print(f"\n=== ES 【环境】 Tag Compliance Audit ===")
+print("\n=== ES 【环境】 Tag Compliance Audit ===")
 print(f"Total instances: {total}")
 print(f"Compliant:       {compliant}")
 print(f"Non-compliant:   {len(non_compliant)}")

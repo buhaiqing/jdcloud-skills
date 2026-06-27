@@ -5,7 +5,6 @@ from scripts.lib.sensitive_masker import (
     _var_name_for,
     _is_sensitive,
     _field_path,
-    SENSITIVE_FIELDS,
 )
 
 

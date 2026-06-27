@@ -59,8 +59,13 @@ rules:
     check_logic:
       field: ScalingGroupId
       operator: exists
-    remediation: 配置弹性伸缩组和伸缩规则，设置合理的触发条件和冷却时间
-    data_source: (无对应 skill，标记为 manual check)
+    remediation: |
+      配置弹性伸缩组和伸缩规则，设置合理的触发条件和冷却时间。
+      **注意**: JD Cloud ESS（弹性伸缩）当前无 CLI/SDK 支持，仅可通过控制台配置。
+      **替代方案**:
+      - 容器化工作负载：使用 `jdcloud-kubernetes-ops` 配置 HPA（Horizontal Pod Autoscaler）
+      - VM 工作负载：通过控制台手动配置 ESS 伸缩组
+    data_source: (console-only — 无 CLI/SDK 支持；K8s 场景见 jdcloud-kubernetes-ops)
 
   - id: WAF-EFF-006
     title: 告警噪音治理

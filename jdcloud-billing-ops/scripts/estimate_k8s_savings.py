@@ -91,7 +91,7 @@ def main():
             "dataDisks": data_disks,
         })
 
-    print(f"\n📋 节点组详情:")
+    print("\n📋 节点组详情:")
     print(f"{'名称':<20} {'规格':<15} {'数量':<5} {'计费方式':<20} {'状态':<10}")
     print("-" * 70)
     for n in node_groups:

@@ -122,3 +122,29 @@ rules:
       value: "Enabled"
     remediation: 开启 JCS for MySQL 慢查询日志，设置合理的慢查询阈值（建议 1-2 秒）
     data_source: jdcloud-mysql-ops
+
+  # === WAF-PERF-011 ~ WAF-PERF-047 reserved (existing rules migrated from other pillars) ===
+
+  - id: WAF-PERF-048
+    title: CDN 缓存命中率达标
+    severity: medium
+    check_type: metric
+    resource_type: CDN
+    description: CDN 域名的缓存命中率应 ≥ 90%，命中率过低意味着源站压力大、回源流量高、用户体验差
+    check_logic:
+      field: hit_rate
+      operator: gte
+      value: "0.90"
+      metric_formula: "1 - (origin_traffic / total_traffic)"
+      metric_window_days: 7
+    remediation: |
+      命中率 < 90% 时优化方向:
+      1. 延长静态资源 TTL (图片/JS/CSS 建议 30 天以上)
+      2. 对版本化资源 (/app.v123.js) 设置 TTL=365 天
+      3. 启用 set-ignore-query-string 防止 query string 碎片化
+      4. 静态资源回源切换到 OSS (set-source + config-back-source-oss)
+      5. 高频 URL 预热 (bat-create-prefetch-task)
+    data_source: jdcloud-cdn-ops + jdcloud-cloudmonitor-ops
+    references:
+      - jdcloud-cdn-ops/references/monitoring.md#2-hit-rate-命中率--the-waf-perf-048-metric
+      - jdcloud-cdn-ops/references/core-concepts.md#5-hit-rate-命中率--waf-perf-048

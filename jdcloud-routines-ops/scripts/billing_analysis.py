@@ -21,7 +21,6 @@ import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 # 添加 lib 路径
 _script_dir = Path(__file__).resolve().parent
@@ -207,7 +206,7 @@ def print_billing_report(results: list[dict], renew_months: int, warning_days: i
     print("\n" + "=" * 80)
     print(f"💰 资源续费成本预估（续费 {renew_months} 个月）")
     print("=" * 80)
-    print(f"\n📊 汇总:")
+    print("\n📊 汇总:")
     print(f"   资源总数: {len(results)} 个")
     print(f"   预估原价: ¥{sum(r.get('original_price', 0) for r in results):.2f}")
     print(f"   预估实付: ¥{total_cost:.2f}")
@@ -356,7 +355,7 @@ def main():
     # 初始化客户端
     client = JdcClient()
 
-    print(f"💰 资源账单分析")
+    print("💰 资源账单分析")
     print(f"   分析范围: 未来 {args.warning_days} 天内到期的资源")
     print(f"   续费预估: {args.renew_months} 个月")
     print(f"   区域: {', '.join(regions)}")

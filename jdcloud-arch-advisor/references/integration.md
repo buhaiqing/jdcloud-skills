@@ -111,7 +111,7 @@ printf "%s" "default" > /tmp/jdc-home/.jdc/current # 注意：无换行
 |----------|-----------------|---------|
 | `jdcloud-nat-ops` | Reliability: NAT Gateway 高可用 / Cost: NAT闲置 |人工登录控制台或 OpenAPI `DescribeNatGateways` |
 | `jdcloud-oss-ops` | Cost: OSS存储桶生命周期 / Security: OSS访问日志 |人工登录 OSS 控制台 |
-| `jdcloud-cdn-ops` | Performance: CDN命中率 / Cost: CDN流量 |人工登录 CDN 控制台 |
+| `jdcloud-cdn-ops` | Performance: CDN命中率 (`WAF-PERF-048`) / Cost: CDN流量 | `jdc cdn query-statistics-data` + Cloud Monitor `OriginTraffic` |
 | `jdcloud-kubernetes-ops` | Reliability: JCS K8s 多 AZ / Cost:节点池利用率 | `jdc kubernetes describe-clusters`（如有） |
 | `jdcloud-jcq-ops` | Reliability: JCQ 高可用 / Cost: JCQ消息堆积 |人工登录控制台 |
 | `jdcloud-billing-ops` | Cost:资源成本账单量化分析 |京东云费用中心控制台 |

@@ -53,11 +53,8 @@ import argparse
 import json
 import sys
 import tempfile
-import shutil
-from dataclasses import asdict
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -72,7 +69,7 @@ from gcl_runner import (  # noqa: E402
 )
 
 sys.path.insert(0, str(REPO_ROOT / "tests"))
-from gcl_dashboard import load_traces, DashboardData, parse_iso  # noqa: E402
+from gcl_dashboard import load_traces, DashboardData  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -106,18 +103,14 @@ def make_critic_for_record(record: dict[str, Any]) -> callable:
         scores = {}
         for d in RUBRIC_DIMENSIONS:
             # For RETRY→PASS: iter 1 has score_0, iter 2 has 1.0
-            if status == "PASS" and it == 1 and d in score_0:
-                scores[d] = 0.0
-            elif status == "ABORT" and d in score_0:
-                scores[d] = 0.0
-            elif status == "RETURN_BEST" and d in score_0:
+            if status == "PASS" and it == 1 and d in score_0 or status == "ABORT" and d in score_0 or status == "RETURN_BEST" and d in score_0:
                 scores[d] = 0.0
             else:
                 scores[d] = 1.0
         blocking = scores.get("safety", 1.0) == 0.0
         return CriticScore(
             scores=scores,
-            justifications={d: f"test fixture for {record['id']}" for d in RUBRIC_DIMENSIONS},
+            justifications=dict.fromkeys(RUBRIC_DIMENSIONS, f"test fixture for {record['id']}"),
             suggestions=[
                 f"address {d}" for d in RUBRIC_DIMENSIONS
                 if scores.get(d, 1.0) == 0.0
@@ -243,13 +236,13 @@ def run_test(gt_path: Path, verbose: bool = False) -> int:
                 return {}
             status = record.get("expected_status")
             if status == "ABORT":
-                return {d: 1 for d in score_0}
+                return dict.fromkeys(score_0, 1)
             if status == "RETURN_BEST":
-                return {d: record["expected_iterations"] for d in score_0}
+                return dict.fromkeys(score_0, record["expected_iterations"])
             if status == "PASS":
                 # RETRY→PASS: only the first iter fails.
-                return {d: 1 for d in score_0}
-            return {d: 1 for d in score_0}
+                return dict.fromkeys(score_0, 1)
+            return dict.fromkeys(score_0, 1)
 
         for record in records:
             skill = record["skill"]
@@ -335,11 +328,11 @@ def run_test(gt_path: Path, verbose: bool = False) -> int:
                 return 1
 
         print(f"  ✅ All {len(records)} ground-truth records produce a")
-        print(f"     dashboard aggregation that matches their labels.")
+        print("     dashboard aggregation that matches their labels.")
         return 0
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="gcl_dashboard_test",
         description="Verify dashboard aggregation against ground truth",
@@ -356,16 +349,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     args = p.parse_args(argv)
 
-    print(f"=== GCL Dashboard Test ===")
+    print("=== GCL Dashboard Test ===")
     print(f"  Ground truth: {args.ground_truth}")
     print()
     rc = run_test(args.ground_truth, verbose=args.verbose)
     if rc == 0:
         print()
-        print(f"  Result: PASS")
+        print("  Result: PASS")
     else:
         print()
-        print(f"  Result: FAIL")
+        print("  Result: FAIL")
     return rc
 
 

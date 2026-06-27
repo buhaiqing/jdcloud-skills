@@ -395,7 +395,7 @@ def main():
             print("[ERROR] --resample requires --as-of <DATE> or --as-of-range <START>:<END>")
             sys.exit(2)
 
-        print(f"[SUMMARY] Resample done")
+        print("[SUMMARY] Resample done")
         return
 
     # Step 1: Run topo-scan to collect real data
@@ -465,18 +465,18 @@ def main():
 
     # Write human-readable summary
     summary_lines = [
-        f"# JD Cloud Infrastructure Baseline Snapshot",
-        f"",
+        "# JD Cloud Infrastructure Baseline Snapshot",
+        "",
         f"**Date**: {manifest['generated_at']}",
         f"**Account**: {manifest['account_id']}",
         f"**Region**: {manifest['region']}",
         f"**Total Resources**: {manifest['resource_count']}",
         f"**Provider Version**: {manifest['provider_version']} (no official JD Cloud Provider)",
-        f"",
-        f"## Resource Counts",
-        f"",
-        f"| Type | Count |",
-        f"|------|:-----:|",
+        "",
+        "## Resource Counts",
+        "",
+        "| Type | Count |",
+        "|------|:-----:|",
     ]
     for rtype, count in sorted(inventory["resource_counts"].items()):
         summary_lines.append(f"| {rtype} | {count} |")

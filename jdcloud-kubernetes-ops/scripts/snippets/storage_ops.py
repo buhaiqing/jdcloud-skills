@@ -16,7 +16,6 @@ SAFETY:
     - Always check PVC status before deletion
 """
 
-from typing import Optional, List, Set
 
 try:
     from kubernetes import client
@@ -30,14 +29,13 @@ from .k8s_client import (
     get_k8s_client,
     get_storage_v1_client,
     handle_k8s_api_errors,
-    retry_on_failure,
     K8sResourceNotFoundError,
     K8sClientError,
 )
 
 
 @handle_k8s_api_errors
-def list_storage_classes(kubeconfig_path: Optional[str] = None) -> dict:
+def list_storage_classes(kubeconfig_path: str | None = None) -> dict:
     """List all StorageClass resources in the cluster.
 
     Args:
@@ -83,10 +81,10 @@ def list_storage_classes(kubeconfig_path: Optional[str] = None) -> dict:
 def create_pvc(
     name: str,
     namespace: str,
-    storage_class: Optional[str] = None,
+    storage_class: str | None = None,
     size: str = "10Gi",
     access_mode: str = "ReadWriteOnce",
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Create a PersistentVolumeClaim.
 
@@ -168,7 +166,7 @@ def create_pvc(
 @handle_k8s_api_errors
 def list_pvcs(
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """List all PersistentVolumeClaims in a namespace.
 
@@ -208,7 +206,7 @@ def list_pvcs(
 
 def _get_pods_using_pvc(
     api: client.CoreV1Api, pvc_name: str, namespace: str
-) -> List[str]:
+) -> list[str]:
     """Find Pod names that are using a given PVC.
 
     Checks both regular container volumes and init container volumeMounts.
@@ -222,7 +220,7 @@ def _get_pods_using_pvc(
         List[str]: Sorted, deduplicated Pod names using the PVC.
     """
     pods = api.list_namespaced_pod(namespace=namespace)
-    using_pods: Set[str] = set()
+    using_pods: set[str] = set()
 
     for pod in pods.items:
         # Direct volume claim reference
@@ -257,7 +255,7 @@ def _get_pods_using_pvc(
 def delete_pvc(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Delete a PersistentVolumeClaim.
 
@@ -319,7 +317,7 @@ def delete_pvc(
 
 
 @handle_k8s_api_errors
-def list_pvs(kubeconfig_path: Optional[str] = None) -> dict:
+def list_pvs(kubeconfig_path: str | None = None) -> dict:
     """List all PersistentVolumes in the cluster.
 
     Args:
@@ -361,7 +359,7 @@ def list_pvs(kubeconfig_path: Optional[str] = None) -> dict:
 def check_pvc_health(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Check health status of a PVC.
 
@@ -447,8 +445,8 @@ def check_pvc_health(
 
 @handle_k8s_api_errors
 def get_storage_summary(
-    namespace: Optional[str] = None,
-    kubeconfig_path: Optional[str] = None,
+    namespace: str | None = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Get storage resource summary for the cluster or namespace.
 

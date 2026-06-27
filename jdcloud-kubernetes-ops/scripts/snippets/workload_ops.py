@@ -15,7 +15,6 @@ SAFETY:
     - Always check resource status before deletion
 """
 
-from typing import Optional, List, Dict, Any, Tuple
 
 try:
     from kubernetes import client
@@ -42,9 +41,9 @@ from .k8s_client import (
 @handle_k8s_api_errors
 def list_pods(
     namespace: str,
-    label_selector: Optional[str] = None,
-    field_selector: Optional[str] = None,
-    kubeconfig_path: Optional[str] = None,
+    label_selector: str | None = None,
+    field_selector: str | None = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """List all Pods in a namespace.
 
@@ -99,10 +98,10 @@ def list_pods(
 def get_pod_logs(
     name: str,
     namespace: str,
-    container: Optional[str] = None,
-    tail_lines: Optional[int] = 100,
-    since_seconds: Optional[int] = None,
-    kubeconfig_path: Optional[str] = None,
+    container: str | None = None,
+    tail_lines: int | None = 100,
+    since_seconds: int | None = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Get logs from a Pod.
 
@@ -148,7 +147,7 @@ def delete_pod(
     wait_for_deletion: bool = False,
     timeout_seconds: int = 60,
     poll_interval: float = 2.0,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Delete a Pod with optional wait for deletion completion.
 
@@ -241,7 +240,7 @@ def delete_pod(
     }
 
 
-def _check_pod_status_issues(pod) -> List[str]:
+def _check_pod_status_issues(pod) -> list[str]:
     """Check Pod status for issues.
     
     Args:
@@ -252,18 +251,18 @@ def _check_pod_status_issues(pod) -> List[str]:
     """
     issues = []
     status = pod.status.phase
-    
+
     if status == "Pending":
         issues.append("Pod is Pending (waiting for scheduling or image pull)")
     elif status == "Failed":
         issues.append(f"Pod has Failed: {pod.status.reason or 'unknown reason'}")
     elif status == "Unknown":
         issues.append("Pod status is Unknown")
-    
+
     return issues
 
 
-def _check_container_readiness(pod) -> Tuple[bool, List[str]]:
+def _check_container_readiness(pod) -> tuple[bool, list[str]]:
     """Check container readiness status.
     
     Args:
@@ -275,15 +274,15 @@ def _check_container_readiness(pod) -> Tuple[bool, List[str]]:
     issues = []
     container_statuses = pod.status.container_statuses or []
     all_ready = all(c.ready for c in container_statuses)
-    
+
     if not all_ready and pod.status.phase == "Running":
         not_ready = [c.name for c in container_statuses if not c.ready]
         issues.append(f"Containers not ready: {', '.join(not_ready)}")
-    
+
     return all_ready, issues
 
 
-def _check_container_restarts(pod) -> Tuple[int, List[str]]:
+def _check_container_restarts(pod) -> tuple[int, list[str]]:
     """Check container restart counts.
     
     Args:
@@ -295,14 +294,14 @@ def _check_container_restarts(pod) -> Tuple[int, List[str]]:
     issues = []
     container_statuses = pod.status.container_statuses or []
     total_restarts = sum(c.restart_count for c in container_statuses)
-    
+
     if total_restarts > 0:
         issues.append(f"Total container restarts: {total_restarts}")
-    
+
     return total_restarts, issues
 
 
-def _check_crashloop_backoff(pod) -> List[str]:
+def _check_crashloop_backoff(pod) -> list[str]:
     """Check for containers in CrashLoopBackOff state.
     
     Args:
@@ -313,18 +312,18 @@ def _check_crashloop_backoff(pod) -> List[str]:
     """
     issues = []
     container_statuses = pod.status.container_statuses or []
-    
+
     for cs in container_statuses:
         if cs.state and cs.state.waiting:
             if cs.state.waiting.reason == "CrashLoopBackOff":
                 issues.append(f"Container {cs.name} is in CrashLoopBackOff")
-    
+
     return issues
 
 
 def _check_error_events(
     api: client.CoreV1Api, pod_name: str, namespace: str
-) -> List[str]:
+) -> list[str]:
     """Check for error events related to the Pod.
     
     Args:
@@ -345,11 +344,11 @@ def _check_error_events(
         if e.type == "Warning"
         and e.reason in ("FailedScheduling", "FailedMount", "FailedAttachVolume", "Unhealthy")
     ]
-    
+
     if error_events:
         latest = error_events[-1]
         issues.append(f"Recent error: {latest.reason} - {latest.message}")
-    
+
     return issues
 
 
@@ -357,7 +356,7 @@ def _check_error_events(
 def check_pod_health(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Check health status of a Pod.
 
@@ -398,13 +397,13 @@ def check_pod_health(
     # Aggregate issues from all checks
     issues = []
     issues.extend(_check_pod_status_issues(pod))
-    
+
     all_ready, readiness_issues = _check_container_readiness(pod)
     issues.extend(readiness_issues)
-    
+
     total_restarts, restart_issues = _check_container_restarts(pod)
     issues.extend(restart_issues)
-    
+
     issues.extend(_check_crashloop_backoff(pod))
     issues.extend(_check_error_events(api, name, namespace))
 
@@ -428,7 +427,7 @@ def check_pod_health(
 @handle_k8s_api_errors
 def list_services(
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """List all Services in a namespace.
 
@@ -476,7 +475,7 @@ def list_services(
 def check_service_health(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Check health status of a Service.
 
@@ -562,8 +561,8 @@ def check_service_health(
 @handle_k8s_api_errors
 def list_deployments(
     namespace: str,
-    label_selector: Optional[str] = None,
-    kubeconfig_path: Optional[str] = None,
+    label_selector: str | None = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """List all Deployments in a namespace.
 
@@ -615,7 +614,7 @@ def scale_deployment(
     name: str,
     namespace: str,
     replicas: int,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Scale a Deployment to the specified number of replicas.
 
@@ -646,7 +645,7 @@ def scale_deployment(
 def restart_deployment(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Restart a Deployment by updating the restart annotation.
 
@@ -687,7 +686,7 @@ def restart_deployment(
 def check_deployment_health(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Check health status of a Deployment.
 
@@ -773,7 +772,7 @@ def check_deployment_health(
 @handle_k8s_api_errors
 def list_hpas(
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """List all HorizontalPodAutoscalers in a namespace.
 
@@ -824,7 +823,7 @@ def list_hpas(
 def check_hpa_health(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Check health status of an HPA.
 
@@ -913,7 +912,7 @@ def check_hpa_health(
 @handle_k8s_api_errors
 def list_ingresses(
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """List all Ingresses in a namespace.
 
@@ -980,7 +979,7 @@ def list_ingresses(
 def check_ingress_health(
     name: str,
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Check health status of an Ingress.
 
@@ -1087,7 +1086,7 @@ def check_ingress_health(
 @handle_k8s_api_errors
 def get_workload_summary(
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
 ) -> dict:
     """Get workload resource summary for a namespace.
 

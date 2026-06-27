@@ -21,7 +21,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import gcl_runner
 from gcl_runner import (
     DEFAULT_MAX_ITER,
     EXTENSION_DIMENSIONS,
@@ -140,13 +139,13 @@ class TestDecide:
 
     def test_return_when_all_pass(self):
         rubric = self._make_rubric()
-        score = CriticScore(scores={d: 1.0 for d in RUBRIC_DIMENSIONS})
+        score = CriticScore(scores=dict.fromkeys(RUBRIC_DIMENSIONS, 1.0))
         decision, reason, _ = decide(score, rubric, 1)
         assert decision == "RETURN"
 
     def test_retry_when_below_threshold_and_iter_lt_max(self):
         rubric = self._make_rubric(max_iter=3)
-        scores = {d: 1.0 for d in RUBRIC_DIMENSIONS}
+        scores = dict.fromkeys(RUBRIC_DIMENSIONS, 1.0)
         scores["correctness"] = 0.5  # below threshold 1.0
         score = CriticScore(scores=scores)
         decision, reason, feedback = decide(score, rubric, 1)
@@ -155,7 +154,7 @@ class TestDecide:
 
     def test_return_best_when_max_iter_reached(self):
         rubric = self._make_rubric(max_iter=2)
-        scores = {d: 1.0 for d in RUBRIC_DIMENSIONS}
+        scores = dict.fromkeys(RUBRIC_DIMENSIONS, 1.0)
         scores["correctness"] = 0.5
         score = CriticScore(scores=scores)
         decision, reason, _ = decide(score, rubric, 2)
@@ -175,12 +174,12 @@ class TestDecide:
 
     def test_all_pass_true(self):
         rubric = self._make_rubric()
-        score = CriticScore(scores={d: 1.0 for d in RUBRIC_DIMENSIONS})
+        score = CriticScore(scores=dict.fromkeys(RUBRIC_DIMENSIONS, 1.0))
         assert all_pass(score, rubric) is True
 
     def test_all_pass_false(self):
         rubric = self._make_rubric()
-        scores = {d: 1.0 for d in RUBRIC_DIMENSIONS}
+        scores = dict.fromkeys(RUBRIC_DIMENSIONS, 1.0)
         scores["idempotency"] = 0.0  # below 0.5 threshold
         score = CriticScore(scores=scores)
         assert all_pass(score, rubric) is False

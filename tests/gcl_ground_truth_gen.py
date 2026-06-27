@@ -44,8 +44,6 @@ import argparse
 import json
 import random
 import sys
-import uuid
-from dataclasses import asdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -53,7 +51,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from gcl_runner import (  # noqa: E402
-    DEFAULT_TRACE_DIR,
     GeneratorOutput,
     CriticScore,
     RUBRIC_DIMENSIONS,

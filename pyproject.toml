@@ -9,4 +9,32 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+# 仓库所有 Python 一律走 Ruff：lint + format。
+line-length = 100
+target-version = "py310"
+extend-exclude = [".venv", "venv", "build", "dist", ".egg-info"]
+
+[tool.ruff.lint]
+# 默认规则集：pycodestyle(E/W)、Pyflakes(F)、pyupgrade(UP)、flake8-bugbear(B)、
+# flake8-simplify(SIM)、ruff 内置可执行性检查(C4)。后续如需 isort/import 排序，
+# 直接加 "I"；需 docstring 控制加 "D"。
+select = ["E", "W", "F", "UP", "B", "SIM", "C4"]
+# 与现有 k8s_cruise_report.py 等脚本兼容：暂不强制 print / 调试语句。
+ignore = [
+    "E501",   # 行长由 formatter 控制，lint 不重复报警
+    "B008",   # 函数调用中的默认参数（如 requests.get(url=URL)）常见且安全
+    "SIM108", # 三元 vs if/else 风格由 formatter 决定
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]  # 测试里允许 assert
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

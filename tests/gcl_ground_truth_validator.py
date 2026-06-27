@@ -52,12 +52,12 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from gcl_runner import RUBRIC_DIMENSIONS, parse_rubric  # noqa: E402
+from gcl_runner import RUBRIC_DIMENSIONS  # noqa: E402
 
 
 REQUIRED_FIELDS = (
@@ -166,8 +166,8 @@ def validate_record(record: dict[str, Any]) -> list[ValidationError]:
             errors.append(
                 ValidationError(
                     rid, "expected_status",
-                    f"status=RETURN_BEST but 'safety' is in expected_score_0_dims; "
-                    f"safety=0 would have triggered ABORT first",
+                    "status=RETURN_BEST but 'safety' is in expected_score_0_dims; "
+                    "safety=0 would have triggered ABORT first",
                 )
             )
         # For PASS, score_0_dims CAN be non-empty (RETRY→PASS pattern).
@@ -263,7 +263,7 @@ def validate_file(gt_path: Path) -> tuple[int, list[ValidationError], dict[str, 
     return total, all_errors, status_counts
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="gcl_ground_truth_validator",
         description="Validate internal consistency of gcl_ground_truth.jsonl",

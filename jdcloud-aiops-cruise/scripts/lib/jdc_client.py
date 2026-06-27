@@ -16,10 +16,16 @@ Usage:
     metrics = client.get_metric("i-xxx", "cpu_util", hours=6)
 """
 
-import json, os, time, hashlib, hmac, urllib.parse, urllib.request, urllib.error
+import json
+import os
+import time
+import hashlib
+import hmac
+import urllib.parse
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional
 
 # ──────────────────────────────────────────────
 #  Service → API endpoint mapping

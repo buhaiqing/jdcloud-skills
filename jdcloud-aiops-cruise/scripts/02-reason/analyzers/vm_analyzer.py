@@ -17,7 +17,6 @@ from .base_analyzer import BaseAnalyzer
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-import path_setup
 from lib.jdc_client import tag_dict, get_tag
 
 
@@ -189,7 +188,7 @@ class VmAnalyzer(BaseAnalyzer):
                     if ratio > 0.8:
                         v_find("warning",
                             f"网络{label}带宽峰值{peak_mbps:.1f}Mbps，已达{instance_type}上限{net_gbps}Gbps的{ratio*100:.0f}%",
-                            f"1. 检查流量来源; 2. 如需升配实例规格通过 jdcloud-vm-ops 执行",
+                            "1. 检查流量来源; 2. 如需升配实例规格通过 jdcloud-vm-ops 执行",
                             "jdcloud-vm-ops")
 
             # 云盘加密

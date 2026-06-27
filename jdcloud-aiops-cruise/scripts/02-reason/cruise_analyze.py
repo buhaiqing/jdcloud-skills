@@ -10,12 +10,14 @@ If --sniff-file is provided, uses cached topology from Phase 1.
 Otherwise runs Phase 1 discovery first.
 """
 
-import sys, os, json, argparse
+import sys
+import os
+import json
+import argparse
 from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import path_setup
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources
@@ -39,7 +41,7 @@ def main():
     # ── Phase 1: Discovery ──
     if args.sniff_file:
         print(f"[加载] 从文件加载拓扑: {args.sniff_file}")
-        with open(args.sniff_file, "r", encoding="utf-8") as f:
+        with open(args.sniff_file, encoding="utf-8") as f:
             topology_data = json.load(f)
     else:
         print(f"[检索] 执行嗅探 (客户={customer})...")

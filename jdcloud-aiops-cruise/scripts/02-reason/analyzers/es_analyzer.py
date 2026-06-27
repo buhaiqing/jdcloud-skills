@@ -9,7 +9,6 @@ Checks: cluster health, version, node count, disk type, encryption status.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-import path_setup
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
 from lib.jdc_client import get_tag
@@ -63,7 +62,7 @@ class EsAnalyzer(BaseAnalyzer):
             env = tags.get("环境", "")
             if ctype == "general" and env == "production":
                 self._add_finding("info",
-                    f"通用型集群 (生产环境)", "", name)
+                    "通用型集群 (生产环境)", "", name)
 
             # Node configuration
             ic = es.get("instanceClass", {})

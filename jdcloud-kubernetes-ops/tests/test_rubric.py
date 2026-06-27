@@ -141,7 +141,7 @@ def test_rubric_max_iterations_limits(rubric_template):
     assert max_iter == 3
     for i in range(1, max_iter + 1):
         assert i <= max_iter
-    assert 4 > max_iter
+    assert max_iter < 4
 
 
 def test_k8s_version_upgrade_path():

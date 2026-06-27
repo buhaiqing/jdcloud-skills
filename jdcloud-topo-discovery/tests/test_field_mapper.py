@@ -1,5 +1,4 @@
 """Tests for field mapper (JD Cloud)."""
-import pytest
 from scripts.lib.field_mapper import FieldMapper, MappingSpec, MappingRule
 
 

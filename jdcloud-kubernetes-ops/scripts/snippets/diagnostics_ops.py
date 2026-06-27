@@ -17,7 +17,7 @@ Usage:
 """
 
 import re
-from typing import Optional, List, Dict, Any
+from typing import Any
 import logging
 from datetime import datetime, timedelta
 
@@ -31,7 +31,6 @@ except ImportError:
 
 from .k8s_client import (
     get_k8s_client,
-    get_apps_v1_client,
     handle_k8s_api_errors,
 )
 from .workload_ops import (
@@ -51,7 +50,7 @@ from .storage_ops import check_pvc_health, list_pvcs
 logger = logging.getLogger(__name__)
 
 
-def _compile_patterns(patterns: List[str]) -> List[re.Pattern]:
+def _compile_patterns(patterns: list[str]) -> list[re.Pattern]:
     """Compile human-readable patterns into regexes with word boundaries.
 
     Multi-word phrases are matched literally; single words are wrapped with
@@ -68,7 +67,7 @@ def _compile_patterns(patterns: List[str]) -> List[re.Pattern]:
     return compiled
 
 
-def _matches_any(text: str, compiled_patterns: List[re.Pattern]) -> bool:
+def _matches_any(text: str, compiled_patterns: list[re.Pattern]) -> bool:
     """Return True if text matches any compiled pattern."""
     return any(p.search(text) for p in compiled_patterns)
 
@@ -88,7 +87,7 @@ class DiagnosticReport:
         """
         self.namespace = namespace
         self.timestamp = datetime.utcnow().isoformat() + "Z"
-        self.resources: Dict[str, Any] = {
+        self.resources: dict[str, Any] = {
             "pods": [],
             "services": [],
             "deployments": [],
@@ -96,16 +95,16 @@ class DiagnosticReport:
             "ingresses": [],
             "pvcs": [],
         }
-        self.issues: List[Dict[str, Any]] = []
-        self.root_causes: List[Dict[str, Any]] = []
-        self.recommendations: List[str] = []
+        self.issues: list[dict[str, Any]] = []
+        self.root_causes: list[dict[str, Any]] = []
+        self.recommendations: list[str] = []
         self.severity = "info"  # info, warning, critical
 
     def add_resource_health(
         self,
         resource_type: str,
         resource_name: str,
-        health_result: Dict[str, Any],
+        health_result: dict[str, Any],
     ) -> None:
         """Add health check result for a resource.
 
@@ -185,7 +184,7 @@ class DiagnosticReport:
         # Generate recommendations
         self._generate_recommendations()
 
-    def _get_pattern_checkers(self) -> List[Callable[[], None]]:
+    def _get_pattern_checkers(self) -> list[Callable[[], None]]:
         """Get list of pattern checker functions.
 
         Returns:
@@ -390,7 +389,7 @@ class DiagnosticReport:
                 "For Pending resources: check events with 'kubectl describe <resource>'"
             )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert report to dictionary.
 
         Returns:
@@ -420,9 +419,9 @@ class DiagnosticReport:
 @handle_k8s_api_errors
 def diagnose_namespace(
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
+    kubeconfig_path: str | None = None,
     include_storage: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Perform comprehensive diagnostic analysis of a namespace.
 
     This function aggregates health checks across all resource types
@@ -503,8 +502,8 @@ def diagnose_namespace(
 @handle_k8s_api_errors
 def analyze_performance_bottlenecks(
     namespace: str,
-    kubeconfig_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    kubeconfig_path: str | None = None,
+) -> dict[str, Any]:
     """Analyze performance bottlenecks in a namespace.
 
     This function identifies common performance issues:
@@ -626,8 +625,8 @@ def analyze_performance_bottlenecks(
 def correlate_events(
     namespace: str,
     since_minutes: int = 60,
-    kubeconfig_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    kubeconfig_path: str | None = None,
+) -> dict[str, Any]:
     """Correlate events across resources in a namespace.
 
     This function collects recent events and identifies patterns:

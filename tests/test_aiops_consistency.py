@@ -193,7 +193,7 @@ def check_cross_skill_delegation() -> tuple[bool, str]:
             missing.append(skill)
     if missing:
         return False, f"AGENTS.md missing delegation rows: {missing}"
-    return True, f"all 4 AI OPS skills delegated in AGENTS.md"
+    return True, "all 4 AI OPS skills delegated in AGENTS.md"
 
 
 def main() -> int:

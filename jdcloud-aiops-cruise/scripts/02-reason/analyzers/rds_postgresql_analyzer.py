@@ -14,8 +14,6 @@ from .base_analyzer import BaseAnalyzer
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-import path_setup
-from lib.jdc_client import tag_dict, get_tag
 
 
 # ── Thresholds (from references/threshold-definitions.md) ──
@@ -129,12 +127,12 @@ class RdsPostgresqlAnalyzer(BaseAnalyzer):
         findings = []
         instance_id = instance.get("instanceId", "unknown")
         instance_name = instance.get("instanceName", "")
-        
+
         # Get instance specs
         cpu = instance.get("instanceCPU", 0)
         memory_mb = instance.get("instanceMemoryMB", 0)
         storage_gb = instance.get("instanceStorageGB", 0)
-        
+
         # Check storage (from instance spec vs usage would need CloudMonitor)
         # For now, generate info-level findings about basic info
         findings.append({
@@ -147,7 +145,7 @@ class RdsPostgresqlAnalyzer(BaseAnalyzer):
             "ops_skill": "jdcloud-postgresql-ops",
             "requires_confirmation": True,
         })
-        
+
         return findings
 
     def _check_slow_query_risk(self, instance: dict) -> list:
@@ -167,21 +165,21 @@ class RdsPostgresqlAnalyzer(BaseAnalyzer):
     def analyze(self) -> list:
         """Execute PostgreSQL health analysis."""
         findings = []
-        
+
         for instance in self.resources:
             # Health check
             findings.extend(self._check_health_thresholds(instance))
-            
+
             # Slow query check (placeholder)
             findings.extend(self._check_slow_query_risk(instance))
-            
+
             # VACUUM status check (placeholder)
             findings.extend(self._check_vacuum_status(instance))
-            
+
             # Add delegation reminder for deep analysis
             instance_id = instance.get("instanceId")
             instance_name = instance.get("instanceName", "")
-            
+
             findings.append({
                 "resource": instance_name,
                 "resource_id": instance_id,
@@ -192,7 +190,7 @@ class RdsPostgresqlAnalyzer(BaseAnalyzer):
                 "ops_skill": "jdcloud-postgresql-ops",
                 "requires_confirmation": True,
             })
-        
+
         self.findings = findings
         return findings
 

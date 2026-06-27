@@ -66,10 +66,9 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +113,7 @@ class TraceRecord:
     skill: str
     rubric_version: str
     started_at: datetime
-    finished_at: Optional[datetime]
+    finished_at: datetime | None
     final_status: str  # "PASS" | "RETURN_BEST" | "ABORT"
     final_iter: int
     iterations: int
@@ -151,8 +150,8 @@ def parse_iso(ts: str) -> datetime:
 
 def load_traces(
     trace_dir: Path,
-    since: Optional[timedelta] = None,
-    skill_filter: Optional[str] = None,
+    since: timedelta | None = None,
+    skill_filter: str | None = None,
 ) -> tuple[list[TraceRecord], list[tuple[Path, str]]]:
     """Load all GCL trace JSON files from a directory.
 
@@ -174,7 +173,7 @@ def load_traces(
     if not trace_dir.exists():
         return traces, errors
 
-    cutoff: Optional[datetime] = None
+    cutoff: datetime | None = None
     if since is not None:
         cutoff = datetime.now(timezone.utc) - since
 
@@ -376,7 +375,7 @@ def render_terminal(
     d: DashboardData,
     errors: list[tuple[Path, str]],
     pruned_count: int = 0,
-    skill_filter: Optional[str] = None,
+    skill_filter: str | None = None,
 ) -> str:
     """Render the dashboard as ASCII art. Mirrors retrospective §5.4."""
     out: list[str] = []
@@ -546,7 +545,7 @@ def render_json(
     d: DashboardData,
     errors: list[tuple[Path, str]],
     pruned_count: int = 0,
-    skill_filter: Optional[str] = None,
+    skill_filter: str | None = None,
 ) -> str:
     """Render the dashboard as JSON. Suitable for downstream
     automation (Phase 4 alarms, Grafana, etc.)."""
@@ -642,7 +641,7 @@ def build_argparser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = build_argparser().parse_args(argv)
 
     trace_dir = Path(args.trace_dir) if args.trace_dir else DEFAULT_TRACE_DIR
