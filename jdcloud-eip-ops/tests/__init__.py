@@ -1,1 +1,0 @@
-# eip-ops tests package
