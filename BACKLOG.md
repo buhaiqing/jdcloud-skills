@@ -120,7 +120,7 @@
 | pyproject.toml 新增 `[tool.ruff]` 配置 | ✅ | 已锁定规则集 E/W/F/UP/B/SIM/C4, line-length=100 |
 | `dev` 依赖声明 `ruff>=0.6` | ✅ | 已写入 |
 | `clean_python.sh` 已含 `.ruff_cache` 清理 | ✅ | 已具备,无需修改 |
-| 历史代码 `ruff check .` 422 个错误清理 | ⏳ | **当前真待办**，按 skill 目录分批 `ruff check --fix`；317 个可自动修，105 个需手改 |
+| 历史代码 `ruff check .` 422 个错误清理 | ✅ **F-1 完成** / ⏳ F-2 待办 | 335 个自动修复已完成（2026-06-27），剩余 94 个需手改 |
 
 ### F-1. ruff 自动修复（317 个）
 
@@ -148,9 +148,9 @@ ruff check --unsafe-fixes .
 | 优先级 | 任务 | 收益 | 工作量 | 阻塞 |
 |:------:|------|------|:------:|:----:|
 | 🥇 | **F-1 ruff 自动修复（317 个）** | 立即解锁 CI；为 Phase G 做准备 | 1 个命令 + review | 否 |
-| 🥇 | ~~C-1 jdcloud-cdn-ops~~ ✅ **已完成** | — | — | — |
-| 🥈 | **D-2 测试覆盖（5-8 个高风险 skill 优先）** | 防止回归；GCL 闭环 | ~2000 行 | 否 |
-| 🥈 | ~~D-4 vm-ops 伸缩组章节~~ ❌ **已放弃** | JD Cloud ESS 无 CLI/SDK | 0 | — |
+| 🥇 | C-1 jdcloud-cdn-ops | ✅ 已完成 | — | — | — |
+| 🥈 | D-2 测试覆盖（5-8 个高风险 skill 优先） | ⏳ 待办 | 防止回归；GCL 闭环 | ~2000 行 | 否 |
+| 🥈 | D-4 vm-ops 伸缩组章节 | ❌ 已放弃 | JD Cloud ESS 无 CLI/SDK | 0 | — |
 | 🥈 | **F-2 ruff 手改（~105 个）** | 收尾 F 阶段 | ~半天 | 否 |
 
 ---
@@ -171,6 +171,8 @@ ruff check --unsafe-fixes .
 
 | Date | Change |
 |------|--------|
+| 2026-06-27 | **AGENTS.md 新增规则**: "Post-Change Self-Review (Mandatory)" — 每次改动后必须执行结构化自我评审（ruff/test/F821/commit-size/BACKLOG-sync/self-critique 7 项检查），通过后才能 claim completion |
+| 2026-06-27 | **F-1 完成**: ruff 自动修复 335 个错误（422 → 94 剩余）；所有 66 个测试通过；提交 85 文件 / +2736/-492 行；Phase F 进度: 335/422 自动修复完成，剩余 94 个手改（F-2）|
 | 2026-06-27 | **D-4 放弃**: JD Cloud ESS 无 CLI/SDK 支持，`ag`（高可用组）≠ 真正 auto-scaling；WAF-EFF-005 更新为 console-only + K8s HPA 替代路径；BACKLOG D-4 状态从 ⏳ → ❌（不实施）|
 | 2026-06-27 | **Phase C-1 完成**: `jdcloud-cdn-ops` v1.0.0 创建（17 文件 / 2194 行 / 19 测试通过 / ruff 全过 / CLI-first with SDK fallback）；arch-advisor 同步补 WAF-PERF-048 真实定义（命中率 ≥ 90% metric check）；BACKLOG C-1 状态从 ⏳ → ✅ |
 | 2026-06-27 | **BACKLOG 全量校对**: 删除 8 条过期条目（jcq/billing/auto-scaling-orch 命名违规/elasticsearch/alert-intelligence/cloudmonitor/routines/aiops-cruise 文档）；确认 cdn-ops 是 Phase C 唯一真未做；auto-scaling 重新决策为 vm-ops 子章节；Phase F ruff 历史错误 422 个现状确认（317 自动修 + 105 手改）；优先级矩阵收敛到 5 项真待办（F-1 / C-1 / D-2 / D-4 / F-2） |

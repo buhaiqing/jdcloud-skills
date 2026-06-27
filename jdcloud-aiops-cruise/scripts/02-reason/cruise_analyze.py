@@ -17,7 +17,9 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_scripts_dir = Path(__file__).resolve().parent
+_project_dir = _scripts_dir.parent
+sys.path.insert(0, str(_project_dir))
 
 from lib.jdc_client import JdcClient
 from lib.resource_discovery import discover_customer_resources

@@ -447,6 +447,44 @@ All issues discovered during both review rounds MUST be proactively fixed before
 - Updating documentation inconsistencies
 - Ensuring alignment with repository-wide conventions
 
+### Post-Change Self-Review (Mandatory)
+**After EVERY code or documentation change, the Agent MUST perform a structured self-review BEFORE claiming completion.**
+
+**Trigger**: Any edit to `.py`, `.md`, `.yaml`, `.json` files in the repository.
+
+**Review Checklist**:
+| # | Check | Action if Failed |
+|---|-------|------------------|
+| 1 | **ruff check** passes | Run `ruff check --fix` and fix remaining manually |
+| 2 | **ruff format** applied | Run `ruff format .` |
+| 3 | **Tests pass** | Run `pytest` for affected modules; fix or update tests |
+| 4 | **No F821/F822** (undefined names) | Fix immediately — runtime risk |
+| 5 | **Commit size reasonable** | If >20 files, consider splitting commits |
+| 6 | **BACKLOG.md sync** | If skill status changed, update BACKLOG |
+| 7 | **Self-critique** | Ask: "What could break? What did I miss?" |
+
+**Self-Review Output Format**:
+```markdown
+## Self-Review: <change-summary>
+
+### ✅ Passed
+- ruff check: X errors (all fixable / fixed)
+- Tests: Y/Z passed
+- ...
+
+### ⚠️ Issues Found
+- <issue-1>: <fix-applied>
+- <issue-2>: <fix-applied>
+
+### 🎯 Score
+<0-10>/10 — <reason>
+
+### 🔧 Action Items
+- [ ] <if-any-deferred>
+```
+
+**Enforcement**: This is a required step. The Agent MUST NOT claim "done" or create PR without completing this checklist.
+
 ---
 
 ## Generator-Critic-Loop (GCL) — Adversarial Quality Gate

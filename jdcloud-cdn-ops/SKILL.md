@@ -160,6 +160,21 @@ jdc --output json cdn query-band \
 jdc --output json cdn create-refresh-task \
   --domain example.com \
   --url-list '["https://example.com/foo.html","https://example.com/bar.html"]'
+
+# Hit-rate calculation (WAF-PERF-048)
+# Note: JD Cloud CDN does not expose hit-rate directly. Compute from:
+#   hit_rate = 1 - (origin_traffic / total_traffic)
+# Where:
+#   total_traffic   = sum of $.result.data[].flow from query-statistics-data
+#   origin_traffic  = Cloud Monitor metric "OriginTraffic" (or estimate from back-source logs)
+#
+# Example workflow:
+# 1. Query total traffic
+TOTAL=$(jdc --output json cdn query-statistics-data \
+  --domain example.com --start-time 2026-06-20T00:00:00Z --end-time 2026-06-27T00:00:00Z \
+  | jq '[.result.data[].flow] | add')
+# 2. Query origin traffic via Cloud Monitor (delegate to jdcloud-cloudmonitor-ops)
+# 3. Calculate: echo "scale=2; 1 - ($ORIGIN / $TOTAL)" | bc
 ```
 
 ### Validate
@@ -220,6 +235,23 @@ About to: <operation> on <resource-id>
 Risk: <one-line>
 Continue? (yes/no)
 ```
+
+## Quick Reference — Top 10 Commands
+
+| Intent | Command |
+|--------|---------|
+| List domains | `jdc --output json cdn get-domain-list --page-number 1 --page-size 50` |
+| Get domain detail | `jdc --output json cdn get-domain-detail --domain example.com` |
+| Start / stop domain | `jdc --output json cdn start-domain --domain example.com` / `stop-domain` |
+| Create cache rule | `jdc --output json cdn create-cache-rule --domain X --rule-path /static/* --cache-ttl 3600` |
+| Query bandwidth | `jdc --output json cdn query-band --domain X --start-time ... --end-time ...` |
+| Refresh URL (purge) | `jdc --output json cdn create-refresh-task --domain X --url-list '["..."]'` |
+| Set origin | `jdc --output json cdn set-source --domain X --source '["https://origin.com"]'` |
+| Check domain config | `jdc --output json cdn query-domain-config --domain example.com` |
+| Query refresh task | `jdc --output json cdn query-refresh-task --task-id <id>` |
+| Check quota | `jdc --output json cdn query-cdn-user-quota` |
+
+See [cli-usage.md](references/cli-usage.md) for complete command reference (~150 sub-commands).
 
 ## Failure Recovery (Quick Reference)
 
