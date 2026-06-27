@@ -10,6 +10,8 @@ instructions and referenced ops skill.
 
 from abc import ABC, abstractmethod
 
+from lib.jdc_client import get_tag
+
 
 class BaseAnalyzer(ABC):
     service_name = "base"
@@ -22,6 +24,38 @@ class BaseAnalyzer(ABC):
         self.alarms = []
         self.spec_limits = {}
         self.findings = []
+
+    # ── Common discovery helper ──
+
+    def discover_by_tag(self, topology: dict, resource_key: str,
+                        tag_key: str = "客户") -> list:
+        """Filter resources from topology by customer tag."""
+        self.topology = topology
+        customer = topology.get("customer", "")
+        all_items = topology.get("raw", {}).get(resource_key, [])
+        self.resources = [r for r in all_items if get_tag(r, tag_key) == customer]
+        return self.resources
+
+    # ── Common metrics query helper ──
+
+    def query_metrics_batch(self, client, id_field: str = "instanceId",
+                            metrics: list = None, hours: int = 6,
+                            service_code: str = "vm") -> dict:
+        """Query CloudMonitor metrics for all discovered resources."""
+        metrics = metrics or []
+        for r in self.resources:
+            rid = r.get(id_field)
+            if not rid:
+                continue
+            try:
+                pts = client.get_metrics_batch(rid, metrics, hours=hours,
+                                               region=getattr(client, 'region', None),
+                                               service_code=service_code)
+                if pts:
+                    self.metrics[rid] = pts
+            except Exception:
+                continue
+        return self.metrics
 
     @abstractmethod
     def discover(self, topology: dict) -> list:

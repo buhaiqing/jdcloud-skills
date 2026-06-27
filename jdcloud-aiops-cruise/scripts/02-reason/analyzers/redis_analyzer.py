@@ -13,41 +13,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
-from lib.jdc_client import get_tag, tag_dict
+from lib.jdc_client import tag_dict
 
 
 class RedisAnalyzer(BaseAnalyzer):
     service_name = "redis"
     icon = "[缓存]"
 
+    REDIS_METRICS = ["redis.memory.usage", "redis.hit_rate",
+                     "redis.connections", "redis.cpu.util"]
+
     def discover(self, topology: dict) -> list:
-        self.topology = topology
-        customer = topology.get("customer", "")
-        all_redis = topology.get("raw", {}).get("redis", [])
-        self.resources = [r for r in all_redis if get_tag(r, "客户") == customer]
-        return self.resources
+        return self.discover_by_tag(topology, "redis")
 
     def query_metrics(self, client, hours: int = 6) -> dict:
-        # Redis monitor metrics from JD Cloud:
-        # - redis.memory.usage  (内存使用率 %)
-        # - redis.hit_rate      (缓存命中率 %)
-        # - redis.connections   (连接数)
-        # - redis.cpu.util      (CPU %)
-        redis_metrics = ["redis.memory.usage", "redis.hit_rate",
-                         "redis.connections", "redis.cpu.util"]
-        for r in self.resources:
-            rid = r.get("cacheInstanceId")
-            if not rid:
-                continue
-            try:
-                pts = client.get_metrics_batch(rid, redis_metrics, hours=hours,
-                                               region=client.region,
-                                               service_code="redis")
-                if pts:
-                    self.metrics[rid] = pts
-            except Exception:
-                continue
-        return self.metrics
+        return self.query_metrics_batch(client, id_field="cacheInstanceId",
+                                        metrics=self.REDIS_METRICS, hours=hours,
+                                        service_code="redis")
 
     def analyze(self) -> list:
         self.findings = []
@@ -63,7 +45,6 @@ class RedisAnalyzer(BaseAnalyzer):
             mem = metrics.get("redis.memory.usage", [])
             if mem:
                 last = mem[-1][1]
-                avg = sum(v for _, v in mem) / len(mem)
                 if last > 85:
                     self._add_finding("critical",
                         f"内存使用率{last:.1f}% (规格{mem_mb}MB)",

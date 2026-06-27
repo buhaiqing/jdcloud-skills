@@ -122,9 +122,12 @@ if args.health_json and os.path.exists(args.health_json):
 def get_health(instance_id, default='✅'):
     h = health_data.get(instance_id, {})
     level = h.get('level', '')
-    if level == 'CRITICAL': return '🔴'
-    if level == 'WARNING': return '🟡'
-    if h.get('z_score', 0) > 2.0: return '🟡'
+    if level == 'CRITICAL':
+        return '🔴'
+    if level == 'WARNING':
+        return '🟡'
+    if h.get('z_score', 0) > 2.0:
+        return '🟡'
     return default
 
 # ── Build Subnet → resources mapping ──
@@ -149,13 +152,13 @@ for v in vms:
     })
 
 # CLBs: loadBalancer.subnetId
-for l in clbs:
-    sn = l.get('subnetId', '')
-    priv_ip = mermaid_extract_str(l, 'privateIp.privateIpAddress')
-    eip_addr = mermaid_extract_str(l, 'privateIp.elasticIpAddress')
+for clb in clbs:
+    sn = clb.get('subnetId', '')
+    priv_ip = mermaid_extract_str(clb, 'privateIp.privateIpAddress')
+    eip_addr = mermaid_extract_str(clb, 'privateIp.elasticIpAddress')
     subnet_map.get(sn, {}).setdefault('clbs', []).append({
-        'name': l.get('loadBalancerName', ''),
-        'id': l.get('loadBalancerId', ''),
+        'name': clb.get('loadBalancerName', ''),
+        'id': clb.get('loadBalancerId', ''),
         'ip': priv_ip,
         'eip': eip_addr
     })
@@ -218,7 +221,7 @@ def render_ascii():
     lines.append(f"**VPC**: {vpc_name} ({vpc_id})  **CIDR**: {primary_vpc.get('addressPrefix', '')}")
     lines.append("```")
 
-    for sid, sn in subnet_map.items():
+    for _sid, sn in subnet_map.items():
         lines.append(f"├─ 子网: {sn['name']} ({sn['cidr']}) ~ {sn['az']}")
         items = sn.get('vms', []) + sn.get('clbs', []) + sn.get('rds', []) + sn.get('redis', [])
         if not items:
@@ -296,8 +299,8 @@ def render_mermaid():
     lines.append(f"    subgraph VPC[{vpc_label}]")
     lines.append("        style VPC fill:#e8f4fd,stroke:#3b82f6")
 
-    for sid, sn in subnet_map.items():
-        safe_sn = mermaid_safe_id(f"sub_{sid}")
+    for _sid, sn in subnet_map.items():
+        safe_sn = mermaid_safe_id(f"sub_{_sid}")
         sn_label = mermaid_safe_subgraph_label(sn['name'], sn['cidr'], sn.get('az', ''))
         lines.append(f"    subgraph {safe_sn}[{sn_label}]")
         items = sn.get('vms', []) + sn.get('clbs', []) + sn.get('rds', []) + sn.get('redis', [])
@@ -305,12 +308,16 @@ def render_mermaid():
         if large_scale and len(items) > MERMAID_MAX_NODES:
             # Aggregated view: one node per resource type with count
             parts = []
-            if sn.get('vms'): parts.append(f"VM x{len(sn['vms'])}")
-            if sn.get('clbs'): parts.append(f"CLB x{len(sn['clbs'])}")
-            if sn.get('rds'): parts.append(f"RDS x{len(sn['rds'])}")
-            if sn.get('redis'): parts.append(f"Redis x{len(sn['redis'])}")
+            if sn.get('vms'):
+                parts.append(f"VM x{len(sn['vms'])}")
+            if sn.get('clbs'):
+                parts.append(f"CLB x{len(sn['clbs'])}")
+            if sn.get('rds'):
+                parts.append(f"RDS x{len(sn['rds'])}")
+            if sn.get('redis'):
+                parts.append(f"Redis x{len(sn['redis'])}")
             label = mermaid_safe_label(" | ".join(parts) if parts else "(预留)")
-            safe_id = mermaid_safe_id(f"agg_{sid}")
+            safe_id = mermaid_safe_id(f"agg_{_sid}")
             lines.append(f"        {safe_id}[{label}]")
         else:
             for it in items:
@@ -327,12 +334,12 @@ def render_mermaid():
         lines.append("    end")
 
     # EIP → CLB connections
-    for l in clbs:
-        clb_id = l.get('loadBalancerId', '')
-        eip_addr = mermaid_extract_str(l, 'privateIp.elasticIpAddress')
+    for clb in clbs:
+        clb_id = clb.get('loadBalancerId', '')
+        eip_addr = mermaid_extract_str(clb, 'privateIp.elasticIpAddress')
         if eip_addr:
             safe_eip = mermaid_safe_id(f"eip_{eip_addr}")
-            safe_clb = mermaid_safe_id(f"res_{clb_id or l.get('loadBalancerName','')}")
+            safe_clb = mermaid_safe_id(f"res_{clb_id or clb.get('loadBalancerName','')}")
             lines.append(f"    {safe_eip}((&#34;{eip_addr}&#34;)) --> {safe_clb}")
 
     lines.append("    end")

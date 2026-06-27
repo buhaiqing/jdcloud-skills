@@ -61,7 +61,6 @@ class SgAnalyzer(BaseAnalyzer):
         self.findings = []
         for sg in self.resources:
             name = sg.get("groupName", sg.get("groupId", ""))
-            rules = sg.get("rules", [])
             # Rules might be in permissionInbound / permissionOutbound
             for direction in ["permissionInbound", "permissionOutbound",
                               "permissioninbound", "permissionoutbound",

@@ -10,10 +10,6 @@ it does NOT generate DDL/DML recommendations such as CREATE INDEX.
 
 from . import register
 from .base_analyzer import BaseAnalyzer
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 
 class RdsMysqlAnalyzer(BaseAnalyzer):
@@ -24,14 +20,8 @@ class RdsMysqlAnalyzer(BaseAnalyzer):
 
     def discover(self, topology: dict) -> list:
         """Extract MySQL instances tagged with the target customer."""
-        self.topology = topology
-        all_instances = topology.get("raw", {}).get("rds", [])
-
-        # Filter MySQL instances
-        self.resources = [
-            inst for inst in all_instances if inst.get("engine") == "MySQL"
-        ]
-
+        self.discover_by_tag(topology, "rds")
+        self.resources = [r for r in self.resources if r.get("engine") == "MySQL"]
         return self.resources
 
     def query_metrics(self, client, hours: int = 6) -> None:

@@ -15,13 +15,77 @@ from pathlib import Path
 _scripts_dir = Path(__file__).parent.parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
-from lib.jdc_client import JdcClient, filter_by_tag, tag_dict
+from lib.jdc_client import JdcClient, filter_by_tag, tag_dict  # noqa: E402
 
 K8S_CLUSTER_TAG = "kubernetes.jdcloud.com/cluster_id"
 K8S_CREATED_TAG = "kubernetes.jdcloud.com/created_by"
 
 # All regions to scan
 ALL_REGIONS = ["cn-north-1", "cn-east-2", "cn-south-1", "cn-east-1"]
+
+# Resource type config: (raw_key, list_method_name, vpc_id_field, name_field, id_field)
+# list_method_name maps to client.list_<name>()
+_RESOURCE_TYPES = [
+    ("vms", "vms", "vpcId", "instanceName", "instanceId"),
+    ("lbs", "lbs", "vpcId", "loadBalancerName", "loadBalancerId"),
+    ("redis", "redis", "vpcId", "cacheInstanceName", "cacheInstanceId"),
+    ("mongodb", "mongodb", "vpcId", "instanceName", "instanceId"),
+    ("rds", "rds", "vpcId", "instanceName", "instanceId"),
+    ("eips", "eips", "vpcId", None, None),  # name/id handled specially
+    ("es", "es", "vpcId", "instanceName", "instanceId"),
+]
+
+# Infrastructure resources (not tagged by customer — minimized by VPC association)
+_INFRA_RESOURCE_TYPES = [
+    ("vpcs", "vpcs"),
+    ("subnets", "subnets"),
+    ("security_groups", "security_groups"),
+]
+
+
+def _collect_raw(client, regions):
+    """Scan all regions and collect raw resource lists."""
+    raw = {"vms": [], "lbs": [], "redis": [], "mongodb": [], "rds": [],
+           "vpcs": [], "subnets": [], "security_groups": [], "eips": [],
+           "es": []}
+
+    for region in regions:
+        for raw_key, list_name, *_ in _RESOURCE_TYPES + _INFRA_RESOURCE_TYPES:
+            try:
+                items = getattr(client, f"list_{list_name}")(region=region)
+                raw[raw_key].extend(items)
+            except Exception as e:
+                label = list_name.replace("_", " ").title()
+                print(f"  [警告]  {region} {label} discovery failed: {e}")
+    return raw
+
+
+def _classify(tags: dict, name: str, rtype: str) -> dict:
+    """Determine deployment mode with confidence score."""
+    # K8s signals
+    if K8S_CLUSTER_TAG in tags or K8S_CREATED_TAG in tags:
+        tag = K8S_CLUSTER_TAG if K8S_CLUSTER_TAG in tags else K8S_CREATED_TAG
+        return {"mode": "k8s", "confidence": 0.95,
+                "reason": f"detected K8s tag: {tag}"}
+
+    # Customer tag present, no K8s tags
+    if "客户" in tags:
+        return {"mode": "traditional", "confidence": 0.85,
+                "reason": "customer tag present, no K8s tags"}
+
+    # Name prefix matching
+    return {"mode": "unknown", "confidence": 0.30,
+            "reason": "no identifying tags"}
+
+
+def _classify_resource(tags: dict, resource: dict, name_field: str, id_field: str, rtype: str):
+    """Classify a single resource and return entry + optional confirmation."""
+    name = resource.get(name_field, "") if name_field else ""
+    rid = resource.get(id_field, "") if id_field else ""
+    cls = _classify(tags, name, rtype)
+    entry = cls | {"id": rid, "name": name}
+    needs = entry if cls["confidence"] <= 0.8 else None
+    return entry, needs
 
 
 def discover_customer_resources(client: JdcClient, customer: str,
@@ -32,173 +96,66 @@ def discover_customer_resources(client: JdcClient, customer: str,
         {
             "customer": str,
             "regions": [str],
-            "raw": {
-                "vms": [...], "lbs": [...], "redis": [...], "mongodb": [...],
-                "vpcs": [...], "subnets": [...], "security_groups": [...],
-                "eips": [...], "nats": [...], "es": [...],
-            },
-            "topology": {
-                "vpcs": {vpc_id: {name, cidr, subnets: [...], resources: [...]}},
-                "clb_targets": {lb_id: [backend_ip, ...]},
-                "k8s_clusters": {cluster_id: {nodes: [...], ingress: [...]}},
-            },
-            "classification": {
-                "resources": [{"id": ..., "type": ..., "mode": ..., "confidence": ..., "reason": ...}],
-                "needs_confirmation": [{"id": ..., "type": ..., "reason": ...}],
-            }
+            "raw": {...},
+            "topology": {"vpcs": {vpc_id: {...}}},
+            "classification": {...},
         }
     """
     if regions is None:
         regions = ALL_REGIONS
 
-    raw = {"vms": [], "lbs": [], "redis": [], "mongodb": [], "rds": [], "vpcs": [],
-           "subnets": [], "security_groups": [], "eips": [], "nats": [],
-           "es": [],}
-
-    for region in regions:
-        try:
-            vms = client.list_vms(region=region)
-            raw["vms"].extend(vms)
-        except Exception as e:
-            print(f"  [警告]  {region} VM discovery failed: {e}")
-        try:
-            lbs = client.list_lbs(region=region)
-            raw["lbs"].extend(lbs)
-        except Exception as e:
-            print(f"  [警告]  {region} LB discovery failed: {e}")
-        try:
-            redis = client.list_redis(region=region)
-            raw["redis"].extend(redis)
-        except Exception as e:
-            print(f"  [警告]  {region} Redis discovery failed: {e}")
-        try:
-            mongodb = client.list_mongodb(region=region)
-            raw["mongodb"].extend(mongodb)
-        except Exception as e:
-            print(f"  [警告]  {region} MongoDB discovery failed: {e}")
-        try:
-            vpcs = client.list_vpcs(region=region)
-            raw["vpcs"].extend(vpcs)
-        except Exception as e:
-            print(f"  [警告]  {region} VPC discovery failed: {e}")
-        try:
-            subnets = client.list_subnets(region=region)
-            raw["subnets"].extend(subnets)
-        except Exception as e:
-            print(f"  [警告]  {region} Subnet discovery failed: {e}")
-        try:
-            sgs = client.list_security_groups(region=region)
-            raw["security_groups"].extend(sgs)
-        except Exception as e:
-            print(f"  [警告]  {region} Security Group discovery failed: {e}")
-        try:
-            es = client.list_es(region=region)
-            raw["es"].extend(es)
-        except Exception as e:
-            print(f"  [警告]  {region} ES discovery failed: {e}")
-        try:
-            eips = client.list_eips(region=region)
-            raw["eips"].extend(eips)
-        except Exception as e:
-            print(f"  [警告]  {region} EIP discovery failed: {e}")
-        try:
-            rds = client.list_rds(region=region)
-            raw["rds"].extend(rds)
-        except Exception as e:
-            print(f"  [警告]  {region} RDS discovery failed: {e}")
+    raw = _collect_raw(client, regions)
 
     # Filter to customer resources
-    customer_vms = filter_by_tag(raw["vms"], "客户", customer)
-    customer_lbs = filter_by_tag(raw["lbs"], "客户", customer)
-    customer_redis = filter_by_tag(raw["redis"], "客户", customer)
-    customer_mongodb = filter_by_tag(raw["mongodb"], "客户", customer)
-    customer_rds = filter_by_tag(raw["rds"], "客户", customer)
-    customer_eips = filter_by_tag(raw["eips"], "客户", customer)
-    customer_nats = filter_by_tag(raw["nats"], "客户", customer)
-    customer_es = filter_by_tag(raw["es"], "客户", customer)
+    customer_data = {}
+    for raw_key, *_rest in _RESOURCE_TYPES:
+        customer_data[raw_key] = filter_by_tag(raw[raw_key], "客户", customer)
 
-    # ── Minimize returned/persisted raw data (Safety requirement) ──
-    # Phase 1 must list regional resources to discover tagged ones, but the
-    # raw topology persisted to reports/output must NOT contain all-account
-    # / cross-customer inventory. Replace each raw array with only
-    # customer-scoped entries.
-    raw["vms"] = customer_vms
-    raw["lbs"] = customer_lbs
-    raw["redis"] = customer_redis
-    raw["mongodb"] = customer_mongodb
-    raw["rds"] = customer_rds
-    raw["eips"] = customer_eips
-    raw["nats"] = customer_nats
-    raw["es"] = customer_es
+    # Minimize raw data (safety: don't persist cross-customer inventory)
+    for raw_key in customer_data:
+        raw[raw_key] = customer_data[raw_key]
 
-    # Build VPC topology
-    vpc_map = {}
+    # Collect VPC IDs from all customer resources
     customer_vpc_ids = set()
-    for vm in customer_vms:
-        vpc_id = vm.get("vpcId", "")
-        if vpc_id:
-            customer_vpc_ids.add(vpc_id)
-    for lb in customer_lbs:
-        vpc_id = lb.get("vpcId", "")
-        if vpc_id:
-            customer_vpc_ids.add(vpc_id)
-    for r in customer_redis:
-        vpc_id = r.get("vpcId", "")
-        if vpc_id:
-            customer_vpc_ids.add(vpc_id)
-    for m in customer_mongodb:
-        vpc_id = m.get("vpcId", "")
-        if vpc_id:
-            customer_vpc_ids.add(vpc_id)
-    for r in customer_rds:
-        vpc_id = r.get("vpcId", "")
-        if vpc_id:
-            customer_vpc_ids.add(vpc_id)
-    for eip in customer_eips:
-        vpc_id = eip.get("vpcId", "")
-        if vpc_id:
-            customer_vpc_ids.add(vpc_id)
+    for raw_key, _list_name, vpc_field, *_rest in _RESOURCE_TYPES:
+        for r in customer_data.get(raw_key, []):
+            vpc_id = r.get(vpc_field, "")
+            if vpc_id:
+                customer_vpc_ids.add(vpc_id)
 
-    # ── Minimize VPC / subnet / security-group raw data ──
-    # Only keep VPCs referenced by customer resources.
+    # Minimize VPC/subnet/security_group raw data
     customer_vpcs = [vpc for vpc in raw["vpcs"]
                      if vpc.get("vpcId") in customer_vpc_ids]
     raw["vpcs"] = customer_vpcs
 
-    # Only keep subnets belonging to customer VPCs.
-    customer_vpc_id_set = customer_vpc_ids  # already a set
     customer_subnets = [sn for sn in raw["subnets"]
-                        if sn.get("vpcId") in customer_vpc_id_set]
+                        if sn.get("vpcId") in customer_vpc_ids]
     raw["subnets"] = customer_subnets
 
-    # Only keep security groups associated with customer VMs.
-    # Extract SG IDs from customer VMs' network interfaces.
+    # Security groups associated with customer VMs
     customer_sg_ids = set()
-    for vm in customer_vms:
-        for ni in [vm.get("primaryNetworkInterface", {})]:
-            nif = ni.get("networkInterface", {}) if isinstance(ni, dict) else {}
-            for sg_ref in nif.get("securityGroups", []):
-                gid = sg_ref.get("groupId", "")
-                if gid:
-                    customer_sg_ids.add(gid)
-    customer_sgs = [sg for sg in raw["security_groups"]
-                    if sg.get("groupId") in customer_sg_ids]
-    raw["security_groups"] = customer_sgs
+    for vm in customer_data.get("vms", []):
+        ni = vm.get("primaryNetworkInterface", {})
+        nif = ni.get("networkInterface", {}) if isinstance(ni, dict) else {}
+        for sg_ref in nif.get("securityGroups", []):
+            gid = sg_ref.get("groupId", "")
+            if gid:
+                customer_sg_ids.add(gid)
+    raw["security_groups"] = [sg for sg in raw["security_groups"]
+                              if sg.get("groupId") in customer_sg_ids]
 
-    # Build VPC topology from minimized data
+    # Build VPC topology
+    vpc_map = {}
     for vpc in customer_vpcs:
-        vpc_id = vpc["vpcId"]
-        vpc_map[vpc_id] = {
-            "name": vpc.get("vpcName", ""),
-            "cidr": vpc.get("addressPrefix", ""),
-            "subnets": [],
-            "vms": [],
-            "lbs": [],
-            "redis": [],
-            "mongodb": [],
-            "rds": [],
-            "eips": [],
-        }
+        vpc_id = vpc.get("vpcId", "")
+        if vpc_id:
+            vpc_map[vpc_id] = {
+                "name": vpc.get("vpcName", ""),
+                "cidr": vpc.get("addressPrefix", ""),
+                "subnets": [],
+                "vms": [], "lbs": [], "redis": [], "mongodb": [],
+                "rds": [], "eips": [],
+            }
 
     for subnet in customer_subnets:
         vpc_id = subnet.get("vpcId", "")
@@ -209,74 +166,35 @@ def discover_customer_resources(client: JdcClient, customer: str,
                 "az": subnet.get("az", ""),
             })
 
-    for vm in customer_vms:
-        vpc_id = vm.get("vpcId", "")
-        if vpc_id in vpc_map:
-            vpc_map[vpc_id]["vms"].append(vm.get("instanceName", ""))
-
-    for rds in customer_rds:
-        vpc_id = rds.get("vpcId", "")
-        if vpc_id in vpc_map:
-            vpc_map[vpc_id]["rds"].append(rds.get("instanceName", ""))
-
-    for mongo in customer_mongodb:
-        vpc_id = mongo.get("vpcId", "")
-        if vpc_id in vpc_map:
-            vpc_map[vpc_id]["mongodb"].append(mongo.get("instanceName", ""))
-
-    for eip in customer_eips:
-        vpc_id = eip.get("vpcId", "")
-        if vpc_id in vpc_map:
-            vpc_map[vpc_id]["eips"].append(
-                eip.get("elasticIpAddress") or eip.get("ipAddress") or eip.get("elasticIpId", "")
-            )
+    # Populate VPC topology with resource names
+    for raw_key, _list_name, vpc_field, name_field, _id_field in _RESOURCE_TYPES:
+        for r in customer_data.get(raw_key, []):
+            vpc_id = r.get(vpc_field, "")
+            if vpc_id not in vpc_map:
+                continue
+            if raw_key == "eips":
+                name = r.get("elasticIpAddress") or r.get("ipAddress") or r.get("elasticIpId", "")
+            else:
+                name = r.get(name_field, "") if name_field else ""
+            # eips key in vpc_map is already "eips"
+            vpc_map[vpc_id].setdefault(raw_key, []).append(name)
 
     # Build classification
     classification = {"resources": [], "needs_confirmation": []}
-    for vm in customer_vms:
-        tags = tag_dict(vm)
-        name = vm.get("instanceName", "")
-        rid = vm.get("instanceId", "")
-        cls = _classify(tags, name, "vm")
-        classification["resources"].append(cls | {"id": rid, "name": name})
-        if cls["confidence"] <= 0.8:
-            classification["needs_confirmation"].append(cls | {"id": rid, "name": name})
-
-    for lb in customer_lbs:
-        tags = tag_dict(lb)
-        name = lb.get("loadBalancerName", "")
-        rid = lb.get("loadBalancerId", "")
-        cls = _classify(tags, name, "lb")
-        classification["resources"].append(cls | {"id": rid, "name": name})
-        if cls["confidence"] <= 0.8:
-            classification["needs_confirmation"].append(cls | {"id": rid, "name": name})
-
-    for rds in customer_rds:
-        tags = tag_dict(rds)
-        name = rds.get("instanceName", "")
-        rid = rds.get("instanceId", "")
-        cls = _classify(tags, name, "rds")
-        classification["resources"].append(cls | {"id": rid, "name": name})
-        if cls["confidence"] <= 0.8:
-            classification["needs_confirmation"].append(cls | {"id": rid, "name": name})
-
-    for mongo in customer_mongodb:
-        tags = tag_dict(mongo)
-        name = mongo.get("instanceName", "")
-        rid = mongo.get("instanceId", "")
-        cls = _classify(tags, name, "mongodb")
-        classification["resources"].append(cls | {"id": rid, "name": name})
-        if cls["confidence"] <= 0.8:
-            classification["needs_confirmation"].append(cls | {"id": rid, "name": name})
-
-    for eip in customer_eips:
-        tags = tag_dict(eip)
-        name = eip.get("elasticIpAddress") or eip.get("ipAddress") or eip.get("elasticIpName", "")
-        rid = eip.get("elasticIpId") or eip.get("id", "")
-        cls = _classify(tags, name, "eip")
-        classification["resources"].append(cls | {"id": rid, "name": name})
-        if cls["confidence"] <= 0.8:
-            classification["needs_confirmation"].append(cls | {"id": rid, "name": name})
+    for raw_key, _list_name, _vpc_field, name_field, id_field in _RESOURCE_TYPES:
+        for r in customer_data.get(raw_key, []):
+            tags = tag_dict(r)
+            if raw_key == "eips":
+                name = r.get("elasticIpAddress") or r.get("ipAddress") or r.get("elasticIpName", "")
+                rid = r.get("elasticIpId") or r.get("id", "")
+            else:
+                name = r.get(name_field, "") if name_field else ""
+                rid = r.get(id_field, "") if id_field else ""
+            cls = _classify(tags, name, raw_key.rstrip("s"))
+            entry = cls | {"id": rid, "name": name}
+            classification["resources"].append(entry)
+            if cls["confidence"] <= 0.8:
+                classification["needs_confirmation"].append(entry)
 
     return {
         "customer": customer,
@@ -285,21 +203,3 @@ def discover_customer_resources(client: JdcClient, customer: str,
         "topology": {"vpcs": vpc_map},
         "classification": classification,
     }
-
-
-def _classify(tags: dict, name: str, rtype: str) -> dict:
-    """Determine deployment mode with confidence score."""
-    # K8s signals
-    if K8S_CLUSTER_TAG in tags or K8S_CREATED_TAG in tags:
-        return {"mode": "k8s", "confidence": 0.95,
-                "reason": f"detected K8s tag: {K8S_CLUSTER_TAG if K8S_CLUSTER_TAG in tags else K8S_CREATED_TAG}"}
-
-    # Customer tag present, no K8s tags
-    if "客户" in tags:
-        return {"mode": "traditional", "confidence": 0.85,
-                "reason": "customer tag present, no K8s tags"}
-
-    # Name prefix matching
-    customer = ""  # determined at higher level
-    return {"mode": "unknown", "confidence": 0.30,
-            "reason": "no identifying tags"}

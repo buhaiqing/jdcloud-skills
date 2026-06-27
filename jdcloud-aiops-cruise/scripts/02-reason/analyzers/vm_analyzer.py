@@ -67,29 +67,13 @@ class VmAnalyzer(BaseAnalyzer):
 
     def discover(self, topology: dict) -> list:
         """Extract VMs tagged with the target customer."""
-        self.topology = topology
-        customer = topology.get("customer", "")
-        all_vms = topology.get("raw", {}).get("vms", [])
-        self.resources = [
-            vm for vm in all_vms
-            if get_tag(vm, "客户") == customer
-        ]
-        return self.resources
+        return self.discover_by_tag(topology, "vms")
 
     def query_metrics(self, client, hours: int = 6) -> dict:
         """Collect metrics for all discovered VMs (last 6 hours)."""
-        for vm in self.resources:
-            rid = vm.get("instanceId")
-            if not rid:
-                continue
-            try:
-                points = client.get_metrics_batch(rid, self.METRICS, hours=hours,
-                                                  service_code="vm")
-                if points:
-                    self.metrics[rid] = points
-            except Exception:
-                continue
-        return self.metrics
+        return self.query_metrics_batch(client, id_field="instanceId",
+                                        metrics=self.METRICS, hours=hours,
+                                        service_code="vm")
 
     def analyze(self) -> list:
         """Run all VM analysis rules."""
@@ -106,11 +90,8 @@ class VmAnalyzer(BaseAnalyzer):
             metrics = self.metrics.get(rid, {})
 
             # Helper to auto-fill VM context into findings
-            def v_find(severity, msg, action="", ops=""):
-                self._add_finding(severity, msg, action,
-                    resource=name, resource_id=rid,
-                    resource_ip=ip, instance_type=instance_type,
-                    ops_skill=ops)
+            ctx = {"resource": name, "resource_id": rid,
+                   "resource_ip": ip, "instance_type": instance_type}
 
             # ── CPU threshold ──
             cpu = metrics.get("cpu_util", [])
@@ -121,12 +102,12 @@ class VmAnalyzer(BaseAnalyzer):
                     act = ("1. 登录服务器执行 `top -bn1` 查看高CPU进程; "
                            "2. 确认异常进程后联系应用负责人; "
                            "3. 如需升配，通过 jdcloud-vm-ops 执行")
-                    v_find("critical",
+                    self._add_finding("critical",
                         f"CPU平均使用率{avg:.1f}%（阈值>{THRESHOLDS['cpu_util']['critical']}%），峰值{max_cpu:.1f}%",
-                        act, "jdcloud-vm-ops")
+                        act, ops_skill="jdcloud-vm-ops", **ctx)
                 elif avg > THRESHOLDS["cpu_util"]["warning"]:
                     act = "检查进程资源占用；如持续偏高建议升配（通过 jdcloud-vm-ops）"
-                    v_find("warning", f"CPU平均使用率{avg:.1f}%（阈值>{THRESHOLDS['cpu_util']['warning']}%）", act)
+                    self._add_finding("warning", f"CPU平均使用率{avg:.1f}%（阈值>{THRESHOLDS['cpu_util']['warning']}%）", act, **ctx)
 
             # ── Memory threshold ──
             mem = metrics.get("memory.usage", [])
@@ -137,25 +118,25 @@ class VmAnalyzer(BaseAnalyzer):
                     act = ("1. 登录服务器执行 `free -m` 确认内存使用; "
                            "2. 检查应用日志查找 OOM 相关错误; "
                            "3. 如需升配，通过 jdcloud-vm-ops 执行升配操作")
-                    v_find("critical",
+                    self._add_finding("critical",
                         f"内存平均使用率{avg:.1f}%（阈值>{THRESHOLDS['memory.usage']['critical']}%），峰值{max_mem:.1f}%",
-                        act, "jdcloud-vm-ops")
+                        act, ops_skill="jdcloud-vm-ops", **ctx)
                 elif avg > THRESHOLDS["memory.usage"]["warning"]:
-                    v_find("warning", f"内存平均使用率{avg:.1f}%（阈值>{THRESHOLDS['memory.usage']['warning']}%）",
-                           "检查进程内存占用，关注是否有内存泄漏")
+                    self._add_finding("warning", f"内存平均使用率{avg:.1f}%（阈值>{THRESHOLDS['memory.usage']['warning']}%）",
+                           "检查进程内存占用，关注是否有内存泄漏", **ctx)
 
             # ── Disk usage ──
             du = metrics.get("vm.disk.dev.used", [])
             if du:
                 last = du[-1][1]
                 if last > THRESHOLDS["vm.disk.dev.used"]["critical"]:
-                    v_find("critical",
+                    self._add_finding("critical",
                         f"磁盘使用率{last:.1f}%（阈值>{THRESHOLDS['vm.disk.dev.used']['critical']}%）",
                         "1. 登录服务器执行 `df -h` 确认具体分区; 2. 清理日志或临时文件; 3. 通过 jdcloud-vm-ops 扩容云盘",
-                        "jdcloud-vm-ops")
+                        ops_skill="jdcloud-vm-ops", **ctx)
                 elif last > THRESHOLDS["vm.disk.dev.used"]["warning"]:
-                    v_find("warning", f"磁盘使用率{last:.1f}%（阈值>{THRESHOLDS['vm.disk.dev.used']['warning']}%）",
-                           "计划扩容或清理数据")
+                    self._add_finding("warning", f"磁盘使用率{last:.1f}%（阈值>{THRESHOLDS['vm.disk.dev.used']['warning']}%）",
+                           "计划扩容或清理数据", **ctx)
 
             # ── IOPS spec limit ──
             disk_type = self._infer_disk_type(vm)
@@ -170,15 +151,15 @@ class VmAnalyzer(BaseAnalyzer):
                     avg_iops = sum(v for _, v in pts) / len(pts)
                     ratio = peak / max_iops if max_iops > 0 else 0
                     if ratio > 0.8:
-                        v_find("warning",
+                        self._add_finding("warning",
                             f"{label}峰值{peak:.0f}，平均{avg_iops:.0f}，已达{disk_type}上限{max_iops}的{ratio*100:.0f}%",
                             f"1. 检查磁盘 {disk_type} 是否达到IOPS瓶颈; 2. 优化查询减少IO; 3. 如需升配通过 jdcloud-vm-ops 执行",
-                            "jdcloud-vm-ops")
+                            ops_skill="jdcloud-vm-ops", **ctx)
 
             # ── Network bandwidth spec limit ──
             net_gbps = limits.get("network_gbps", 99)
             net_max_bps = net_gbps * 1_000_000_000
-            for direction, label, mkey in [("入", "入带宽", "vm.network.dev.bytes.in"),
+            for _direction, label, mkey in [("入", "入带宽", "vm.network.dev.bytes.in"),
                                             ("出", "出带宽", "vm.network.dev.bytes.out")]:
                 pts = metrics.get(mkey, [])
                 if pts:
@@ -186,28 +167,28 @@ class VmAnalyzer(BaseAnalyzer):
                     peak_mbps = peak_bps / 1_000_000
                     ratio = peak_bps / net_max_bps if net_max_bps > 0 else 0
                     if ratio > 0.8:
-                        v_find("warning",
+                        self._add_finding("warning",
                             f"网络{label}带宽峰值{peak_mbps:.1f}Mbps，已达{instance_type}上限{net_gbps}Gbps的{ratio*100:.0f}%",
                             "1. 检查流量来源; 2. 如需升配实例规格通过 jdcloud-vm-ops 执行",
-                            "jdcloud-vm-ops")
+                            ops_skill="jdcloud-vm-ops", **ctx)
 
             # 云盘加密
             for dd in vm.get("dataDisks", []):
                 cd = dd.get("cloudDisk", {})
                 if not cd.get("encrypted", True) and not cd.get("encrypt", True):
-                    v_find("warning",
+                    self._add_finding("warning",
                         f"数据盘 {cd.get('name','')} ({cd.get('diskSizeGB',0)}GB {cd.get('diskType','')}) 未加密",
-                        "控制台操作：云硬盘 → 更多 → 创建加密快照 → 用快照创建加密盘", "jdcloud-vm-ops")
+                        "控制台操作：云硬盘 → 更多 → 创建加密快照 → 用快照创建加密盘", ops_skill="jdcloud-vm-ops", **ctx)
             sd = vm.get("systemDisk", {}).get("cloudDisk", {})
             if not sd.get("encrypted", True) and not sd.get("encrypt", True):
-                v_find("info",
+                self._add_finding("info",
                     f"系统盘 {sd.get('diskSizeGB',0)}GB {sd.get('diskType','')} 未加密",
-                    "敏感环境建议通过加密快照迁移", "jdcloud-vm-ops")
+                    "敏感环境建议通过加密快照迁移", ops_skill="jdcloud-vm-ops", **ctx)
 
             # K8s 识别
             if is_k8s:
                 cluster_id = get_tag(vm, "kubernetes.jdcloud.com/cluster_id")
-                v_find("info", f"K8s节点（集群 {cluster_id}）", "Pod级分析请使用 k8s_analyzer")
+                self._add_finding("info", f"K8s节点（集群 {cluster_id}）", "Pod级分析请使用 k8s_analyzer", **ctx)
 
             # 系统负载
             ld = metrics.get("vm.avg.load5", [])
@@ -216,9 +197,9 @@ class VmAnalyzer(BaseAnalyzer):
                 vcpu = self._estimate_vcpu(instance_type)
                 ratio = avg_load / vcpu if vcpu > 0 else 0
                 if ratio > 6.0:
-                    v_find("warning",
+                    self._add_finding("warning",
                         f"系统负载(5min)平均{avg_load:.2f}（vCPU={vcpu}，负载/vCPU={ratio:.2f}，阈值>6.0）",
-                        "检查是否有异常进程或流量突增", "jdcloud-vm-ops")
+                        "检查是否有异常进程或流量突增", ops_skill="jdcloud-vm-ops", **ctx)
 
             # TCP 连接
             tcp = metrics.get("vm.netstat.tcp.established", [])
@@ -226,15 +207,16 @@ class VmAnalyzer(BaseAnalyzer):
                 avg_tcp = sum(v for _, v in tcp) / len(tcp)
                 max_conn = limits.get("max_conn", 9999999)
                 if max_conn < 9999999 and avg_tcp > max_conn * 0.8:
-                    v_find("warning",
+                    self._add_finding("warning",
                         f"TCP连接数平均{avg_tcp:.0f}，已达{instance_type}上限{max_conn}的{avg_tcp/max_conn*100:.0f}%",
-                        "检查连接泄漏，考虑升配实例规格", "jdcloud-vm-ops")
+                        "检查连接泄漏，考虑升配实例规格", ops_skill="jdcloud-vm-ops", **ctx)
 
             # 到期提醒
             charge = vm.get("charge", {})
             expire = charge.get("chargeExpiredTime", "")
             if expire:
-                v_find("info", f"到期时间: {expire}", "通过 jdcloud-vm-ops 续费", "jdcloud-vm-ops")
+                self._add_finding("info", f"到期时间: {expire}", "通过 jdcloud-vm-ops 续费",
+                    ops_skill="jdcloud-vm-ops", **ctx)
 
         return self.findings
 

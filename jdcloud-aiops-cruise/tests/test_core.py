@@ -165,7 +165,7 @@ class TestJdcClient:
                 if points:
                     ts, val = points[0]
                     assert isinstance(ts, int)
-                    assert isinstance(val, (int, float))
+                    assert isinstance(val, int | float)
         except RuntimeError:
             pass
 

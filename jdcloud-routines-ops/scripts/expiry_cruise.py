@@ -26,7 +26,7 @@ _script_dir = Path(__file__).resolve().parent
 _project_dir = _script_dir.parent
 sys.path.insert(0, str(_project_dir))
 
-from lib.jdc_client import JdcClient
+from lib.jdc_client import JdcClient  # noqa: E402
 
 
 # ═══════════════════════════════════════════════════════════════

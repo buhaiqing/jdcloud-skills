@@ -251,7 +251,7 @@ class JdcClient:
                 body = e.read().decode("utf-8", errors="replace")
                 last_err = RuntimeError(f"HTTP {e.code}: {body[:200]}")
                 if e.code < 500 and e.code != 429:
-                    raise last_err
+                    raise last_err from e
             except (urllib.error.URLError, OSError) as e:
                 last_err = RuntimeError(f"Network: {e}")
         raise last_err or RuntimeError("Max retries")

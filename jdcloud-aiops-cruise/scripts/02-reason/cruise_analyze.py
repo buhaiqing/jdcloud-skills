@@ -21,9 +21,9 @@ _scripts_dir = Path(__file__).resolve().parent
 _project_dir = _scripts_dir.parent
 sys.path.insert(0, str(_project_dir))
 
-from lib.jdc_client import JdcClient
-from lib.resource_discovery import discover_customer_resources
-from analyzers import create_all
+from lib.jdc_client import JdcClient  # noqa: E402
+from lib.resource_discovery import discover_customer_resources  # noqa: E402
+from analyzers import create_all  # noqa: E402
 
 
 def main():

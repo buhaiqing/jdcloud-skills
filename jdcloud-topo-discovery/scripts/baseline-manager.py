@@ -30,7 +30,7 @@ _script_dir = Path(__file__).resolve().parent
 if str(_script_dir) not in sys.path:
     sys.path.insert(0, str(_script_dir))
 
-from lib.baseline_local import LocalBackend
+from lib.baseline_local import LocalBackend  # noqa: E402
 
 
 def parse_args(argv=None):
@@ -377,7 +377,6 @@ def main():
                     print(f"  Dates: {', '.join(created)}")
             else:
                 # Mode 3: batch copy all dates in range
-                gaps = backend.list_gaps(start, end)
                 created = 0
                 skipped = 0
                 for d in [date.fromisoformat(start) + timedelta(days=i)

@@ -12,7 +12,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from analyzers import register
 from analyzers.base_analyzer import BaseAnalyzer
-from lib.jdc_client import get_tag
 
 EIP_THRESHOLDS = {
     "bandwidth_warning_ratio": 0.80,
@@ -32,11 +31,7 @@ class EipAnalyzer(BaseAnalyzer):
     icon = "[拓扑]"
 
     def discover(self, topology: dict) -> list:
-        self.topology = topology
-        customer = topology.get("customer", "")
-        all_eips = topology.get("raw", {}).get("eips", [])
-        self.resources = [e for e in all_eips if get_tag(e, "客户") == customer]
-        return self.resources
+        return self.discover_by_tag(topology, "eips")
 
     def query_metrics(self, client, hours: int = 6) -> dict:
         for eip in self.resources:
@@ -45,7 +40,7 @@ class EipAnalyzer(BaseAnalyzer):
                 continue
             try:
                 pts = client.get_metrics_batch(rid, ["eip.bandwidth.in", "eip.bandwidth.out"],
-                                               hours=hours, region=client.region,
+                                               hours=hours, region=getattr(client, 'region', None),
                                                service_code="eip")
                 if pts:
                     self.metrics[rid] = pts
@@ -62,11 +57,8 @@ class EipAnalyzer(BaseAnalyzer):
             bound_resource = self._bound_resource(eip)
             metrics = self.metrics.get(rid, {})
 
-            def eip_find(severity, msg, action="", ops=""):
-                self._add_finding(severity, msg, action,
-                    resource=ip, resource_id=rid,
-                    resource_ip=ip, instance_type=f"{bandwidth_mbps}Mbps",
-                    ops_skill=ops)
+            ctx = {"resource": ip, "resource_id": rid,
+                   "resource_ip": ip, "instance_type": f"{bandwidth_mbps}Mbps"}
 
             for direction, label in [("eip.bandwidth.in", "入带宽"),
                                       ("eip.bandwidth.out", "出带宽")]:
@@ -76,29 +68,29 @@ class EipAnalyzer(BaseAnalyzer):
                 peak = max(v for _, v in pts) / 1_000_000  # bps → Mbps
                 ratio = peak / bandwidth_mbps if bandwidth_mbps > 0 else 0
                 if ratio >= EIP_THRESHOLDS["bandwidth_warning_ratio"]:
-                    eip_find("warning",
+                    self._add_finding("warning",
                         f"{label}峰值{peak:.1f}Mbps，达到EIP带宽{bandwidth_mbps}Mbps的{ratio*100:.0f}%",
                         "只读建议：确认业务流量峰值；如需调整带宽，由人工通过 jdcloud-eip-ops 执行",
-                        "jdcloud-eip-ops")
+                        ops_skill="jdcloud-eip-ops", **ctx)
                 elif ratio >= EIP_THRESHOLDS["bandwidth_info_ratio"]:
-                    eip_find("info",
+                    self._add_finding("info",
                         f"{label}峰值{peak:.1f}Mbps，达到EIP带宽的{ratio*100:.0f}%",
-                        "建议关注带宽趋势")
+                        "建议关注带宽趋势", **ctx)
 
             if bound_resource:
-                eip_find("info",
+                self._add_finding("info",
                     f"EIP已绑定：{bound_resource}，带宽{bandwidth_mbps}Mbps",
-                    "审计记录：公网入口需确保安全组/ACL最小开放")
+                    "审计记录：公网入口需确保安全组/ACL最小开放", **ctx)
             else:
-                eip_find("warning",
+                self._add_finding("warning",
                     f"EIP未绑定任何资源，带宽{bandwidth_mbps}Mbps",
                     "只读建议：确认是否闲置；如需释放或绑定，必须由人工通过 jdcloud-eip-ops 执行",
-                    "jdcloud-eip-ops")
+                    ops_skill="jdcloud-eip-ops", **ctx)
 
             if not metrics:
-                eip_find("info",
+                self._add_finding("info",
                     "未获取到EIP流量指标",
-                    "建议检查云监控指标是否开通；本次仅基于资源属性完成审计")
+                    "建议检查云监控指标是否开通；本次仅基于资源属性完成审计", **ctx)
 
         return self.findings
 
