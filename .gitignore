@@ -255,5 +255,6 @@ audit-results/
 .opencode/
 .mavis/
 .lingma/
+.pi/
 
 node_modules/
