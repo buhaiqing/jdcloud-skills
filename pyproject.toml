@@ -13,6 +13,7 @@ dev = [
     "pytest>=7.0",
     "ruff>=0.6",
     "jsonschema>=4.21",
+    "pyyaml>=6.0",
 ]
 
 [tool.pytest]
