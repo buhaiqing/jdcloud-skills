@@ -12,7 +12,13 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "ruff>=0.6",
+    "jsonschema>=4.21",
 ]
+
+[tool.pytest]
+# --import-mode=importlib: 解决同名测试模块（如 test_rubric.py）
+# 从多个 jdcloud-*/tests/ 目录收集时的 __file__ 冲突问题。
+addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
 # 仓库所有 Python 一律走 Ruff：lint + format。
