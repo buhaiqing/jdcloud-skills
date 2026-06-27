@@ -17,17 +17,18 @@ Usage:
 """
 
 import re
+from collections.abc import Callable
 from typing import Any
 import logging
 from datetime import datetime, timedelta
 
 try:
-    from kubernetes import client
-    from kubernetes.client.rest import ApiException
+    from kubernetes import client  # noqa: F401
+    from kubernetes.client.rest import ApiException  # noqa: F401
 except ImportError:
     raise ImportError(
         "kubernetes package not installed. Run: pip install kubernetes>=25.3.0"
-    )
+    ) from None
 
 from .k8s_client import (
     get_k8s_client,
@@ -331,7 +332,6 @@ class DiagnosticReport:
         ingress_issues = [
             i for i in self.issues if i["resource_type"] == "ingresses"
         ]
-        service_issues = [i for i in self.issues if i["resource_type"] == "services"]
 
         if not ingress_issues:
             return

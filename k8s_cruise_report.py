@@ -23,7 +23,7 @@ if env_path.exists():
 
 # 添加 aiops cruise lib 路径
 sys.path.insert(0, str(Path(__file__).parent / "jdcloud-aiops-cruise" / "scripts"))
-from lib.jdc_client import JdcClient
+from lib.jdc_client import JdcClient  # noqa: E402
 
 CLUSTER_ID = "k8s-g1rlg9atud"
 REGION = "cn-east-2"

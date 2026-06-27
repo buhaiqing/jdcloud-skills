@@ -11,9 +11,9 @@ from dotenv import load_dotenv
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from jdcloud_sdk.core.credential import Credential
-from jdcloud_sdk.services.es.client.EsClient import EsClient
-from jdcloud_sdk.services.es.apis.DescribeInstancesRequest import (
+from jdcloud_sdk.core.credential import Credential  # noqa: E402
+from jdcloud_sdk.services.es.client.EsClient import EsClient  # noqa: E402
+from jdcloud_sdk.services.es.apis.DescribeInstancesRequest import (  # noqa: E402
     DescribeInstancesRequest,
     DescribeInstancesParameters,
 )

@@ -19,11 +19,11 @@ SAFETY:
 
 try:
     from kubernetes import client
-    from kubernetes.client.rest import ApiException
+    from kubernetes.client.rest import ApiException  # noqa: F401
 except ImportError:
     raise ImportError(
         "kubernetes package not installed. Run: pip install kubernetes>=25.3.0"
-    )
+    ) from None
 
 from .k8s_client import (
     get_k8s_client,
@@ -68,10 +68,9 @@ def list_storage_classes(kubeconfig_path: str | None = None) -> dict:
         classes.append(class_info)
 
         # Check if this is the default StorageClass
-        if sc.metadata.annotations:
-            if sc.metadata.annotations.get(
-                "storageclass.kubernetes.io/is-default-class"
-            ) == "true":
+        if sc.metadata.annotations and sc.metadata.annotations.get(
+            "storageclass.kubernetes.io/is-default-class"
+        ) == "true":
                 default_class = sc.metadata.name
 
     return {"storage_classes": classes, "default_class": default_class}
@@ -134,7 +133,7 @@ def create_pvc(
                 f"StorageClass '{storage_class}' does not exist",
                 resource_type="StorageClass",
                 resource_name=storage_class,
-            )
+            ) from None
 
     pvc_spec = client.V1PersistentVolumeClaim(
         metadata=client.V1ObjectMeta(name=name, namespace=namespace),

@@ -27,7 +27,6 @@ def _parse_charge(charge_spec: dict) -> tuple[str, bool]:
 
 def main():
     cred = Credential(os.environ["JDC_ACCESS_KEY"], os.environ["JDC_SECRET_KEY"])
-    billing_client = BillingClient(cred)
 
     # 1. Find cluster across all regions
     print(f"🔍 查询集群: {CLUSTER_ID}")

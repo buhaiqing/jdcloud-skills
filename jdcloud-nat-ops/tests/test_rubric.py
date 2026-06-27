@@ -52,7 +52,6 @@ def test_safety_zero_triggers_abort(rubric_template):
     """Safety=0 must trigger abort."""
     scores = {"correctness": 1, "safety": 0, "idempotency": 1,
               "traceability": 1, "spec_compliance": 1}
-    trace = _build_trace(scores, decision="RETRY")
     # Simulate orchestrator: Safety=0 → abort
     if scores["safety"] == 0:
         decision = "ABORT"
@@ -117,7 +116,6 @@ def test_delete_nat_safety_gate_protocol():
                  "dnatRuleCount": 0, "elasticIpAddresses": ["eip-001"]}
 
     def can_delete(nat, confirm=False):
-        has_rules = nat.get("snatRuleCount", 0) > 0 or nat.get("dnatRuleCount", 0) > 0
         return confirm and True  # with explicit confirm, can proceed
 
     # Without confirm, even empty NAT should not proceed
@@ -210,7 +208,6 @@ def test_dnat_protocol_validation():
 def test_nat_state_transition_on_delete():
     """NAT gateway transitions: available → deleting → (404)."""
     # Simulate state transitions during delete
-    states = ["available", "deleting"]
     def poll_after_delete(describe_result):
         return describe_result.get("state") if describe_result else "deleted"
 

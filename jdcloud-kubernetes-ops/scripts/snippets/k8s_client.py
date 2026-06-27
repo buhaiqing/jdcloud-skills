@@ -24,7 +24,7 @@ try:
 except ImportError:
     raise ImportError(
         "kubernetes package not installed. Run: pip install kubernetes>=25.3.0"
-    )
+    ) from None
 
 logger = logging.getLogger(__name__)
 

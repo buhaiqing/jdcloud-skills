@@ -103,9 +103,7 @@ def test_bucket_name_validation():
             return False
         if not bucket_name_pattern.match(name):
             return False
-        if is_ip_format(name):
-            return False
-        return True
+        return not is_ip_format(name)
 
     for name in valid_names:
         assert _valid_bucket_name(name), f"Valid name rejected: {name}"

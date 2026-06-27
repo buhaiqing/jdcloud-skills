@@ -52,7 +52,6 @@ def test_safety_zero_triggers_abort(rubric_template):
     """Safety=0 must trigger abort."""
     scores = {"correctness": 1, "safety": 0, "idempotency": 1,
               "traceability": 1, "spec_compliance": 1}
-    trace = _build_trace(scores, decision="RETRY")
     # Simulate orchestrator: Safety=0 → abort
     if scores["safety"] == 0:
         decision = "ABORT"
@@ -125,10 +124,7 @@ def test_spec_compliance_cidr_check():
         if prefix < 1 or prefix > 32:
             return False
         # Step 3: each octet must be 0-255
-        for octet in cidr.split("/")[0].split("."):
-            if int(octet) > 255:
-                return False
-        return True
+        return all(int(octet) <= 255 for octet in cidr.split("/")[0].split("."))
 
     for cidr in valid_cidrs:
         assert _valid_cidr(cidr), f"Valid CIDR rejected: {cidr}"

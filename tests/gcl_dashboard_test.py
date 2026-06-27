@@ -93,7 +93,6 @@ def make_critic_for_record(record: dict[str, Any]) -> callable:
     """
     score_0 = set(record.get("expected_score_0_dims", []))
     status = record.get("expected_status")
-    n_iter = record.get("expected_iterations", 1)
 
     iter_counter = {"n": 0}
 

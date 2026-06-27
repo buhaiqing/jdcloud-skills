@@ -52,7 +52,6 @@ def test_safety_zero_triggers_abort(rubric_template):
     """Safety=0 must trigger abort."""
     scores = {"correctness": 1, "safety": 0, "idempotency": 1,
               "traceability": 1, "spec_compliance": 1}
-    trace = _build_trace(scores, decision="RETRY")
     # Simulate orchestrator: Safety=0 → abort
     if scores["safety"] == 0:
         decision = "ABORT"
@@ -131,7 +130,7 @@ def test_cannot_release_in_use_eip():
     def can_release_eip(eip, confirm=False):
         if eip.get("instanceId") is None:
             return True
-        if eip.get("instanceType") == "vm" and confirm:
+        if eip.get("instanceType") == "vm" and confirm:  # noqa: SIM103
             return True
         return False
 

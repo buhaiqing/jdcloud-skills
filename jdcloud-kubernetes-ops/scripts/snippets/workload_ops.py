@@ -17,11 +17,11 @@ SAFETY:
 
 
 try:
-    from kubernetes import client
+    from kubernetes import client  # noqa: F401
 except ImportError:
     raise ImportError(
         "kubernetes package not installed. Run: pip install kubernetes>=25.3.0"
-    )
+    ) from None
 
 from .k8s_client import (
     get_k8s_client,
@@ -242,10 +242,10 @@ def delete_pod(
 
 def _check_pod_status_issues(pod) -> list[str]:
     """Check Pod status for issues.
-    
+
     Args:
         pod: Pod object from kubernetes client.
-    
+
     Returns:
         List of issue descriptions.
     """
@@ -264,10 +264,10 @@ def _check_pod_status_issues(pod) -> list[str]:
 
 def _check_container_readiness(pod) -> tuple[bool, list[str]]:
     """Check container readiness status.
-    
+
     Args:
         pod: Pod object from kubernetes client.
-    
+
     Returns:
         Tuple of (all_ready: bool, issues: List[str]).
     """
@@ -284,10 +284,10 @@ def _check_container_readiness(pod) -> tuple[bool, list[str]]:
 
 def _check_container_restarts(pod) -> tuple[int, list[str]]:
     """Check container restart counts.
-    
+
     Args:
         pod: Pod object from kubernetes client.
-    
+
     Returns:
         Tuple of (total_restarts: int, issues: List[str]).
     """
@@ -303,10 +303,10 @@ def _check_container_restarts(pod) -> tuple[int, list[str]]:
 
 def _check_crashloop_backoff(pod) -> list[str]:
     """Check for containers in CrashLoopBackOff state.
-    
+
     Args:
         pod: Pod object from kubernetes client.
-    
+
     Returns:
         List of issue descriptions.
     """
@@ -314,9 +314,8 @@ def _check_crashloop_backoff(pod) -> list[str]:
     container_statuses = pod.status.container_statuses or []
 
     for cs in container_statuses:
-        if cs.state and cs.state.waiting:
-            if cs.state.waiting.reason == "CrashLoopBackOff":
-                issues.append(f"Container {cs.name} is in CrashLoopBackOff")
+        if cs.state and cs.state.waiting and cs.state.waiting.reason == "CrashLoopBackOff":
+            issues.append(f"Container {cs.name} is in CrashLoopBackOff")
 
     return issues
 
@@ -325,12 +324,12 @@ def _check_error_events(
     api: client.CoreV1Api, pod_name: str, namespace: str
 ) -> list[str]:
     """Check for error events related to the Pod.
-    
+
     Args:
         api: CoreV1Api client.
         pod_name: Pod name.
         namespace: Kubernetes namespace.
-    
+
     Returns:
         List of issue descriptions.
     """
@@ -525,8 +524,7 @@ def check_service_health(
         issues.append("Endpoints resource not found")
 
     # Check LoadBalancer external IP
-    if svc.spec.type == "LoadBalancer":
-        if not (svc.status.load_balancer and svc.status.load_balancer.ingress):
+    if svc.spec.type == "LoadBalancer" and not (svc.status.load_balancer and svc.status.load_balancer.ingress):
             issues.append("LoadBalancer Service has no external IP assigned")
 
     # Check events for errors
@@ -933,11 +931,11 @@ def list_ingresses(
             "namespace": ingress.metadata.namespace,
             "ingress_class": ingress.spec.ingress_class_name,
             "hosts": list(
-                set(
+                {
                     rule.host
                     for rule in (ingress.spec.rules or [])
                     if rule.host
-                )
+                }
             ),
             "paths": [
                 {

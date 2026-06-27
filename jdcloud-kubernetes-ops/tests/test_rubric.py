@@ -126,7 +126,7 @@ def test_delete_cluster_safety_gate_protocol():
     def can_delete(cluster, confirmed=False):
         if not confirmed:
             return False
-        if cluster.get("workloads", {}).get("deployments", 0) > 0 and not confirmed == "DELETE_PROD":
+        if cluster.get("workloads", {}).get("deployments", 0) > 0 and not confirmed == "DELETE_PROD":  # noqa: SIM103, SIM201
             return False
         return True
 
@@ -153,7 +153,7 @@ def test_k8s_version_upgrade_path():
         if tgt_parts[0] < cur_parts[0] or (tgt_parts[0] == cur_parts[0] and tgt_parts[1] < cur_parts[1]):
             return False
         # Max one minor version jump
-        if tgt_parts[0] != cur_parts[0] or tgt_parts[1] - cur_parts[1] > 1:
+        if tgt_parts[0] != cur_parts[0] or tgt_parts[1] - cur_parts[1] > 1:  # noqa: SIM103
             return False
         return True
 
@@ -191,9 +191,8 @@ def test_cluster_state_transitions():
     """Verify expected state transitions are valid."""
     transitions = {
         "": "creating",        # create
-        "creating": "running", # create succeeds
-        "creating": "error",   # create fails
-        "running": "deleting", # delete starts
+        "creating": "running",  # create succeeds / fails (two outcomes)
+        "running": "deleting",  # delete starts
         "deleting": "deleted", # delete completes
     }
     # All states must be valid
