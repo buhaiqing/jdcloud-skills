@@ -1,4 +1,5 @@
 """Tests for mermaid_safe — Mermaid rendering safety utilities."""
+
 import pytest
 from scripts.lib.mermaid_safe import (
     mermaid_escape,
@@ -12,28 +13,31 @@ from scripts.lib.mermaid_safe import (
 
 # ── mermaid_escape ──
 
-@pytest.mark.parametrize("input_text,expected", [
-    # Parentheses
-    ("丹东鹏飞 (vpc-xxx)", "丹东鹏飞 &#40;vpc-xxx&#41;"),
-    ("(test)", "&#40;test&#41;"),
-    # Square brackets
-    ("[label]", "&#91;label&#93;"),
-    # Curly braces
-    ("{key}", "&#123;key&#125;"),
-    # Pipe
-    ("App | 10.0.0.0/24", "App &#124; 10.0.0.0/24"),
-    # Double quotes
-    ('say "hello"', "say &quot;hello&quot;"),
-    # Line break
-    ("line1\\nline2", "line1<br/>line2"),
-    # Combined
-    ("丹东鹏飞 (vpc-xxx) | 10.0.0.0/24",
-     "丹东鹏飞 &#40;vpc-xxx&#41; &#124; 10.0.0.0/24"),
-    # No special chars
-    ("simple-label", "simple-label"),
-    # Empty
-    ("", ""),
-])
+
+@pytest.mark.parametrize(
+    "input_text,expected",
+    [
+        # Parentheses
+        ("丹东鹏飞 (vpc-xxx)", "丹东鹏飞 &#40;vpc-xxx&#41;"),
+        ("(test)", "&#40;test&#41;"),
+        # Square brackets
+        ("[label]", "&#91;label&#93;"),
+        # Curly braces
+        ("{key}", "&#123;key&#125;"),
+        # Pipe
+        ("App | 10.0.0.0/24", "App &#124; 10.0.0.0/24"),
+        # Double quotes
+        ('say "hello"', "say &quot;hello&quot;"),
+        # Line break
+        ("line1\\nline2", "line1<br/>line2"),
+        # Combined
+        ("丹东鹏飞 (vpc-xxx) | 10.0.0.0/24", "丹东鹏飞 &#40;vpc-xxx&#41; &#124; 10.0.0.0/24"),
+        # No special chars
+        ("simple-label", "simple-label"),
+        # Empty
+        ("", ""),
+    ],
+)
 def test_mermaid_escape(input_text, expected):
     assert mermaid_escape(input_text) == expected
 
@@ -46,23 +50,28 @@ def test_mermaid_escape_non_string():
 
 # ── mermaid_safe_id ──
 
-@pytest.mark.parametrize("input_id,expected", [
-    ("res_alb-z5aeeqhdtj", "res_alb-z5aeeqhdtj"),
-    ("res_redis-jq8j5c6slnfd", "res_redis-jq8j5c6slnfd"),
-    ("sub_subnet-whicj3hhk0", "sub_subnet-whicj3hhk0"),
-    # Dots replaced
-    ("eip_116.196.75.209", "eip_116_196_75_209"),
-    # Special chars replaced
-    ("res_alb-z5aeeqhdtj:test", "res_alb-z5aeeqhdtj_test"),
-    ("agg_abc-def_123", "agg_abc-def_123"),
-    # Chinese chars replaced
-    ("res_鹏飞", "res___"),
-])
+
+@pytest.mark.parametrize(
+    "input_id,expected",
+    [
+        ("res_alb-z5aeeqhdtj", "res_alb-z5aeeqhdtj"),
+        ("res_redis-jq8j5c6slnfd", "res_redis-jq8j5c6slnfd"),
+        ("sub_subnet-whicj3hhk0", "sub_subnet-whicj3hhk0"),
+        # Dots replaced
+        ("eip_116.196.75.209", "eip_116_196_75_209"),
+        # Special chars replaced
+        ("res_alb-z5aeeqhdtj:test", "res_alb-z5aeeqhdtj_test"),
+        ("agg_abc-def_123", "agg_abc-def_123"),
+        # Chinese chars replaced
+        ("res_鹏飞", "res___"),
+    ],
+)
 def test_mermaid_safe_id(input_id, expected):
     assert mermaid_safe_id(input_id) == expected
 
 
 # ── mermaid_safe_label ──
+
 
 def test_mermaid_safe_label_basic():
     label = mermaid_safe_label("✅ my-app<br/>10.0.0.1")
@@ -90,6 +99,7 @@ def test_mermaid_safe_label_no_truncation():
 
 
 # ── mermaid_extract_str ──
+
 
 def test_extract_flat_field():
     data = {"name": "test-vm"}
@@ -130,6 +140,7 @@ def test_extract_non_dict_intermediate():
 
 # ── mermaid_safe_subgraph_label ──
 
+
 def test_subgraph_label_basic():
     label = mermaid_safe_subgraph_label("鹏飞-应用生产", "172.21.14.32/27")
     assert "鹏飞-应用生产" in label
@@ -150,6 +161,7 @@ def test_subgraph_label_no_cidr():
 
 
 # ── mermaid_safe_vpc_label ──
+
 
 def test_vpc_label():
     label = mermaid_safe_vpc_label("丹东鹏飞", "vpc-24lk5go6oj")

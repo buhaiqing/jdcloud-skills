@@ -1,4 +1,5 @@
 """Tests for field mapper (JD Cloud)."""
+
 from scripts.lib.field_mapper import FieldMapper, MappingSpec, MappingRule
 
 
@@ -67,7 +68,7 @@ def test_int_type_coercion():
         ],
     )
     hcl = FieldMapper().map_resource("eip", data, spec, "eip1")
-    assert 'bandwidth_mbps = 100' in hcl
+    assert "bandwidth_mbps = 100" in hcl
     assert 'bandwidth_mbps = "100"' not in hcl
 
 

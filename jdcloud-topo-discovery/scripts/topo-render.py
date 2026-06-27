@@ -4,25 +4,17 @@
 Reads JSON data from TOPO_TMP_DIR (env) or /tmp/.
 Supports lazy loading: brief mode skips VM/RDS/Redis files entirely.
 
-Large-scale Mermaid (>50 resources per Subnet) auto-collapses to avoid OOM.
-
-> **JD Cloud 适配**:
-> - 资源路径: `$.result.vpcs` / `$.result.subnets` (与阿里云 `$.Vpcs.Vpc` 不同)
-> - 术语: Subnet 而非 VSwitch
-> - 资源命名: 小写 (vpcName / instanceId / cacheInstanceId)
-
 Usage:
   python3 topo-render.py <output_dir> <mode:brief|detailed> <timestamp> <region> [--format ascii|mermaid|both] [--health-json path]
 """
 
 import json
-import sys
 import os
+import sys
 import argparse
 import subprocess
 
-# ── Safe rendering utilities ──
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from mermaid_safe import (
     mermaid_escape,
     mermaid_safe_id,
@@ -32,36 +24,24 @@ from mermaid_safe import (
     mermaid_safe_vpc_label,
 )
 
-# ── Config ──
-MERMAID_MAX_NODES = 50  # collapse if any Subnet has more than this
-
-# ── Argument parsing ──
+MERMAID_MAX_NODES = 50
 parser = argparse.ArgumentParser()
-parser.add_argument('output_dir')
-parser.add_argument('report_mode', choices=('brief', 'detailed'))
-parser.add_argument('timestamp')
-parser.add_argument('region_id')
-parser.add_argument('--format', choices=('ascii', 'mermaid', 'both'), default='both')
-parser.add_argument('--health-json', default=None)
+parser.add_argument("output_dir")
+parser.add_argument("report_mode", choices=("brief", "detailed"))
+parser.add_argument("timestamp")
+parser.add_argument("region_id")
+parser.add_argument("--format", choices=("ascii", "mermaid", "both"), default="both")
+parser.add_argument("--health-json", default=None)
 args = parser.parse_args()
 
-output_dir = args.output_dir
-report_mode = 'detailed' if args.report_mode == 'detailed' else 'brief'
-timestamp = args.timestamp
-region_id = args.region_id
-output_format = args.format
-
-# ── Data directory (concurrent-safe) ──
-DATA_DIR = os.environ.get('TOPO_TMP_DIR', '/tmp')
-
-# ── Load data (lazy: brief skips VM/RDS/Redis) ──
+DATA_DIR = os.environ.get("TOPO_TMP_DIR", "/tmp")
 _cache = {}
 
+
 def load_json(name):
-    """Lazy-load a JSON data file from DATA_DIR, cached."""
     if name in _cache:
         return _cache[name]
-    path = os.path.join(DATA_DIR, f'{name}.json')
+    path = os.path.join(DATA_DIR, name + ".json")
     if not os.path.exists(path):
         _cache[name] = {}
         return _cache[name]
@@ -73,344 +53,271 @@ def load_json(name):
         _cache[name] = {}
         return _cache[name]
 
-# Only load what we need based on mode
-BRIEF_FILES = ['vpcs', 'subnets', 'clbs', 'eips', 'sgs', 'ags', 'iam_users', 'kms_keys']
-DETAILED_FILES = ['vms', 'rds', 'redis']
 
-for name in BRIEF_FILES:
-    load_json(name)
-if report_mode == 'detailed':
-    for name in DETAILED_FILES:
-        load_json(name)
+for f in ["vpcs", "subnets", "clbs", "eips", "sgs", "ags", "iam_users", "kms_keys"]:
+    load_json(f)
+if args.report_mode == "detailed":
+    for f in ["vms", "rds", "redis"]:
+        load_json(f)
 
-# ── Parse loaded data ──
-def _get(name, *keys):
-    """Safely dig into loaded JSON data, JD Cloud format: result.<name>[*]."""
+
+def get_items(name, *keys):
     d = _cache.get(name, {})
     for k in keys:
-        if isinstance(d, dict):
-            d = d.get(k, {})
-        else:
-            return []
-    if isinstance(d, list):
-        return d
-    return []
+        d = d.get(k, {}) if isinstance(d, dict) else []
+    return d if isinstance(d, list) else []
 
-# JD Cloud response paths: result.<resources> (lowercase, no nested wrapper)
-vpcs  = _get('vpcs', 'result', 'vpcs')
-subns = _get('subnets', 'result', 'subnets')
-clbs  = _get('clbs', 'result', 'loadBalancers')
-eips  = _get('eips', 'result', 'elasticIps')
-sgs   = _get('sgs', 'result', 'networkSecurityGroups')
-ags   = _get('ags', 'result', 'ags')
-iam   = _get('iam_users', 'result', 'subUsers')
-kms   = _get('kms_keys', 'result', 'keys')
-vms   = _get('vms', 'result', 'instances') if report_mode == 'detailed' else []
-rds   = _get('rds', 'result', 'dbInstances') if report_mode == 'detailed' else []
-redis = _get('redis', 'result', 'cacheInstances') if report_mode == 'detailed' else []
 
-# ── Load health overlay (optional) ──
-health_data = {}
+vpcs = get_items("vpcs", "result", "vpcs")
+subns = get_items("subnets", "result", "subnets")
+clbs = get_items("clbs", "result", "loadBalancers")
+eips = get_items("eips", "result", "elasticIps")
+sgs = get_items("sgs", "result", "networkSecurityGroups")
+ags = get_items("ags", "result", "ags")
+iam = get_items("iam_users", "result", "subUsers")
+kms = get_items("kms_keys", "result", "keys")
+vms = get_items("vms", "result", "instances") if args.report_mode == "detailed" else []
+rds = get_items("rds", "result", "dbInstances") if args.report_mode == "detailed" else []
+redis_items = (
+    get_items("redis", "result", "cacheInstances") if args.report_mode == "detailed" else []
+)
+
+health = {}
 if args.health_json and os.path.exists(args.health_json):
     try:
         with open(args.health_json) as f:
-            health_data = json.load(f)
-        print(f"[INFO] Health overlay loaded from {args.health_json}")
+            health = json.load(f)
     except Exception:
-        print(f"[WARN] Failed to load health JSON: {args.health_json}")
+        pass
 
-def get_health(instance_id, default='✅'):
-    h = health_data.get(instance_id, {})
-    level = h.get('level', '')
-    if level == 'CRITICAL':
-        return '🔴'
-    if level == 'WARNING':
-        return '🟡'
-    if h.get('z_score', 0) > 2.0:
-        return '🟡'
+
+def health_icon(rid, default="✅"):
+    h = health.get(rid, {})
+    lvl = h.get("level", "")
+    if lvl == "CRITICAL":
+        return "🔴"
+    if lvl == "WARNING" or h.get("z_score", 0) > 2.0:
+        return "🟡"
     return default
 
-# ── Build Subnet → resources mapping ──
-subnet_map = {}
+
+# Build subnet resource map
+sn_map = {}
 for s in subns:
-    s_id = s.get('subnetId', '')
-    subnet_map[s_id] = {
-        'name': s.get('subnetName', ''),
-        'cidr': s.get('addressPrefix', ''),
-        'az': s.get('az', ''),
-        'vms': [], 'clbs': [], 'rds': [], 'redis': []
+    sid = s.get("subnetId", "")
+    sn_map[sid] = {
+        "name": s.get("subnetName", ""),
+        "cidr": s.get("addressPrefix", ""),
+        "az": s.get("az", ""),
+        "vms": [],
+        "clbs": [],
+        "rds": [],
+        "redis": [],
     }
-
-# VMs: instance.subnetId
 for v in vms:
-    sn = v.get('subnetId', '')
-    subnet_map.get(sn, {}).setdefault('vms', []).append({
-        'name': v.get('instanceName', ''),
-        'id': v.get('instanceId', ''),
-        'ip': v.get('privateIpAddress', ''),
-        'status': v.get('status', '')
-    })
-
-# CLBs: loadBalancer.subnetId
+    sn = v.get("subnetId", "")
+    if sn in sn_map:
+        sn_map[sn]["vms"].append(v)
 for clb in clbs:
-    sn = clb.get('subnetId', '')
-    priv_ip = mermaid_extract_str(clb, 'privateIp.privateIpAddress')
-    eip_addr = mermaid_extract_str(clb, 'privateIp.elasticIpAddress')
-    subnet_map.get(sn, {}).setdefault('clbs', []).append({
-        'name': clb.get('loadBalancerName', ''),
-        'id': clb.get('loadBalancerId', ''),
-        'ip': priv_ip,
-        'eip': eip_addr
-    })
-
-# RDS: dbInstance.subnetId
+    sn = clb.get("subnetId", "")
+    if sn in sn_map:
+        sn_map[sn]["clbs"].append(clb)
 for d in rds:
-    sn = d.get('subnetId', '')
-    subnet_map.get(sn, {}).setdefault('rds', []).append({
-        'name': d.get('instanceName', ''),
-        'id': d.get('instanceId', ''),
-        'conn': d.get('connectionString', ''),
-        'engine': d.get('engine', '')
-    })
+    sn = d.get("subnetId", "")
+    if sn in sn_map:
+        sn_map[sn]["rds"].append(d)
+for r in redis_items:
+    sn = r.get("subnetId", "")
+    if sn in sn_map:
+        sn_map[sn]["redis"].append(r)
 
-# Redis: cacheInstance.subnetId
-for r in redis:
-    sn = r.get('subnetId', '')
-    subnet_map.get(sn, {}).setdefault('redis', []).append({
-        'name': r.get('cacheInstanceName', ''),
-        'id': r.get('cacheInstanceId', ''),
-        'domain': r.get('connectionDomain', ''),
-        'type': r.get('instanceType', '')
-    })
-
-# ── Detect large-scale mode for Mermaid ──
-total_resources = sum(
-    len(sn.get('vms',[])) + len(sn.get('clbs',[])) + len(sn.get('rds',[])) + len(sn.get('redis',[]))
-    for sn in subnet_map.values()
+total_res = sum(
+    len(sn["vms"]) + len(sn["clbs"]) + len(sn["rds"]) + len(sn["redis"]) for sn in sn_map.values()
 )
-large_scale = total_resources > MERMAID_MAX_NODES
-if large_scale:
-    print(f"[INFO] Large topology ({total_resources} resources > {MERMAID_MAX_NODES}), Mermaid using aggregated view")
+large = total_res > MERMAID_MAX_NODES
 
-# Primary VPC
-primary_vpc = vpcs[0] if vpcs else {}
-vpc_id = primary_vpc.get('vpcId', '')
-vpc_name = primary_vpc.get('vpcName', '') or vpc_id
-project_name = os.getenv('TOPO_PROJECT_NAME', vpc_name)
+pv = vpcs[0] if vpcs else {}
+vpc_id = pv.get("vpcId", "")
+vpc_name = pv.get("vpcName", "") or vpc_id
+proj = os.getenv("TOPO_PROJECT_NAME", vpc_name)
+pname = "\u8be6\u7ec6" if args.report_mode == "detailed" else "\u7b80\u62a5"
 
-# ── Helper: resource line with health ──
-def resource_line(it, indent='│  '):
-    h = get_health(it.get('id', ''))
-    if 'ip' in it and 'eip' in it and it['eip']:
-        return f"{indent}{h} {it['name']}: {it['ip']} (EIP: {it['eip']})"
-    elif 'ip' in it:
-        return f"{indent}{h} {it['name']}: {it['ip']}"
-    elif 'domain' in it:
-        return f"{indent}{h} {it['name']} [{it.get('type','')}]: {it['domain']}"
-    else:
-        return f"{indent}{h} {it['name']}: {it.get('conn', '')}"
 
-# ── Render ASCII ──
+def res_line(it, ind="    \u2502  \u251c\u2500 "):
+    h = health_icon(
+        it.get("instanceId", "")
+        or it.get("loadBalancerId", "")
+        or it.get("cacheInstanceId", "")
+        or it.get("instanceId", "")
+        or ""
+    )
+    nm = (
+        it.get("instanceName", "")
+        or it.get("loadBalancerName", "")
+        or it.get("cacheInstanceName", "")
+        or ""
+    )
+    ip = it.get("privateIpAddress", "") or mermaid_extract_str(it, "privateIp.privateIpAddress")
+    eip = mermaid_extract_str(it, "privateIp.elasticIpAddress")
+    if eip:
+        return f"{ind}{h} {nm}: {ip} (EIP: {eip})"
+    if ip:
+        return f"{ind}{h} {nm}: {ip}"
+    return f"{ind}{h} {nm}"
+
+
 def render_ascii():
-    lines = []
-    lines.append(f"# {project_name} - 京东云网络拓扑与资源清单")
-    lines.append(f"> 生成时间: {timestamp} | 区域: {region_id} | 模式: {'详细' if report_mode == 'detailed' else '简报'}")
-    lines.append("---")
-    lines.append("## 🏗️ VPC 网络拓扑")
-    lines.append("")
-    lines.append(f"**VPC**: {vpc_name} ({vpc_id})  **CIDR**: {primary_vpc.get('addressPrefix', '')}")
-    lines.append("```")
-
-    for _sid, sn in subnet_map.items():
-        lines.append(f"├─ 子网: {sn['name']} ({sn['cidr']}) ~ {sn['az']}")
-        items = sn.get('vms', []) + sn.get('clbs', []) + sn.get('rds', []) + sn.get('redis', [])
+    lines = [
+        f"# {proj} - \u4eac\u4e1c\u4e91\u7f51\u7edc\u62d3\u6251\u4e0e\u8d44\u6e90\u6e05\u5355",
+        f"> \u751f\u6210\u65f6\u95f4: {args.timestamp} | \u533a\u57df: {args.region_id} | \u6a21\u5f0f: {pname}",
+        "---",
+        "## \U0001f3d7\ufe0f VPC \u7f51\u7edc\u62d3\u6251",
+        "",
+        f"**VPC**: {vpc_name} ({vpc_id})  **CIDR**: {pv.get('addressPrefix', '')}",
+        "```",
+    ]
+    for _sid, sn in sn_map.items():
+        lines.append(f"\u2514\u2500 \u5b50\u7f51: {sn['name']} ({sn['cidr']}) ~ {sn['az']}")
+        items = sn["vms"] + sn["clbs"] + sn["rds"] + sn["redis"]
         if not items:
-            lines.append("│  └─ (预留)")
+            lines.append("\u2502  \u2514\u2500 (\u9884\u7559)")
         else:
-            for idx, it in enumerate(items[:MERMAID_MAX_NODES]):
-                last = idx == len(items) - 1 or idx == MERMAID_MAX_NODES - 1
-                pfx = "│  └─ " if last else "│  ├─ "
-                lines.append(resource_line(it, f"   {pfx}"))
-            if len(items) > MERMAID_MAX_NODES:
-                lines.append(f"   │  └─ ... ({len(items) - MERMAID_MAX_NODES} more)")
+            for idx, it in enumerate(items):
+                p = "\u2502  \u2514\u2500 " if idx == len(items) - 1 else "\u2502  \u251c\u2500 "
+                lines.append(res_line(it, f"   {p}"))
     lines.append("```")
-    lines.append("")
     if len(vpcs) > 1:
-        lines.append(f"> 💡 检测到 {len(vpcs)} 个 VPC,当前展示主 VPC ({vpc_id})。其余 VPC: {', '.join(v.get('vpcId','') for v in vpcs[1:])}")
-        lines.append("")
-    lines.append("---")
-    lines.append("")
+        o = ", ".join(v.get("vpcId", "") for v in vpcs[1:])
+        lines.append(f"\n> \U0001f4a1 \u68c0\u6d4b\u5230 {len(vpcs)} VPC\u3002\u5176\u4ed6: {o}")
+    if health:
+        lines.extend(
+            [
+                "---",
+                "## \U0001f49a \u5065\u5eb7\u603b\u89c8",
+                "",
+                "| \u8d44\u6e90 | \u7c7b\u578b | \u5065\u5eb7 | \u5f02\u5e38\u8bc4\u5206 |",
+                "|---|---|---|---|",
+            ]
+        )
+        for rid, h in health.items():
+            e = (
+                "\U0001f534"
+                if h.get("level", "") == "CRITICAL"
+                else ("\U0001f7e1" if h.get("level", "") == "WARNING" else "\u2705")
+            )
+            lines.append(f"| {rid} | {h.get('type', '')} | {e} | {h.get('z_score', 0)} |")
+    lines.extend(
+        [
+            "---",
+            "## \U0001f4ca \u8d44\u6e90\u7edf\u8ba1",
+            "| \u7c7b\u578b | \u6570\u91cf |",
+            "|---|---|",
+            f"| VPC | {len(vpcs)} |",
+            f"| Subnet | {len(subns)} |",
+            f"| VM | {len(vms)} |",
+            f"| CLB | {len(clbs)} |",
+            f"| EIP | {len(eips)} |",
+            f"| AG | {len(ags)} |",
+            f"| SecurityGroup | {len(sgs)} |",
+            f"| IAM | {len(iam)} |",
+            f"| KMS | {len(kms)} |",
+        ]
+    )
+    if args.report_mode == "detailed":
+        lines.extend([f"| RDS | {len(rds)} |", f"| Redis | {len(redis_items)} |"])
+    lines.extend(["", "---", "> jdcloud-topo-discovery | READ-ONLY"])
+    return "\n".join(lines)
 
-    # Health summary
-    if health_data:
-        lines.append("## 💚 健康状态总览")
-        lines.append("")
-        lines.append("| 资源 | 类型 | 健康 | 异常评分 |")
-        lines.append("|---|---|---|---|")
-        for rid, h in health_data.items():
-            hl = h.get('level', '')
-            z = h.get('z_score', 0)
-            emoji = '🔴' if hl == 'CRITICAL' else ('🟡' if hl == 'WARNING' else '✅')
-            lines.append(f"| {rid} | {h.get('type','')} | {emoji} | {z} |")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
 
-    # Resource stats
-    lines.append("## 📊 资源统计")
-    lines.append("| 资源类型 | 数量 | 明细 |")
-    lines.append("|---|---|---|")
-    lines.append(f"| VPC | {len(vpcs)} | {vpc_name}" + (f" + {len(vpcs)-1} more" if len(vpcs) > 1 else "") + " |")
-    lines.append(f"| Subnet | {len(subns)} | {primary_vpc.get('addressPrefix', '')} |")
-    lines.append(f"| VM (云主机) | {len(vms)} | {len(vms)} running |")
-    lines.append(f"| CLB (负载均衡) | {len(clbs)} | {len(clbs)} active |")
-    lines.append(f"| EIP (公网 IP) | {len(eips)} | {len(eips)} InUse |")
-    lines.append(f"| AG (高可用组) | {len(ags)} | {len(ags)} active |")
-    lines.append(f"| SecurityGroup (安全组) | {len(sgs)} | — |")
-    lines.append(f"| IAM SubUser | {len(iam)} | sub-users |")
-    lines.append(f"| KMS Key | {len(kms)} | keys |")
-    if report_mode == 'detailed':
-        lines.append(f"| RDS | {len(rds)} | databases |")
-        lines.append(f"| Redis | {len(redis)} | cache instances |")
-
-    if report_mode == 'detailed':
-        lines.append("")
-        lines.append("### 详细清单")
-        lines.append("| 类型 | 名称/ID | 规格/引擎 | IP/连接串 | 可用区 |")
-        lines.append("|---|---|---|---|---|")
-        for v in vms:
-            lines.append(f"| {get_health(v.get('instanceId',''),'')} VM | {v.get('instanceName','')} | {v.get('instanceType','')} | {v.get('privateIpAddress','')} | {v.get('az','')} |")
-        for d in rds:
-            lines.append(f"| {get_health(d.get('instanceId',''),'')} RDS | {d.get('instanceName','')} | {d.get('engine','')} {d.get('engineVersion','')} | {d.get('connectionString','')} | {d.get('az','')} |")
-        for r in redis:
-            lines.append(f"| {get_health(r.get('cacheInstanceId',''),'')} Redis | {r.get('cacheInstanceName','')} | {r.get('instanceType','')} | {r.get('connectionDomain','')} | {r.get('az','')} |")
-
-    lines.append("")
-    lines.append("---")
-    lines.append("> 由 jdcloud-topo-discovery 生成 | 安全模式: READ-ONLY")
-    return '\n'.join(lines)
-
-# ── Render Mermaid ──
 def render_mermaid():
-    lines = []
-    lines.append("```mermaid")
-    lines.append("graph TB")
-    vpc_label = mermaid_safe_vpc_label(vpc_name, vpc_id)
-    lines.append(f"    subgraph VPC[{vpc_label}]")
-    lines.append("        style VPC fill:#e8f4fd,stroke:#3b82f6")
-
-    for _sid, sn in subnet_map.items():
-        safe_sn = mermaid_safe_id(f"sub_{_sid}")
-        sn_label = mermaid_safe_subgraph_label(sn['name'], sn['cidr'], sn.get('az', ''))
-        lines.append(f"    subgraph {safe_sn}[{sn_label}]")
-        items = sn.get('vms', []) + sn.get('clbs', []) + sn.get('rds', []) + sn.get('redis', [])
-
-        if large_scale and len(items) > MERMAID_MAX_NODES:
-            # Aggregated view: one node per resource type with count
-            parts = []
-            if sn.get('vms'):
-                parts.append(f"VM x{len(sn['vms'])}")
-            if sn.get('clbs'):
-                parts.append(f"CLB x{len(sn['clbs'])}")
-            if sn.get('rds'):
-                parts.append(f"RDS x{len(sn['rds'])}")
-            if sn.get('redis'):
-                parts.append(f"Redis x{len(sn['redis'])}")
-            label = mermaid_safe_label(" | ".join(parts) if parts else "(预留)")
-            safe_id = mermaid_safe_id(f"agg_{_sid}")
-            lines.append(f"        {safe_id}[{label}]")
+    lines = [
+        "```mermaid",
+        "graph TB",
+        f"    subgraph VPC[{mermaid_safe_vpc_label(vpc_name, vpc_id)}]",
+        "        style VPC fill:#e8f4fd,stroke:#3b82f6",
+    ]
+    for _sid, sn in sn_map.items():
+        ss = mermaid_safe_id(f"sub_{_sid}")
+        sl = mermaid_safe_subgraph_label(sn["name"], sn["cidr"], sn.get("az", ""))
+        lines.append(f"    subgraph {ss}[{sl}]")
+        items = sn["vms"] + sn["clbs"] + sn["rds"] + sn["redis"]
+        if large and len(items) > MERMAID_MAX_NODES:
+            pts = []
+            if sn["vms"]:
+                pts.append(f"VM x{len(sn['vms'])}")
+            if sn["clbs"]:
+                pts.append(f"CLB x{len(sn['clbs'])}")
+            if sn["rds"]:
+                pts.append(f"RDS x{len(sn['rds'])}")
+            if sn["redis"]:
+                pts.append(f"Redis x{len(sn['redis'])}")
+            lb = mermaid_safe_label(" | ".join(pts) if pts else "(\u9884\u7559)")
+            lines.append(f"        {mermaid_safe_id(f'agg_{_sid}')}[{lb}]")
         else:
             for it in items:
-                safe_id = mermaid_safe_id(f"res_{it.get('id','') or it['name']}")
-                label = f"{get_health(it.get('id',''),'✅')} {mermaid_escape(it['name'])}"
-                if 'ip' in it and it['ip']:
-                    label += f"<br/>{mermaid_escape(it['ip'])}"
-                elif 'domain' in it:
-                    label += f"<br/>{mermaid_escape(it.get('domain',''))}"
-                label = mermaid_safe_label(label)
-                lines.append(f"        {safe_id}[{label}]")
+                rid = mermaid_safe_id(
+                    f"res_{it.get('instanceId', '') or it.get('loadBalancerId', '') or it.get('cacheInstanceId', '') or it.get('name', '')}"
+                )
+                lb = f"{health_icon(it.get('instanceId', '') or it.get('loadBalancerId', '') or it.get('cacheInstanceId', '') or '', chr(0x2705))} {mermaid_escape(it.get('instanceName', '') or it.get('loadBalancerName', '') or it.get('cacheInstanceName', '') or '')}"
+                ip = it.get("privateIpAddress", "") or mermaid_extract_str(
+                    it, "privateIp.privateIpAddress"
+                )
+                if ip:
+                    lb += f"<br/>{mermaid_escape(ip)}"
+                lines.append(f"        {rid}[{mermaid_safe_label(lb)}]")
             if not items:
-                lines.append("        empty_spot[&#40;预留&#41;]")
+                lines.append("        empty_spot[&#40;\u9884\u7559&#41;]")
         lines.append("    end")
-
-    # EIP → CLB connections
     for clb in clbs:
-        clb_id = clb.get('loadBalancerId', '')
-        eip_addr = mermaid_extract_str(clb, 'privateIp.elasticIpAddress')
-        if eip_addr:
-            safe_eip = mermaid_safe_id(f"eip_{eip_addr}")
-            safe_clb = mermaid_safe_id(f"res_{clb_id or clb.get('loadBalancerName','')}")
-            lines.append(f"    {safe_eip}((&#34;{eip_addr}&#34;)) --> {safe_clb}")
-
-    lines.append("    end")
-    lines.append("```")
-    return '\n'.join(lines)
+        ea = mermaid_extract_str(clb, "privateIp.elasticIpAddress")
+        if ea:
+            eid = mermaid_safe_id(f"eip_{ea}")
+            cn = clb.get("loadBalancerId", "") or clb.get("loadBalancerName", "")
+            cid = mermaid_safe_id(f"res_{cn}")
+            lines.append(f"    {eid}((&#34;{ea}&#34;)) --> {cid}")
+    lines.extend(["    end", "```"])
+    return "\n".join(lines)
 
 
-# ── Render and write output ──
-os.makedirs(output_dir, exist_ok=True)
-ascii_content = render_ascii()
-mermaid_content = render_mermaid()
+os.makedirs(args.output_dir, exist_ok=True)
+ascii = render_ascii()
+mermaid = render_mermaid()
 
-if output_format in ('ascii', 'both'):
-    path = os.path.join(output_dir, "report.md")
-    if output_format == 'both':
-        # Insert Mermaid diagram after the ASCII topology section
-        parts = ascii_content.split("---\n")
-        if len(parts) >= 2:
-            first_part = parts[0]
-            rest = "---\n".join(parts[1:])
-            combined = first_part + "---\n\n## 🎨 拓扑关系图\n\n" + mermaid_content + "\n\n---\n" + rest
-        else:
-            combined = ascii_content + "\n\n## 🎨 拓扑关系图\n\n" + mermaid_content
-    else:
-        combined = ascii_content
-    with open(path, 'w') as f:
-        f.write(combined)
-    print(f"✅ Report: {path} ({os.path.getsize(path)} bytes)")
+if args.format in ("ascii", "both"):
+    p = os.path.join(args.output_dir, "report.md")
+    content = (
+        ascii + "\n\n## \U0001f3a8 \u62d3\u6251\u56fe\n\n" + mermaid + "\n"
+        if args.format == "both"
+        else ascii
+    )
+    with open(p, "w") as f:
+        f.write(content)
 
-if output_format in ('mermaid',):
-    path = os.path.join(output_dir, "topology.mermaid.md")
-    with open(path, 'w') as f:
-        f.write(mermaid_content)
-    print(f"✅ Mermaid: {path} ({os.path.getsize(path)} bytes)")
+if args.format == "mermaid":
+    p = os.path.join(args.output_dir, "topology.mermaid.md")
+    with open(p, "w") as f:
+        f.write(mermaid)
 
-# ── Mermaid Lint Gate ──
-LINT_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mermaid-lint', 'lint.mjs')
-LINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mermaid-lint')
+LINT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mermaid-lint", "lint.mjs")
+LDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mermaid-lint")
 
-def run_mermaid_lint(file_path):
-    """Run mermaid-lint on a file. Returns (passed: bool, output: str)."""
-    if not os.path.exists(LINT_SCRIPT):
-        print(f"[WARN] mermaid-lint not found at {LINT_SCRIPT}, skipping lint gate")
-        return True, ""
-    if not os.path.exists(os.path.join(LINT_DIR, 'node_modules')):
-        print(f"[WARN] mermaid-lint deps not installed (run 'npm install' in {LINT_DIR}), skipping")
-        return True, ""
+
+def run_lint(fp):
+    if not os.path.exists(LINT):
+        return
+    if not os.path.exists(os.path.join(LDIR, "node_modules")):
+        return
     try:
-        result = subprocess.run(
-            ['node', LINT_SCRIPT, file_path],
-            capture_output=True, text=True, timeout=30,
-            cwd=LINT_DIR
-        )
-        if result.returncode == 0:
-            print(f"[LINT] ✅ Mermaid syntax valid: {file_path}")
-            return True, result.stdout
-        else:
-            print(f"[LINT] ❌ Mermaid syntax errors in {file_path}:")
-            print(result.stderr or result.stdout)
-            return False, result.stderr or result.stdout
-    except subprocess.TimeoutExpired:
-        print(f"[WARN] mermaid-lint timed out on {file_path}, skipping")
-        return True, ""
-    except Exception as e:
-        print(f"[WARN] mermaid-lint error: {e}, skipping")
-        return True, ""
+        r = subprocess.run(["node", LINT, fp], capture_output=True, text=True, timeout=30, cwd=LDIR)
+        if r.returncode != 0:
+            print(f"[LINT] Errors in {fp}:", r.stderr or r.stdout)
+    except Exception:
+        pass
 
-# Run lint gate on generated files
-for f in [os.path.join(output_dir, 'report.md'), os.path.join(output_dir, 'topology.mermaid.md')]:
-    if os.path.exists(f):
-        passed, _ = run_mermaid_lint(f)
-        if not passed:
-            print("\n🚨 MERMAID LINT GATE FAILED — report may contain invalid diagrams.")
-            print("   Fix the syntax errors above and re-run topo-render.py.")
+
+for fp in [
+    os.path.join(args.output_dir, "report.md"),
+    os.path.join(args.output_dir, "topology.mermaid.md"),
+]:
+    if os.path.exists(fp):
+        run_lint(fp)

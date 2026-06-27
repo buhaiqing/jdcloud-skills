@@ -18,8 +18,19 @@ def test_temp_output_dir(temp_output_dir):
 def test_jdcloud_credential_vault():
     """Verify all critical JD Cloud fixture files are present."""
     import pathlib
+
     fixtures = pathlib.Path(__file__).parent / "fixtures"
-    expected = ["vpc.json", "subnet.json", "vm.json", "mysql.json", "redis.json",
-                "clb.json", "eip.json", "sg.json", "kms.json", "iam.json"]
+    expected = [
+        "vpc.json",
+        "subnet.json",
+        "vm.json",
+        "mysql.json",
+        "redis.json",
+        "clb.json",
+        "eip.json",
+        "sg.json",
+        "kms.json",
+        "iam.json",
+    ]
     for name in expected:
         assert (fixtures / name).exists(), f"Missing fixture: {name}"

@@ -20,6 +20,7 @@ Usage:
     python export-hcl.py --scope all --output-dir ./hcl-export/
     python export-hcl.py --scope vpc-3p9mkq2v3a --output-dir ./hcl-export/ --assume-role jdcloud:ram::...
 """
+
 import argparse
 import json
 import os
@@ -32,9 +33,8 @@ from pathlib import Path
 from scripts.lib.mappings import MAPPINGS
 from scripts.lib.field_mapper import FieldMapper
 from scripts.lib.dependency_inference import infer_dependencies
-from scripts.lib.manifest_builder import ManifestBuilder
-from scripts.lib.manifest_validator import ManifestValidator
-from scripts.lib.provider_locker import ProviderLocker, DEFAULT_PROVIDER_VERSION
+from scripts.lib.manifest_builder import ManifestBuilder, validate_manifest
+from scripts.lib.provider_locker import generate_provider_block, DEFAULT_PROVIDER_VERSION
 
 
 def parse_args(argv=None):
@@ -42,20 +42,21 @@ def parse_args(argv=None):
         description="Export JD Cloud resources as Terraform HCL (documentation only)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--scope", required=True,
-                        help="Resource scope: 'all' or 'vpc-xxxx'")
-    parser.add_argument("--output-dir", required=True,
-                        help="Output directory for HCL files")
-    parser.add_argument("--assume-role",
-                        help="STS role ARN for cross-account access")
-    parser.add_argument("--provider-version", default=DEFAULT_PROVIDER_VERSION,
-                        help="JDCloud Provider version (default: 'n/a' since no official provider)")
-    parser.add_argument("--include-types", nargs="*", default=None,
-                        help="Resource types to include (default: all)")
-    parser.add_argument("--exclude-types", nargs="*", default=None,
-                        help="Resource types to exclude (default: none)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Validate without writing files")
+    parser.add_argument("--scope", required=True, help="Resource scope: 'all' or 'vpc-xxxx'")
+    parser.add_argument("--output-dir", required=True, help="Output directory for HCL files")
+    parser.add_argument("--assume-role", help="STS role ARN for cross-account access")
+    parser.add_argument(
+        "--provider-version",
+        default=DEFAULT_PROVIDER_VERSION,
+        help="JDCloud Provider version (default: 'n/a' since no official provider)",
+    )
+    parser.add_argument(
+        "--include-types", nargs="*", default=None, help="Resource types to include (default: all)"
+    )
+    parser.add_argument(
+        "--exclude-types", nargs="*", default=None, help="Resource types to exclude (default: none)"
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Validate without writing files")
     return parser.parse_args(argv)
 
 
@@ -74,10 +75,16 @@ def main():
     if args.assume_role:
         print(f"[DIAG] Assuming role: {args.assume_role}")
         result = subprocess.run(
-            ["bash", "-c", f"source jdcloud-topo-discovery/scripts/sts-helper.sh "
-                          f"--role-arn '{args.assume_role}' && "
-                          f"echo 'AK=$JDC_ACCESS_KEY'"],
-            capture_output=True, text=True, timeout=60,
+            [
+                "bash",
+                "-c",
+                f"source jdcloud-topo-discovery/scripts/sts-helper.sh "
+                f"--role-arn '{args.assume_role}' && "
+                f"echo 'AK=$JDC_ACCESS_KEY'",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         if result.returncode != 0:
             print("[ERROR] TYPE=ASSUME_ROLE_FAILED FIX=Check role and permissions")
@@ -130,8 +137,7 @@ def main():
     res_lookup = {bn: (rt, data, spec, bn, hcl) for rt, data, spec, bn, hcl in all_blocks}
 
     # Generate provider block (with JD Cloud "n/a" placeholder)
-    locker = ProviderLocker(version=args.provider_version)
-    provider_hcl = locker.render_block(region=region)
+    provider_hcl = generate_provider_block(version=args.provider_version, region=region)
 
     # Build manifest
     elapsed_ms = int(time.time() * 1000) - start_ms
@@ -151,13 +157,14 @@ def main():
     )
 
     # Validate manifest
-    validator = ManifestValidator()
-    validator.validate(manifest)
+    validate_manifest(manifest)
 
     # Dry-run: print summary and exit
     if args.dry_run:
-        print(f"[SUMMARY] Dry run: {sum(by_type.values())} resources, "
-              f"{len(unsupported)} unsupported types")
+        print(
+            f"[SUMMARY] Dry run: {sum(by_type.values())} resources, "
+            f"{len(unsupported)} unsupported types"
+        )
         print(json.dumps(manifest, indent=2))
         sys.exit(0)
 
@@ -219,8 +226,10 @@ def _gen_import_script(ordered, block_lookup, region):
             or data.get("subUserName")
             or "?"
         )
-        lines.append(f"# terraform import '{spec.terraform_type}.{block_name}' "
-                     f"{rt}:{region}:{rid}    # PLACEHOLDER")
+        lines.append(
+            f"# terraform import '{spec.terraform_type}.{block_name}' "
+            f"{rt}:{region}:{rid}    # PLACEHOLDER"
+        )
     return "\n".join(lines) + "\n"
 
 

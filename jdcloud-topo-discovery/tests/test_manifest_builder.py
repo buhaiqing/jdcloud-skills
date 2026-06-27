@@ -1,4 +1,5 @@
 """Tests for manifest builder (JD Cloud)."""
+
 import pytest
 from scripts.lib.manifest_builder import ManifestBuilder
 

@@ -1,4 +1,5 @@
 """Tests for the MAPPINGS registry and individual resource type mappings (JD Cloud)."""
+
 from scripts.lib.mappings import MAPPINGS
 from scripts.lib.field_mapper import FieldMapper
 
@@ -25,7 +26,7 @@ def test_vpc_fixture_can_be_mapped(load_fixture):
     spec = MAPPINGS["vpc"]
     block_name = FieldMapper.generate_block_name(spec.terraform_type, data, spec)
     hcl = FieldMapper().map_resource("vpc", data, spec, block_name)
-    assert "resource \"jdcloud_vpc\"" in hcl
+    assert 'resource "jdcloud_vpc"' in hcl
 
 
 def test_subnet_fixture_can_be_mapped(load_fixture):
@@ -35,7 +36,7 @@ def test_subnet_fixture_can_be_mapped(load_fixture):
     assert spec.parent_ref == "vpcId", "Subnet should declare vpcId as parent"
     block_name = FieldMapper.generate_block_name(spec.terraform_type, data, spec)
     hcl = FieldMapper().map_resource("subnet", data, spec, block_name)
-    assert "resource \"jdcloud_subnet\"" in hcl
+    assert 'resource "jdcloud_subnet"' in hcl
 
 
 def test_vm_fixture_can_be_mapped(load_fixture):
@@ -44,7 +45,7 @@ def test_vm_fixture_can_be_mapped(load_fixture):
     spec = MAPPINGS["vm"]
     assert spec.parent_ref == "subnetId", "VM should declare subnetId as parent"
     hcl = FieldMapper().map_resource("vm", data, spec, "vm1")
-    assert "resource \"jdcloud_instance\"" in hcl
+    assert 'resource "jdcloud_instance"' in hcl
 
 
 def test_mysql_fixture_can_be_mapped(load_fixture):
@@ -53,7 +54,7 @@ def test_mysql_fixture_can_be_mapped(load_fixture):
     spec = MAPPINGS["mysql"]
     assert spec.parent_ref == "subnetId"
     hcl = FieldMapper().map_resource("mysql", data, spec, "db1")
-    assert "resource \"jdcloud_rds_instance\"" in hcl
+    assert 'resource "jdcloud_rds_instance"' in hcl
     # Sensitive accountPassword should be in rules but masked
     has_sensitive = any(r.sensitive for r in spec.rules)
     assert has_sensitive, "MySQL mapping should have a sensitive accountPassword rule"
@@ -64,7 +65,7 @@ def test_redis_fixture_can_be_mapped(load_fixture):
     data = load_fixture("redis")
     spec = MAPPINGS["redis"]
     hcl = FieldMapper().map_resource("redis", data, spec, "redis1")
-    assert "resource \"jdcloud_cache_instance\"" in hcl
+    assert 'resource "jdcloud_cache_instance"' in hcl
 
 
 def test_clb_fixture_can_be_mapped(load_fixture):
@@ -72,7 +73,7 @@ def test_clb_fixture_can_be_mapped(load_fixture):
     data = load_fixture("clb")
     spec = MAPPINGS["clb"]
     hcl = FieldMapper().map_resource("clb", data, spec, "lb1")
-    assert "resource \"jdcloud_lb\"" in hcl
+    assert 'resource "jdcloud_lb"' in hcl
 
 
 def test_eip_fixture_can_be_mapped(load_fixture):
@@ -80,7 +81,7 @@ def test_eip_fixture_can_be_mapped(load_fixture):
     data = load_fixture("eip")
     spec = MAPPINGS["eip"]
     hcl = FieldMapper().map_resource("eip", data, spec, "eip1")
-    assert "resource \"jdcloud_eip\"" in hcl
+    assert 'resource "jdcloud_eip"' in hcl
 
 
 def test_sg_fixture_can_be_mapped(load_fixture):
@@ -88,7 +89,7 @@ def test_sg_fixture_can_be_mapped(load_fixture):
     data = load_fixture("sg")
     spec = MAPPINGS["sg"]
     hcl = FieldMapper().map_resource("sg", data, spec, "sg1")
-    assert "resource \"jdcloud_security_group\"" in hcl
+    assert 'resource "jdcloud_security_group"' in hcl
 
 
 def test_kms_fixture_can_be_mapped(load_fixture):
@@ -96,7 +97,7 @@ def test_kms_fixture_can_be_mapped(load_fixture):
     data = load_fixture("kms")
     spec = MAPPINGS["kms"]
     hcl = FieldMapper().map_resource("kms", data, spec, "k1")
-    assert "resource \"jdcloud_kms_key\"" in hcl
+    assert 'resource "jdcloud_kms_key"' in hcl
 
 
 def test_iam_fixture_can_be_mapped(load_fixture):
@@ -104,7 +105,7 @@ def test_iam_fixture_can_be_mapped(load_fixture):
     data = load_fixture("iam")
     spec = MAPPINGS["iam"]
     hcl = FieldMapper().map_resource("iam", data, spec, "user1")
-    assert "resource \"jdcloud_iam_sub_user\"" in hcl
+    assert 'resource "jdcloud_iam_sub_user"' in hcl
 
 
 def test_minimum_resource_types_phase1():

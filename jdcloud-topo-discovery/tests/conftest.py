@@ -6,6 +6,7 @@ this skill's internal library). The skill's root directory
 (jdcloud-topo-discovery/) is added to sys.path, making the `scripts/`
 subdir importable as a package.
 """
+
 import json
 import sys
 from pathlib import Path
@@ -35,10 +36,12 @@ def fixtures_dir():
 @pytest.fixture
 def load_fixture():
     """Returns a function that loads a JSON fixture by name (without .json extension)."""
+
     def _load(name: str) -> dict:
         path = FIXTURES_DIR / f"{name}.json"
         with open(path, encoding="utf-8") as f:
             return json.load(f)
+
     return _load
 
 

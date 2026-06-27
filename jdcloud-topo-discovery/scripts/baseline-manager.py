@@ -15,6 +15,7 @@ Usage:
     python baseline-manager.py --output-dir ./infra-baseline/ --retention-days 90 --apply-retention
     python baseline-manager.py --output-dir ./infra-baseline/ --diff  (show diff vs latest)
 """
+
 import argparse
 import json
 import os
@@ -45,34 +46,67 @@ def parse_args(argv=None):
         _skills_dir = _script_dir.parent.parent
         default_output = str(_skills_dir / ".runtime" / "baseline")
 
-    parser.add_argument("--output-dir", default=default_output,
-                        help="Root directory for all baselines "
-                             "(default: ${JDC_SKILLS_RUNTIME_ROOT}/baseline, "
-                             "or ${SKILLS_DIR}/.runtime/baseline)")
-    parser.add_argument("--region", default=os.environ.get("JDC_REGION", "cn-north-1"),
-                        help="JD Cloud region (default: env or cn-north-1)")
-    parser.add_argument("--retention-days", type=int, default=90,
-                        help="Days to keep (default: 90)")
-    parser.add_argument("--apply-retention", action="store_true",
-                        help="Apply retention expiry (default: mark only)")
-    parser.add_argument("--diff", action="store_true",
-                        help="Compare current state with latest baseline (drift detection)")
-    parser.add_argument("--compare-with", default=None, metavar="YYYY-MM-DD",
-                        help="With --diff, compare against this historical baseline "
-                             "(default: latest). Format: YYYY-MM-DD")
-    parser.add_argument("--resample", action="store_true",
-                        help="Resample mode: create baseline snapshots for historical dates "
-                             "by copying from an existing baseline (no cloud calls)")
-    parser.add_argument("--from-baseline", default=None, metavar="YYYY-MM-DD|latest",
-                        help="Source baseline date to copy from (default: latest)")
-    parser.add_argument("--as-of", default=None, metavar="YYYY-MM-DD",
-                        help="Single target date for resample (mode 1)")
-    parser.add_argument("--as-of-range", default=None,
-                        help="Date range for batch resample, format: YYYY-MM-DD:YYYY-MM-DD (modes 3/4)")
-    parser.add_argument("--fill-gaps", action="store_true",
-                        help="With --as-of-range, only fill missing dates (mode 4)")
-    parser.add_argument("--force", action="store_true",
-                        help="Overwrite existing baseline directories (default: protect)")
+    parser.add_argument(
+        "--output-dir",
+        default=default_output,
+        help="Root directory for all baselines "
+        "(default: ${JDC_SKILLS_RUNTIME_ROOT}/baseline, "
+        "or ${SKILLS_DIR}/.runtime/baseline)",
+    )
+    parser.add_argument(
+        "--region",
+        default=os.environ.get("JDC_REGION", "cn-north-1"),
+        help="JD Cloud region (default: env or cn-north-1)",
+    )
+    parser.add_argument("--retention-days", type=int, default=90, help="Days to keep (default: 90)")
+    parser.add_argument(
+        "--apply-retention", action="store_true", help="Apply retention expiry (default: mark only)"
+    )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Compare current state with latest baseline (drift detection)",
+    )
+    parser.add_argument(
+        "--compare-with",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="With --diff, compare against this historical baseline "
+        "(default: latest). Format: YYYY-MM-DD",
+    )
+    parser.add_argument(
+        "--resample",
+        action="store_true",
+        help="Resample mode: create baseline snapshots for historical dates "
+        "by copying from an existing baseline (no cloud calls)",
+    )
+    parser.add_argument(
+        "--from-baseline",
+        default=None,
+        metavar="YYYY-MM-DD|latest",
+        help="Source baseline date to copy from (default: latest)",
+    )
+    parser.add_argument(
+        "--as-of",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Single target date for resample (mode 1)",
+    )
+    parser.add_argument(
+        "--as-of-range",
+        default=None,
+        help="Date range for batch resample, format: YYYY-MM-DD:YYYY-MM-DD (modes 3/4)",
+    )
+    parser.add_argument(
+        "--fill-gaps",
+        action="store_true",
+        help="With --as-of-range, only fill missing dates (mode 4)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing baseline directories (default: protect)",
+    )
     return parser.parse_args(argv)
 
 
@@ -102,9 +136,22 @@ def _run_topo_scan(region: str, output_dir: Path) -> dict:
 
     print(f"[INFO] Running topo-scan.sh (region={region})...")
     result = subprocess.run(
-        [str(topo_sh), "--mode", "brief", "--output-dir", str(scan_output),
-         "--format", "both", "--region", region, "--tmp-dir", str(data_dir)],
-        capture_output=True, text=True, timeout=120,
+        [
+            str(topo_sh),
+            "--mode",
+            "brief",
+            "--output-dir",
+            str(scan_output),
+            "--format",
+            "both",
+            "--region",
+            region,
+            "--tmp-dir",
+            str(data_dir),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
         env=env,
     )
 
@@ -166,17 +213,17 @@ def _extract_items(data: dict, rtype: str) -> list:
     result = data.get("result", {})
     # JD Cloud resource list paths
     path_map = {
-        "VPC":            "vpcs",
-        "Subnet":         "subnets",
-        "CLB":            "loadBalancers",
-        "EIP":            "elasticIps",
-        "VM":             "instances",
-        "SecurityGroup":  "networkSecurityGroups",
-        "AG":             "ags",
-        "RDS":            "dbInstances",
-        "Redis":          "cacheInstances",
-        "IAM":            "subUsers",
-        "KMS":            "keys",
+        "VPC": "vpcs",
+        "Subnet": "subnets",
+        "CLB": "loadBalancers",
+        "EIP": "elasticIps",
+        "VM": "instances",
+        "SecurityGroup": "networkSecurityGroups",
+        "AG": "ags",
+        "RDS": "dbInstances",
+        "Redis": "cacheInstances",
+        "IAM": "subUsers",
+        "KMS": "keys",
     }
     key = path_map.get(rtype)
     if not key:
@@ -193,7 +240,9 @@ def _get_account_id() -> str:
     try:
         r = subprocess.run(
             ["jdc", "--output", "json", "sts", "get-caller-identity"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if r.returncode == 0:
             data = json.loads(r.stdout)
@@ -253,9 +302,9 @@ def _compute_diff(current: dict, baseline: dict) -> list:
         c = current_counts.get(rtype, 0)
         b = baseline_counts.get(rtype, 0)
         if c > b:
-            changes.append(f"[ADDED] {rtype}: {b} → {c} (+{c-b})")
+            changes.append(f"[ADDED] {rtype}: {b} → {c} (+{c - b})")
         elif c < b:
-            changes.append(f"[REMOVED] {rtype}: {b} → {c} (-{b-c})")
+            changes.append(f"[REMOVED] {rtype}: {b} → {c} (-{b - c})")
 
     # Compare resource IDs
     current_ids = set()
@@ -314,9 +363,61 @@ def _guess_resource_type(rid: str) -> str:
         "eni": "NIC",
     }
     # Special case: "sub-..." is ambiguous (could be Subnet or SubUser)
-    if rid.startswith("sub-") and not rid[4:4+1].isdigit():
+    if rid.startswith("sub-") and not rid[4 : 4 + 1].isdigit():
         return "IAM"  # more likely a username
     return type_map.get(prefix, "Unknown")
+
+
+def _run_resample(root_dir, args):
+    """Run resample mode: copy baselines without cloud calls."""
+    backend = LocalBackend(root_dir=root_dir)
+    src = args.from_baseline
+    if not src:
+        print("[ERROR] --resample requires --from-baseline (date or 'latest')")
+        sys.exit(2)
+    src_date = src
+    if src == "latest":
+        latest_dir = backend.get_latest()
+        if latest_dir is None:
+            print("[ERROR] No baseline found for --from-baseline=latest")
+            sys.exit(2)
+        src_date = latest_dir.name
+    if backend.get_by_date(src_date) is None:
+        print(f"[ERROR] Source baseline not found: {src_date}")
+        sys.exit(2)
+    if args.as_of:
+        r = backend.copy_baseline(src_date, args.as_of, force=args.force)
+        if r is None:
+            print(f"[INFO] Target date already exists: {args.as_of} (use --force)")
+        else:
+            print(f"\n=== Resample: copied {src_date} -> {args.as_of} ===")
+    elif args.as_of_range:
+        parts = args.as_of_range.split(":")
+        if len(parts) != 2:
+            print(f"[ERROR] --as-of-range needs YYYY-MM-DD:YYYY-MM-DD, got: {args.as_of_range}")
+            sys.exit(2)
+        start, end = parts[0], parts[1]
+        if args.fill_gaps:
+            created = backend.fill_gaps(src_date, start, end, force=args.force)
+            total = len(backend.list_gaps(start, end))
+            print(f"\n=== Resample (fill-gaps): src={src_date}, range={start}..{end} ===")
+            print(f"  Created: {len(created)}, Skipped: {total - len(created)}")
+        else:
+            created = 0
+            d_start = date.fromisoformat(start)
+            d_end = date.fromisoformat(end)
+            for i in range((d_end - d_start).days + 1):
+                r = backend.copy_baseline(
+                    src_date, (d_start + timedelta(days=i)).isoformat(), force=args.force
+                )
+                if r is not None:
+                    created += 1
+            print(f"\n=== Resample (batch): src={src_date}, range={start}..{end} ===")
+            print(f"  Created: {created}")
+    else:
+        print("[ERROR] --resample needs --as-of or --as-of-range")
+        sys.exit(2)
+    print("[SUMMARY] Resample done")
 
 
 def main():
@@ -326,75 +427,7 @@ def main():
 
     # Sprint 17: --resample mode (no cloud calls, just copy/manipulate baselines)
     if args.resample:
-        backend = LocalBackend(root_dir=output_dir)
-
-        # Resolve source baseline
-        src = args.from_baseline
-        if not src:
-            print("[ERROR] --resample requires --from-baseline (date or 'latest')")
-            sys.exit(2)
-
-        src_date = src
-        if src == "latest":
-            latest_dir = backend.get_latest()
-            if latest_dir is None:
-                print("[ERROR] No baseline found for --from-baseline=latest (run baseline-manager first)")
-                sys.exit(2)
-            src_date = latest_dir.name
-
-        # Validate source exists
-        if backend.get_by_date(src_date) is None:
-            print(f"[ERROR] Source baseline not found: {src_date}")
-            print(f"[HINT]  Available baselines: {', '.join(d.isoformat() for d in backend.list_baselines()) or '(none)'}")
-            sys.exit(2)
-
-        force = args.force
-
-        if args.as_of:
-            # Mode 1: single date copy
-            dst = args.as_of
-            result = backend.copy_baseline(src_date, dst, force=force)
-            if result is None:
-                print(f"[INFO] Target date already exists: {dst} (use --force to overwrite)")
-            else:
-                print(f"\n=== Resample: copied {src_date} → {dst} ===")
-        elif args.as_of_range:
-            # Modes 3/4: range
-            parts = args.as_of_range.split(":")
-            if len(parts) != 2:
-                print(f"[ERROR] --as-of-range requires format YYYY-MM-DD:YYYY-MM-DD, got: {args.as_of_range}")
-                sys.exit(2)
-            start, end = parts[0], parts[1]
-
-            if args.fill_gaps:
-                # Mode 4: fill-gaps
-                created = backend.fill_gaps(src_date, start, end, force=force)
-                total_expected = len(backend.list_gaps(start, end))
-                print(f"\n=== Resample (fill-gaps): src={src_date}, range={start}..{end} ===")
-                print(f"  Created: {len(created)}")
-                print(f"  Skipped (already exist): {total_expected - len(created)}")
-                if created:
-                    print(f"  Dates: {', '.join(created)}")
-            else:
-                # Mode 3: batch copy all dates in range
-                created = 0
-                skipped = 0
-                for d in [date.fromisoformat(start) + timedelta(days=i)
-                          for i in range((date.fromisoformat(end) - date.fromisoformat(start)).days + 1)]:
-                    d_str = d.isoformat()
-                    result = backend.copy_baseline(src_date, d_str, force=force)
-                    if result is not None:
-                        created += 1
-                    else:
-                        skipped += 1
-                print(f"\n=== Resample (batch): src={src_date}, range={start}..{end} ===")
-                print(f"  Created: {created}")
-                print(f"  Skipped (already exist, use --force to overwrite): {skipped}")
-        else:
-            print("[ERROR] --resample requires --as-of <DATE> or --as-of-range <START>:<END>")
-            sys.exit(2)
-
-        print("[SUMMARY] Resample done")
+        _run_resample(output_dir, args)
         return
 
     # Step 1: Run topo-scan to collect real data
@@ -412,15 +445,20 @@ def main():
             baseline_dir = backend.get_by_date(args.compare_with)
             if baseline_dir is None:
                 from datetime import date as _date
+
                 try:
                     _date.fromisoformat(args.compare_with)
                 except (ValueError, TypeError):
-                    print(f"[ERROR] Invalid date format for --compare-with: "
-                          f"'{args.compare_with}' (expected YYYY-MM-DD)")
+                    print(
+                        f"[ERROR] Invalid date format for --compare-with: "
+                        f"'{args.compare_with}' (expected YYYY-MM-DD)"
+                    )
                     sys.exit(2)
                 print(f"[ERROR] No baseline found for date: {args.compare_with}")
-                print(f"[HINT]  Available baselines: "
-                      f"{', '.join(d.isoformat() for d in backend.list_baselines()) or '(none)'}")
+                print(
+                    f"[HINT]  Available baselines: "
+                    f"{', '.join(d.isoformat() for d in backend.list_baselines()) or '(none)'}"
+                )
                 sys.exit(2)
             compared_with_label = args.compare_with
         else:
@@ -439,8 +477,10 @@ def main():
                     baseline_data,
                 )
                 if changes:
-                    print(f"\n=== Drift Detection: {len(changes)} changes "
-                          f"(vs {compared_with_label}) ===")
+                    print(
+                        f"\n=== Drift Detection: {len(changes)} changes "
+                        f"(vs {compared_with_label}) ==="
+                    )
                     for c in changes:
                         print(f"  {c}")
                 else:
