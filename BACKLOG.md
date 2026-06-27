@@ -88,11 +88,27 @@
 | Skill | 测试状态 | 缺口 |
 |-------|:-------:|------|
 | `jdcloud-vpc-ops` | ✅ 23/23 | 无 |
-| `jdcloud-topo-discovery` | ✅ 73/73 | 无（BACKLOG 原说可补 sprint16/17/19 是 nice-to-have） |
+| `jdcloud-topo-discovery` | ✅ 73/73 | 无 |
 | `tests/test_aiops_consistency.py` | ✅ 已存在 | 无 |
-| **其余 26 个 ops skill** | ❌ 无测试 | conftest + smoke + test_rubric |
+| **6 个高风险 destructive skill** | ✅ **新增** | conftest + smoke + test_rubric 完成 |
+| **其余 20 个 ops skill** | ❌ 无测试 | 待办（低优先级）|
 
-→ **结论**：测试覆盖是真缺口。但 26 个 skill 都补一遍工作量大；建议选 5-8 个高风险 ops skill 优先。
+**已覆盖的高风险 skill**（2026-06-27 D-2 批次）：
+| Skill | GCL 级别 | 测试文件 | 测试数 |
+|-------|:------:|----------|:------:|
+| `jdcloud-vm-ops` | required | conftest.py, test_smoke.py, test_rubric.py | 20 |
+| `jdcloud-redis-ops` | required | conftest.py, test_smoke.py, test_rubric.py | 19 |
+| `jdcloud-mysql-ops` | required | conftest.py, test_smoke.py, test_rubric.py | 19 |
+| `jdcloud-iam-ops` | required | conftest.py, test_smoke.py, test_rubric.py | 19 |
+| `jdcloud-kms-ops` | required | conftest.py, test_smoke.py, test_rubric.py | 19 |
+| `jdcloud-disk-ops` | required | conftest.py, test_smoke.py, test_rubric.py | 19 |
+
+**配套基础设施**：
+- ✅ `.github/workflows/tests.yml` — GitHub Actions 自动运行测试并生成 HTML/JSON 报告
+- ✅ PR 自动评论测试结果
+- ✅ ruff lint 集成到 CI
+
+→ **结论**：6 个高风险 skill 测试框架已完成，CI 集成就绪。剩余 20 个 skill 低优先级按需补充。
 
 ### D-3. AGENTS.md / README 表格校对
 
